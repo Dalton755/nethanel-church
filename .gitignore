@@ -2,3 +2,21 @@ node_modules
 
 # Turborepo
 .turbo/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Next.js
+.next/
+
+# Expo
+.expo/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

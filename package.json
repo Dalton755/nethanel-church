@@ -19,6 +19,7 @@
     "packages/*"
   ],
   "devDependencies": {
+    "supabase": "^2.117.0",
     "turbo": "^2.10.12"
   },
   "packageManager": "npm@11.16.0"
