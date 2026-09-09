@@ -12,6 +12,7 @@ import { supabase } from "../../lib/supabase";
 
 import { OrganizationSelectorScreen } from "../organization/OrganizationSelectorScreen";
 import { OrganizationSetupScreen } from "../organization/OrganizationSetupScreen";
+import { MainTabs } from "../../navigation/MainTabs";
 
 export function AuthenticatedScreen() {
   const {
@@ -118,89 +119,7 @@ export function AuthenticatedScreen() {
       (role) => role.is_owner
     );
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.content}>
-        <Text style={styles.brand}>
-          NETHANEL CHURCH
-        </Text>
-
-        <Text style={styles.eyebrow}>
-          {profile?.display_name
-            ? `Olá, ${profile.display_name}`
-            : "Bem-vindo"}
-        </Text>
-
-        <Text style={styles.title}>
-          {activeOrganization.name}
-        </Text>
-
-        <Text style={styles.subtitle}>
-          Seu contexto de acesso está pronto.
-        </Text>
-
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>
-            Unidade ativa
-          </Text>
-
-          <Text style={styles.cardValue}>
-            {activeUnit?.name ??
-              "Nenhuma unidade disponível"}
-          </Text>
-
-          <Text style={styles.cardLabel}>
-            Papel
-          </Text>
-
-          <Text style={styles.cardValue}>
-            {ownerRole?.name ??
-              activeOrganization.roles[0]
-                ?.name ??
-              "Sem papel"}
-          </Text>
-
-          <Text style={styles.cardLabel}>
-            Permissões
-          </Text>
-
-          <Text style={styles.cardValue}>
-            {permissions.length}
-          </Text>
-        </View>
-
-        {organizations.length > 1 && (
-          <Pressable
-            onPress={() => {
-              void clearOrganizationSelection();
-            }}
-            style={styles.secondaryButton}
-          >
-            <Text
-              style={
-                styles.secondaryButtonText
-              }
-            >
-              Trocar igreja
-            </Text>
-          </Pressable>
-        )}
-
-        <Pressable
-          onPress={handleSignOut}
-          style={styles.secondaryButton}
-        >
-          <Text
-            style={
-              styles.secondaryButtonText
-            }
-          >
-            Sair
-          </Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
-  );
+  return <MainTabs />;
 }
 
 const styles = StyleSheet.create({
