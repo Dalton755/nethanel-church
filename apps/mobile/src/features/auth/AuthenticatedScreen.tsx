@@ -1,4 +1,8 @@
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -10,9 +14,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import type { Session } from "@supabase/supabase-js";
 
 import { supabase } from "../../lib/supabase";
+import { OrganizationSetupScreen } from "../organization/OrganizationSetupScreen";
 
 type AuthenticatedScreenProps = {
   session: Session;
+};
+
+type Organization = {
+  id: string;
+  name: string;
+  slug: string;
 };
 
 export function AuthenticatedScreen({
@@ -21,35 +32,145 @@ export function AuthenticatedScreen({
   const [displayName, setDisplayName] =
     useState<string | null>(null);
 
-  const [loadingProfile, setLoadingProfile] =
+  const [organization, setOrganization] =
+    useState<Organization | null>(null);
+
+  const [loading, setLoading] =
     useState(true);
 
-  const [profileError, setProfileError] =
+  const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadProfile() {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("user_id", session.user.id)
-        .single();
+  const loadContext = useCallback(
+    async () => {
+      setLoading(true);
+      setErrorMessage(null);
 
-      if (error) {
-        setProfileError(error.message);
-        setLoadingProfile(false);
-        return;
+      try {
+        const [
+          profileResponse,
+          organizationsResponse,
+        ] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("display_name")
+            .eq(
+              "user_id",
+              session.user.id
+            )
+            .single(),
+
+          supabase
+            .from("organizations")
+            .select("id, name, slug")
+            .order("created_at", {
+              ascending: true,
+            }),
+        ]);
+
+        if (profileResponse.error) {
+          throw profileResponse.error;
+        }
+
+        if (organizationsResponse.error) {
+          throw organizationsResponse.error;
+        }
+
+        setDisplayName(
+          profileResponse.data.display_name
+        );
+
+        setOrganization(
+          organizationsResponse.data?.[0] ??
+            null
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Não foi possível carregar sua conta.";
+
+        setErrorMessage(message);
+      } finally {
+        setLoading(false);
       }
+    },
+    [session.user.id]
+  );
 
-      setDisplayName(data.display_name);
-      setLoadingProfile(false);
-    }
-
-    loadProfile();
-  }, [session.user.id]);
+  useEffect(() => {
+    void loadContext();
+  }, [loadContext]);
 
   async function handleSignOut() {
     await supabase.auth.signOut();
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  if (errorMessage) {
+    return (
+      <SafeAreaView
+        style={styles.safeArea}
+      >
+        <View style={styles.content}>
+          <Text style={styles.brand}>
+            NETHANEL CHURCH
+          </Text>
+
+          <Text style={styles.title}>
+            Não foi possível carregar sua conta
+          </Text>
+
+          <Text style={styles.errorText}>
+            {errorMessage}
+          </Text>
+
+          <Pressable
+            onPress={() => {
+              void loadContext();
+            }}
+            style={styles.primaryButton}
+          >
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
+              Tentar novamente
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={handleSignOut}
+            style={styles.secondaryButton}
+          >
+            <Text
+              style={
+                styles.secondaryButtonText
+              }
+            >
+              Sair
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!organization) {
+    return (
+      <OrganizationSetupScreen
+        displayName={displayName}
+        onCreated={loadContext}
+      />
+    );
   }
 
   return (
@@ -59,56 +180,64 @@ export function AuthenticatedScreen({
           NETHANEL CHURCH
         </Text>
 
-        {loadingProfile ? (
-          <ActivityIndicator />
-        ) : (
-          <>
-            <Text style={styles.title}>
-              {displayName
-                ? `Olá, ${displayName}`
-                : "Olá"}
-            </Text>
+        <Text style={styles.eyebrow}>
+          {displayName
+            ? `Olá, ${displayName}`
+            : "Bem-vindo"}
+        </Text>
 
-            <Text style={styles.subtitle}>
-              Sua autenticação está funcionando.
-            </Text>
+        <Text style={styles.title}>
+          {organization.name}
+        </Text>
 
-            <View style={styles.infoBox}>
-              <Text style={styles.infoLabel}>
-                Conta
-              </Text>
+        <Text style={styles.subtitle}>
+          Sua igreja está configurada e pronta
+          para receber os primeiros módulos.
+        </Text>
 
-              <Text style={styles.infoValue}>
-                {session.user.email}
-              </Text>
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>
+            Organização ativa
+          </Text>
 
-              <Text style={styles.infoLabel}>
-                Perfil
-              </Text>
+          <Text style={styles.cardValue}>
+            {organization.name}
+          </Text>
 
-              <Text style={styles.infoValue}>
-                {profileError
-                  ? `Erro: ${profileError}`
-                  : "Profile carregado com RLS"}
-              </Text>
-            </View>
+          <Text style={styles.cardLabel}>
+            Identificador
+          </Text>
 
-            <Pressable
-              onPress={handleSignOut}
-              style={styles.button}
-            >
-              <Text style={styles.buttonText}>
-                Sair
-              </Text>
-            </Pressable>
-          </>
-        )}
+          <Text style={styles.cardValue}>
+            {organization.slug}
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={handleSignOut}
+          style={styles.secondaryButton}
+        >
+          <Text
+            style={
+              styles.secondaryButtonText
+            }
+          >
+            Sair
+          </Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f7f7f6",
+  },
+
   safeArea: {
     flex: 1,
     backgroundColor: "#f7f7f6",
@@ -124,31 +253,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 2.4,
-    marginBottom: 18,
+    color: "#242424",
+    marginBottom: 28,
+  },
+
+  eyebrow: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#676767",
+    marginBottom: 8,
   },
 
   title: {
     fontSize: 30,
+    lineHeight: 36,
     fontWeight: "700",
-    marginBottom: 8,
+    color: "#111111",
+    marginBottom: 10,
   },
 
   subtitle: {
     fontSize: 15,
+    lineHeight: 22,
     color: "#626262",
     marginBottom: 28,
   },
 
-  infoBox: {
+  card: {
+    padding: 18,
     borderWidth: 1,
     borderColor: "#ddddda",
     borderRadius: 14,
     backgroundColor: "#ffffff",
-    padding: 18,
-    gap: 6,
+    gap: 5,
   },
 
-  infoLabel: {
+  cardLabel: {
     marginTop: 8,
     fontSize: 12,
     fontWeight: "700",
@@ -156,23 +296,42 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
 
-  infoValue: {
-    fontSize: 15,
+  cardValue: {
+    fontSize: 16,
     color: "#222222",
   },
 
-  button: {
+  errorText: {
+    marginBottom: 24,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#8b1e1e",
+  },
+
+  primaryButton: {
     height: 50,
-    marginTop: 24,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#d4d4d0",
+    backgroundColor: "#171717",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  buttonText: {
+  primaryButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+
+  secondaryButton: {
+    minHeight: 48,
+    marginTop: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  secondaryButtonText: {
     fontSize: 15,
     fontWeight: "600",
+    color: "#333333",
   },
 });
