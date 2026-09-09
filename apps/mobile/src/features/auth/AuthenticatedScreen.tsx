@@ -1,9 +1,4 @@
 import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
-import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
@@ -11,96 +6,26 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import type { Session } from "@supabase/supabase-js";
 
+import { useOrganization } from "../../contexts/OrganizationContext";
 import { supabase } from "../../lib/supabase";
+
+import { OrganizationSelectorScreen } from "../organization/OrganizationSelectorScreen";
 import { OrganizationSetupScreen } from "../organization/OrganizationSetupScreen";
 
-type AuthenticatedScreenProps = {
-  session: Session;
-};
-
-type Organization = {
-  id: string;
-  name: string;
-  slug: string;
-};
-
-export function AuthenticatedScreen({
-  session,
-}: AuthenticatedScreenProps) {
-  const [displayName, setDisplayName] =
-    useState<string | null>(null);
-
-  const [organization, setOrganization] =
-    useState<Organization | null>(null);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [errorMessage, setErrorMessage] =
-    useState<string | null>(null);
-
-  const loadContext = useCallback(
-    async () => {
-      setLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const [
-          profileResponse,
-          organizationsResponse,
-        ] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("display_name")
-            .eq(
-              "user_id",
-              session.user.id
-            )
-            .single(),
-
-          supabase
-            .from("organizations")
-            .select("id, name, slug")
-            .order("created_at", {
-              ascending: true,
-            }),
-        ]);
-
-        if (profileResponse.error) {
-          throw profileResponse.error;
-        }
-
-        if (organizationsResponse.error) {
-          throw organizationsResponse.error;
-        }
-
-        setDisplayName(
-          profileResponse.data.display_name
-        );
-
-        setOrganization(
-          organizationsResponse.data?.[0] ??
-            null
-        );
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Não foi possível carregar sua conta.";
-
-        setErrorMessage(message);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [session.user.id]
-  );
-
-  useEffect(() => {
-    void loadContext();
-  }, [loadContext]);
+export function AuthenticatedScreen() {
+  const {
+    profile,
+    organizations,
+    activeOrganization,
+    activeUnit,
+    permissions,
+    loading,
+    errorMessage,
+    refreshContext,
+    selectOrganization,
+    clearOrganizationSelection,
+  } = useOrganization();
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -134,7 +59,7 @@ export function AuthenticatedScreen({
 
           <Pressable
             onPress={() => {
-              void loadContext();
+              void refreshContext();
             }}
             style={styles.primaryButton}
           >
@@ -164,14 +89,34 @@ export function AuthenticatedScreen({
     );
   }
 
-  if (!organization) {
+  if (organizations.length === 0) {
     return (
       <OrganizationSetupScreen
-        displayName={displayName}
-        onCreated={loadContext}
+        displayName={
+          profile?.display_name
+        }
+        onCreated={refreshContext}
       />
     );
   }
+
+  if (!activeOrganization) {
+    return (
+      <OrganizationSelectorScreen
+        displayName={
+          profile?.display_name
+        }
+        organizations={organizations}
+        onSelect={selectOrganization}
+        onSignOut={handleSignOut}
+      />
+    );
+  }
+
+  const ownerRole =
+    activeOrganization.roles.find(
+      (role) => role.is_owner
+    );
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -181,37 +126,65 @@ export function AuthenticatedScreen({
         </Text>
 
         <Text style={styles.eyebrow}>
-          {displayName
-            ? `Olá, ${displayName}`
+          {profile?.display_name
+            ? `Olá, ${profile.display_name}`
             : "Bem-vindo"}
         </Text>
 
         <Text style={styles.title}>
-          {organization.name}
+          {activeOrganization.name}
         </Text>
 
         <Text style={styles.subtitle}>
-          Sua igreja está configurada e pronta
-          para receber os primeiros módulos.
+          Seu contexto de acesso está pronto.
         </Text>
 
         <View style={styles.card}>
           <Text style={styles.cardLabel}>
-            Organização ativa
+            Unidade ativa
           </Text>
 
           <Text style={styles.cardValue}>
-            {organization.name}
+            {activeUnit?.name ??
+              "Nenhuma unidade disponível"}
           </Text>
 
           <Text style={styles.cardLabel}>
-            Identificador
+            Papel
           </Text>
 
           <Text style={styles.cardValue}>
-            {organization.slug}
+            {ownerRole?.name ??
+              activeOrganization.roles[0]
+                ?.name ??
+              "Sem papel"}
+          </Text>
+
+          <Text style={styles.cardLabel}>
+            Permissões
+          </Text>
+
+          <Text style={styles.cardValue}>
+            {permissions.length}
           </Text>
         </View>
+
+        {organizations.length > 1 && (
+          <Pressable
+            onPress={() => {
+              void clearOrganizationSelection();
+            }}
+            style={styles.secondaryButton}
+          >
+            <Text
+              style={
+                styles.secondaryButtonText
+              }
+            >
+              Trocar igreja
+            </Text>
+          </Pressable>
+        )}
 
         <Pressable
           onPress={handleSignOut}
@@ -253,7 +226,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 2.4,
-    color: "#242424",
     marginBottom: 28,
   },
 
@@ -268,7 +240,6 @@ const styles = StyleSheet.create({
     fontSize: 30,
     lineHeight: 36,
     fontWeight: "700",
-    color: "#111111",
     marginBottom: 10,
   },
 
@@ -324,7 +295,7 @@ const styles = StyleSheet.create({
 
   secondaryButton: {
     minHeight: 48,
-    marginTop: 16,
+    marginTop: 12,
     alignItems: "center",
     justifyContent: "center",
   },

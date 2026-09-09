@@ -9,6 +9,7 @@ import type { Session } from "@supabase/supabase-js";
 
 import { AuthScreen } from "./src/features/auth/AuthScreen";
 import { AuthenticatedScreen } from "./src/features/auth/AuthenticatedScreen";
+import { OrganizationProvider } from "./src/contexts/OrganizationContext";
 import { supabase } from "./src/lib/supabase";
 
 export default function App() {
@@ -58,9 +59,11 @@ export default function App() {
           <ActivityIndicator size="large" />
         </View>
       ) : session ? (
-        <AuthenticatedScreen
-          session={session}
-        />
+        <OrganizationProvider
+          userId={session.user.id}
+        >
+          <AuthenticatedScreen />
+        </OrganizationProvider>
       ) : (
         <AuthScreen />
       )}
