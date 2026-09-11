@@ -27,6 +27,10 @@ import {
     AccessRolesScreen,
 } from "./AccessRolesScreen";
 
+import {
+    PeopleAccessScreen,
+} from "./PeopleAccessScreen";
+
 
 type ChurchManagementScreenProps = {
     onBack:
@@ -61,7 +65,9 @@ export function ChurchManagementScreen({
         setActiveSection,
     ] =
         useState<
-            "home" | "roles"
+            "home" |
+            "roles" |
+            "peopleAccess"
         >("home");
     const {
         activeOrganization,
@@ -98,6 +104,21 @@ export function ChurchManagementScreen({
     ) {
         return (
             <AccessRolesScreen
+                onBack={() =>
+                    setActiveSection(
+                        "home"
+                    )
+                }
+            />
+        );
+    }
+
+    if (
+        activeSection ===
+        "peopleAccess"
+    ) {
+        return (
+            <PeopleAccessScreen
                 onBack={() =>
                     setActiveSection(
                         "home"
@@ -202,10 +223,10 @@ export function ChurchManagementScreen({
                                 icon="people-outline"
                                 title="Pessoas e acessos"
                                 description="Defina quem pode entrar no sistema e qual acesso cada pessoa possui."
-                                badge="Próxima etapa"
+                                badge="Disponível"
                                 onPress={() =>
-                                    nextStep(
-                                        "Pessoas e acessos"
+                                    setActiveSection(
+                                        "peopleAccess"
                                     )
                                 }
                             />
