@@ -35,6 +35,10 @@ import {
     type ServiceEditorData,
 } from "./NewServiceScreen";
 
+import {
+    ServiceDetailsScreen,
+} from "./ServiceDetailsScreen";
+
 
 type AgendaEvent = {
     id: string;
@@ -153,6 +157,17 @@ export function AgendaScreen() {
             null
         );
 
+    const [
+        viewingService,
+        setViewingService,
+    ] =
+        useState<
+            ServiceEditorData
+            | null
+        >(
+            null
+        );
+
 
     const [
         actionEventId,
@@ -249,10 +264,10 @@ export function AgendaScreen() {
                             "starts_at",
                             new Date(
                                 Date.now() -
-                                    24 *
-                                        60 *
-                                        60 *
-                                        1000
+                                24 *
+                                60 *
+                                60 *
+                                1000
                             ).toISOString()
                         )
                         .order(
@@ -312,7 +327,7 @@ export function AgendaScreen() {
 
                                 const {
                                     data:
-                                        signedData,
+                                    signedData,
                                 } =
                                     await supabase.storage
                                         .from(
@@ -321,7 +336,7 @@ export function AgendaScreen() {
                                         .createSignedUrl(
                                             event.cover_image_path,
                                             60 *
-                                                60
+                                            60
                                         );
 
 
@@ -378,16 +393,103 @@ export function AgendaScreen() {
     }
 
 
-    async function handleEdit(
+    async function loadServiceDetails(
         event: AgendaEvent
     ) {
         if (
             !activeOrganization
         ) {
-            return;
+            return null;
         }
 
+        const {
+            data,
+            error,
+        } =
+            await supabase
+                .from(
+                    "services"
+                )
+                .select(
+                    `
+                theme,
+                preacher_name,
+                bible_reference,
+                livestream_url,
+                notes
+                `
+                )
+                .eq(
+                    "event_id",
+                    event.id
+                )
+                .eq(
+                    "organization_id",
+                    activeOrganization.id
+                )
+                .maybeSingle();
 
+        if (error) {
+            throw error;
+        }
+
+        const result:
+            ServiceEditorData = {
+            id:
+                event.id,
+
+            title:
+                event.title,
+
+            starts_at:
+                event.starts_at,
+
+            ends_at:
+                event.ends_at,
+
+            location_name:
+                event.location_name,
+
+            visibility:
+                event.visibility,
+
+            cover_image_path:
+                event.cover_image_path,
+
+            cover_image_url:
+                event.cover_image_url,
+
+            theme:
+                data?.theme ??
+                null,
+
+            preacher_name:
+                data
+                    ?.preacher_name ??
+                null,
+
+            bible_reference:
+                data
+                    ?.bible_reference ??
+                null,
+
+            livestream_url:
+                data
+                    ?.livestream_url ??
+                null,
+
+            notes:
+                data?.notes ??
+                null,
+        };
+
+        return result;
+    }
+
+
+    async function handleOpenDetails(
+        event: AgendaEvent
+    ) {
         setActionEventId(
             event.id
         );
@@ -396,96 +498,61 @@ export function AgendaScreen() {
             null
         );
 
-
         try {
-            const {
-                data,
-                error,
-            } =
-                await supabase
-                    .from(
-                        "services"
-                    )
-                    .select(
-                        `
-                        theme,
-                        preacher_name,
-                        bible_reference,
-                        livestream_url,
-                        notes
-                        `
-                    )
-                    .eq(
-                        "event_id",
-                        event.id
-                    )
-                    .eq(
-                        "organization_id",
-                        activeOrganization.id
-                    )
-                    .maybeSingle();
+            const service =
+                await loadServiceDetails(
+                    event
+                );
 
-
-            if (error) {
-                throw error;
+            if (service) {
+                setViewingService(
+                    service
+                );
             }
-
-
-            setEditingService({
-                id:
-                    event.id,
-
-                title:
-                    event.title,
-
-                starts_at:
-                    event.starts_at,
-
-                ends_at:
-                    event.ends_at,
-
-                location_name:
-                    event.location_name,
-
-                visibility:
-                    event.visibility,
-
-                cover_image_path:
-                    event.cover_image_path,
-
-                cover_image_url:
-                    event.cover_image_url,
-
-                theme:
-                    data?.theme ??
-                    null,
-
-                preacher_name:
-                    data
-                        ?.preacher_name ??
-                    null,
-
-                bible_reference:
-                    data
-                        ?.bible_reference ??
-                    null,
-
-                livestream_url:
-                    data
-                        ?.livestream_url ??
-                    null,
-
-                notes:
-                    data?.notes ??
-                    null,
-            });
         } catch (error) {
             const message =
-                error instanceof
-                Error
+                error instanceof Error
+                    ? error.message
+                    : "Não foi possível abrir os detalhes do culto.";
+
+            setErrorMessage(
+                message
+            );
+        } finally {
+            setActionEventId(
+                null
+            );
+        }
+    }
+
+
+    async function handleEdit(
+        event: AgendaEvent
+    ) {
+        setActionEventId(
+            event.id
+        );
+
+        setErrorMessage(
+            null
+        );
+
+        try {
+            const service =
+                await loadServiceDetails(
+                    event
+                );
+
+            if (service) {
+                setEditingService(
+                    service
+                );
+            }
+        } catch (error) {
+            const message =
+                error instanceof Error
                     ? error.message
                     : "Não foi possível abrir o culto para edição.";
-
 
             setErrorMessage(
                 message
@@ -576,7 +643,7 @@ export function AgendaScreen() {
             const deleted =
                 data as {
                     cover_image_path?:
-                        string | null;
+                    string | null;
                 } | null;
 
 
@@ -589,7 +656,7 @@ export function AgendaScreen() {
             if (coverPath) {
                 const {
                     error:
-                        storageError,
+                    storageError,
                 } =
                     await supabase.storage
                         .from(
@@ -612,10 +679,13 @@ export function AgendaScreen() {
 
 
             await loadEvents();
+            setViewingService(
+                null
+            );
         } catch (error) {
             const message =
                 error instanceof
-                Error
+                    Error
                     ? error.message
                     : "Não foi possível excluir o culto.";
 
@@ -628,6 +698,47 @@ export function AgendaScreen() {
                 null
             );
         }
+    }
+
+    if (viewingService) {
+        return (
+            <ServiceDetailsScreen
+                service={
+                    viewingService
+                }
+                canManage={
+                    canManage
+                }
+                onBack={() =>
+                    setViewingService(
+                        null
+                    )
+                }
+                onEdit={() => {
+                    setEditingService(
+                        viewingService
+                    );
+
+                    setViewingService(
+                        null
+                    );
+                }}
+                onDelete={() => {
+                    const event =
+                        events.find(
+                            (item) =>
+                                item.id ===
+                                viewingService.id
+                        );
+
+                    if (event) {
+                        handleDeleteRequest(
+                            event
+                        );
+                    }
+                }}
+            />
+        );
     }
 
 
@@ -709,7 +820,7 @@ export function AgendaScreen() {
                                 styles.newButton,
 
                                 pressed &&
-                                    styles.buttonPressed,
+                                styles.buttonPressed,
                             ]}
                         >
                             <Text
@@ -763,7 +874,7 @@ export function AgendaScreen() {
                         </Pressable>
                     </View>
                 ) : events.length ===
-                  0 ? (
+                    0 ? (
                     <View
                         style={
                             styles.empty
@@ -804,13 +915,28 @@ export function AgendaScreen() {
 
 
                                 return (
-                                    <View
+                                    <Pressable
                                         key={
                                             event.id
                                         }
-                                        style={
-                                            styles.event
-                                        }
+                                        onPress={() => {
+                                            if (
+                                                actionEventId !==
+                                                event.id
+                                            ) {
+                                                void handleOpenDetails(
+                                                    event
+                                                );
+                                            }
+                                        }}
+                                        style={({
+                                            pressed,
+                                        }) => [
+                                                styles.event,
+
+                                                pressed &&
+                                                styles.eventPressed,
+                                            ]}
                                     >
                                         {event.cover_image_url && (
                                             <Image
@@ -857,8 +983,8 @@ export function AgendaScreen() {
 
                                             {event.ends_at
                                                 ? ` – ${formatTime(
-                                                      event.ends_at
-                                                  )}`
+                                                    event.ends_at
+                                                )}`
                                                 : ""}
 
                                             {event.location_name
@@ -880,7 +1006,11 @@ export function AgendaScreen() {
                                                 ) : (
                                                     <>
                                                         <Pressable
-                                                            onPress={() => {
+                                                            onPress={(
+                                                                pressEvent
+                                                            ) => {
+                                                                pressEvent.stopPropagation();
+
                                                                 void handleEdit(
                                                                     event
                                                                 );
@@ -888,11 +1018,11 @@ export function AgendaScreen() {
                                                             style={({
                                                                 pressed,
                                                             }) => [
-                                                                styles.editButton,
+                                                                    styles.editButton,
 
-                                                                pressed &&
+                                                                    pressed &&
                                                                     styles.buttonPressed,
-                                                            ]}
+                                                                ]}
                                                         >
                                                             <Text
                                                                 style={
@@ -905,19 +1035,23 @@ export function AgendaScreen() {
 
 
                                                         <Pressable
-                                                            onPress={() =>
+                                                            onPress={(
+                                                                pressEvent
+                                                            ) => {
+                                                                pressEvent.stopPropagation();
+
                                                                 handleDeleteRequest(
                                                                     event
-                                                                )
-                                                            }
+                                                                );
+                                                            }}
                                                             style={({
                                                                 pressed,
                                                             }) => [
-                                                                styles.deleteButton,
+                                                                    styles.deleteButton,
 
-                                                                pressed &&
+                                                                    pressed &&
                                                                     styles.buttonPressed,
-                                                            ]}
+                                                                ]}
                                                         >
                                                             <Text
                                                                 style={
@@ -931,7 +1065,7 @@ export function AgendaScreen() {
                                                 )}
                                             </View>
                                         )}
-                                    </View>
+                                    </Pressable>
                                 );
                             }
                         )}
@@ -1139,6 +1273,18 @@ const styles =
 
             backgroundColor:
                 "#ffffff",
+        },
+
+        eventPressed: {
+            opacity:
+                0.82,
+
+            transform: [
+                {
+                    scale:
+                        0.995,
+                },
+            ],
         },
 
         eventImage: {
