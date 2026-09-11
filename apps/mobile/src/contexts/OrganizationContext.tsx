@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import {
   createContext,
   useCallback,
@@ -9,35 +10,79 @@ import {
   type ReactNode,
 } from "react";
 
-import { supabase } from "../lib/supabase";
+import {
+  AppState,
+} from "react-native";
+
+import {
+  supabase,
+} from "../lib/supabase";
 
 import type {
+  AccessMatrixOrganization,
+  MyAccessMatrixResponse,
   MyContextResponse,
   OrganizationContextItem,
   OrganizationProfile,
   OrganizationUnit,
 } from "../features/organization/organization.types";
 
-type OrganizationContextValue = {
-  profile: OrganizationProfile | null;
 
-  organizations: OrganizationContextItem[];
+type OrganizationContextValue = {
+  profile:
+    OrganizationProfile | null;
+
+  organizations:
+    OrganizationContextItem[];
 
   activeOrganization:
-    | OrganizationContextItem
-    | null;
+    OrganizationContextItem | null;
 
   activeUnit:
-    | OrganizationUnit
-    | null;
+    OrganizationUnit | null;
 
+  /*
+   * Permissões efetivas no contexto
+   * da unidade ativa.
+   *
+   * Mantemos este campo para que as
+   * telas existentes já passem a
+   * respeitar a nova matriz sem
+   * precisarmos alterá-las agora.
+   */
   permissions: string[];
+
+  /*
+   * Permissões efetivamente concedidas
+   * em nível de organização.
+   */
+  organizationPermissions: string[];
 
   loading: boolean;
 
-  errorMessage: string | null;
+  errorMessage:
+    string | null;
 
-  refreshContext: () => Promise<void>;
+  /*
+   * Verifica a permissão no contexto
+   * da unidade ativa ou da unidade
+   * informada.
+   */
+  can: (
+    permissionKey: string,
+    unitId?: string
+  ) => boolean;
+
+  /*
+   * Verifica exclusivamente uma
+   * permissão administrativa global.
+   */
+  canAtOrganization: (
+    permissionKey: string
+  ) => boolean;
+
+  refreshContext:
+    () => Promise<void>;
 
   selectOrganization: (
     organizationId: string
@@ -51,207 +96,394 @@ type OrganizationContextValue = {
     () => Promise<void>;
 };
 
+
 const OrganizationContext =
-  createContext<OrganizationContextValue | null>(
-    null
-  );
+  createContext<
+    OrganizationContextValue | null
+  >(null);
+
 
 type OrganizationProviderProps = {
   userId: string;
   children: ReactNode;
 };
 
+
 function getDefaultUnit(
-  organization: OrganizationContextItem
+  organization:
+    OrganizationContextItem
 ) {
   return (
     organization.units.find(
-      (unit) => unit.is_headquarters
+      (unit) =>
+        unit.is_headquarters
     ) ??
     organization.units[0] ??
     null
   );
 }
 
+
 export function OrganizationProvider({
   userId,
   children,
 }: OrganizationProviderProps) {
-  const [profile, setProfile] =
-    useState<OrganizationProfile | null>(
-      null
-    );
+  const [
+    profile,
+    setProfile,
+  ] =
+    useState<
+      OrganizationProfile | null
+    >(null);
+
 
   const [
     organizations,
     setOrganizations,
-  ] = useState<OrganizationContextItem[]>(
-    []
-  );
+  ] =
+    useState<
+      OrganizationContextItem[]
+    >([]);
+
 
   const [
     activeOrganization,
     setActiveOrganization,
   ] =
-    useState<OrganizationContextItem | null>(
-      null
-    );
+    useState<
+      OrganizationContextItem | null
+    >(null);
 
-  const [activeUnit, setActiveUnit] =
-    useState<OrganizationUnit | null>(
-      null
-    );
 
-  const [loading, setLoading] =
+  const [
+    activeUnit,
+    setActiveUnit,
+  ] =
+    useState<
+      OrganizationUnit | null
+    >(null);
+
+
+  const [
+    accessMatrix,
+    setAccessMatrix,
+  ] =
+    useState<MyAccessMatrixResponse>({
+      organizations: [],
+    });
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
     useState(true);
+
 
   const [
     errorMessage,
     setErrorMessage,
-  ] = useState<string | null>(null);
+  ] =
+    useState<
+      string | null
+    >(null);
+
 
   const organizationStorageKey =
     `@nethanel/active-organization/${userId}`;
 
-  const unitStorageKey = useCallback(
-    (organizationId: string) =>
-      `@nethanel/active-unit/${userId}/${organizationId}`,
-    [userId]
-  );
 
-  const refreshContext = useCallback(
-    async () => {
-      setLoading(true);
-      setErrorMessage(null);
+  const unitStorageKey =
+    useCallback(
+      (
+        organizationId:
+          string
+      ) =>
+        `@nethanel/active-unit/${userId}/${organizationId}`,
+      [userId]
+    );
 
-      try {
-        const { data, error } =
-          await supabase.rpc(
-            "get_my_context"
-          );
 
-        if (error) {
-          throw error;
-        }
+  const refreshContext =
+    useCallback(
+      async () => {
+        setLoading(true);
 
-        const context =
-          data as MyContextResponse | null;
-
-        const nextProfile =
-          context?.profile ?? null;
-
-        const nextOrganizations =
-          Array.isArray(
-            context?.organizations
-          )
-            ? context.organizations
-            : [];
-
-        setProfile(nextProfile);
-        setOrganizations(
-          nextOrganizations
+        setErrorMessage(
+          null
         );
 
-        const storedOrganizationId =
-          await AsyncStorage.getItem(
-            organizationStorageKey
-          );
+        try {
+          /*
+           * Carregamos identidade/contexto
+           * e autorização em paralelo.
+           */
+          const [
+            contextResult,
+            accessResult,
+          ] =
+            await Promise.all([
+              supabase.rpc(
+                "get_my_context"
+              ),
 
-        let nextOrganization:
-          | OrganizationContextItem
-          | null = null;
+              supabase.rpc(
+                "get_my_access_matrix"
+              ),
+            ]);
 
-        if (storedOrganizationId) {
-          nextOrganization =
-            nextOrganizations.find(
-              (organization) =>
-                organization.id ===
-                storedOrganizationId
-            ) ?? null;
-        }
 
-        /*
-         * Se houver somente uma organização,
-         * não obrigamos o usuário a escolhê-la.
-         */
-        if (
-          !nextOrganization &&
-          nextOrganizations.length === 1
-        ) {
-          nextOrganization =
-            nextOrganizations[0];
-        }
+          if (
+            contextResult.error
+          ) {
+            throw contextResult.error;
+          }
 
-        setActiveOrganization(
-          nextOrganization
-        );
 
-        if (!nextOrganization) {
-          setActiveUnit(null);
-          return;
-        }
+          if (
+            accessResult.error
+          ) {
+            throw accessResult.error;
+          }
 
-        await AsyncStorage.setItem(
-          organizationStorageKey,
-          nextOrganization.id
-        );
 
-        const storedUnitId =
-          await AsyncStorage.getItem(
-            unitStorageKey(
-              nextOrganization.id
+          const context =
+            contextResult.data as
+              | MyContextResponse
+              | null;
+
+
+          const matrix =
+            accessResult.data as
+              | MyAccessMatrixResponse
+              | null;
+
+
+          const nextProfile =
+            context?.profile ??
+            null;
+
+
+          const nextOrganizations =
+            Array.isArray(
+              context?.organizations
             )
+              ? context.organizations
+              : [];
+
+
+          const nextAccessMatrix:
+            MyAccessMatrixResponse =
+              matrix &&
+              Array.isArray(
+                matrix.organizations
+              )
+                ? matrix
+                : {
+                    organizations: [],
+                  };
+
+
+          setProfile(
+            nextProfile
           );
 
-        const nextUnit =
-          nextOrganization.units.find(
-            (unit) =>
-              unit.id === storedUnitId
-          ) ??
-          getDefaultUnit(
+          setOrganizations(
+            nextOrganizations
+          );
+
+          setAccessMatrix(
+            nextAccessMatrix
+          );
+
+
+          const storedOrganizationId =
+            await AsyncStorage.getItem(
+              organizationStorageKey
+            );
+
+
+          let nextOrganization:
+            | OrganizationContextItem
+            | null =
+              null;
+
+
+          if (
+            storedOrganizationId
+          ) {
+            nextOrganization =
+              nextOrganizations.find(
+                (
+                  organization
+                ) =>
+                  organization.id ===
+                  storedOrganizationId
+              ) ??
+              null;
+          }
+
+
+          /*
+           * Se só existe uma igreja,
+           * selecionamos automaticamente.
+           */
+          if (
+            !nextOrganization &&
+            nextOrganizations.length ===
+              1
+          ) {
+            nextOrganization =
+              nextOrganizations[0];
+          }
+
+
+          setActiveOrganization(
             nextOrganization
           );
 
-        setActiveUnit(nextUnit);
 
-        if (nextUnit) {
+          if (
+            !nextOrganization
+          ) {
+            setActiveUnit(
+              null
+            );
+
+            return;
+          }
+
+
           await AsyncStorage.setItem(
-            unitStorageKey(
-              nextOrganization.id
-            ),
-            nextUnit.id
+            organizationStorageKey,
+            nextOrganization.id
+          );
+
+
+          const storedUnitId =
+            await AsyncStorage.getItem(
+              unitStorageKey(
+                nextOrganization.id
+              )
+            );
+
+
+          const nextUnit =
+            nextOrganization.units.find(
+              (unit) =>
+                unit.id ===
+                storedUnitId
+            ) ??
+            getDefaultUnit(
+              nextOrganization
+            );
+
+
+          setActiveUnit(
+            nextUnit
+          );
+
+
+          if (nextUnit) {
+            await AsyncStorage.setItem(
+              unitStorageKey(
+                nextOrganization.id
+              ),
+              nextUnit.id
+            );
+          }
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Não foi possível carregar o contexto da sua conta.";
+
+
+          setErrorMessage(
+            message
+          );
+
+
+          setProfile(
+            null
+          );
+
+          setOrganizations(
+            []
+          );
+
+          setActiveOrganization(
+            null
+          );
+
+          setActiveUnit(
+            null
+          );
+
+          /*
+           * Falha fechada:
+           * se não conseguimos calcular
+           * autorização, nenhuma permissão
+           * é concedida.
+           */
+          setAccessMatrix({
+            organizations: [],
+          });
+        } finally {
+          setLoading(
+            false
           );
         }
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Não foi possível carregar o contexto da sua conta.";
+      },
+      [
+        organizationStorageKey,
+        unitStorageKey,
+      ]
+    );
 
-        setErrorMessage(message);
 
-        setProfile(null);
-        setOrganizations([]);
-        setActiveOrganization(null);
-        setActiveUnit(null);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [
-      organizationStorageKey,
-      unitStorageKey,
-    ]
-  );
-
+  /*
+   * Carregamento inicial.
+   */
   useEffect(() => {
     void refreshContext();
   }, [refreshContext]);
 
+
+  /*
+   * Se um administrador alterar as
+   * permissões enquanto o usuário está
+   * fora do app, ao voltar ao aplicativo
+   * o contexto é recalculado.
+   *
+   * O backend continua sendo a camada
+   * autoritativa mesmo antes deste refresh.
+   */
+  useEffect(() => {
+    const subscription =
+      AppState.addEventListener(
+        "change",
+        (state) => {
+          if (
+            state === "active"
+          ) {
+            void refreshContext();
+          }
+        }
+      );
+
+
+    return () => {
+      subscription.remove();
+    };
+  }, [refreshContext]);
+
+
   const selectOrganization =
     useCallback(
       async (
-        organizationId: string
+        organizationId:
+          string
       ) => {
         const organization =
           organizations.find(
@@ -260,20 +492,24 @@ export function OrganizationProvider({
               organizationId
           );
 
+
         if (!organization) {
           throw new Error(
             "Organização não encontrada."
           );
         }
 
+
         setActiveOrganization(
           organization
         );
+
 
         await AsyncStorage.setItem(
           organizationStorageKey,
           organization.id
         );
+
 
         const storedUnitId =
           await AsyncStorage.getItem(
@@ -282,14 +518,22 @@ export function OrganizationProvider({
             )
           );
 
+
         const unit =
           organization.units.find(
             (item) =>
-              item.id === storedUnitId
+              item.id ===
+              storedUnitId
           ) ??
-          getDefaultUnit(organization);
+          getDefaultUnit(
+            organization
+          );
 
-        setActiveUnit(unit);
+
+        setActiveUnit(
+          unit
+        );
+
 
         if (unit) {
           await AsyncStorage.setItem(
@@ -307,100 +551,312 @@ export function OrganizationProvider({
       ]
     );
 
-  const selectUnit = useCallback(
-    async (unitId: string) => {
-      if (!activeOrganization) {
-        throw new Error(
-          "Nenhuma organização ativa."
+
+  const selectUnit =
+    useCallback(
+      async (
+        unitId:
+          string
+      ) => {
+        if (
+          !activeOrganization
+        ) {
+          throw new Error(
+            "Nenhuma organização ativa."
+          );
+        }
+
+
+        const unit =
+          activeOrganization.units.find(
+            (item) =>
+              item.id ===
+              unitId
+          );
+
+
+        if (!unit) {
+          throw new Error(
+            "Unidade não encontrada nesta organização."
+          );
+        }
+
+
+        setActiveUnit(
+          unit
         );
-      }
 
-      const unit =
-        activeOrganization.units.find(
-          (item) => item.id === unitId
+
+        await AsyncStorage.setItem(
+          unitStorageKey(
+            activeOrganization.id
+          ),
+          unit.id
         );
+      },
+      [
+        activeOrganization,
+        unitStorageKey,
+      ]
+    );
 
-      if (!unit) {
-        throw new Error(
-          "Unidade não encontrada nesta organização."
-        );
-      }
-
-      setActiveUnit(unit);
-
-      await AsyncStorage.setItem(
-        unitStorageKey(
-          activeOrganization.id
-        ),
-        unit.id
-      );
-    },
-    [
-      activeOrganization,
-      unitStorageKey,
-    ]
-  );
 
   const clearOrganizationSelection =
-    useCallback(async () => {
-      setActiveOrganization(null);
-      setActiveUnit(null);
+    useCallback(
+      async () => {
+        setActiveOrganization(
+          null
+        );
 
-      await AsyncStorage.removeItem(
-        organizationStorageKey
-      );
-    }, [organizationStorageKey]);
+        setActiveUnit(
+          null
+        );
 
+
+        await AsyncStorage.removeItem(
+          organizationStorageKey
+        );
+      },
+      [
+        organizationStorageKey,
+      ]
+    );
+
+
+  /*
+   * Entrada da matriz correspondente
+   * à organização atualmente ativa.
+   */
+  const activeAccess =
+    useMemo<
+      AccessMatrixOrganization | null
+    >(
+      () => {
+        if (
+          !activeOrganization
+        ) {
+          return null;
+        }
+
+
+        return (
+          accessMatrix.organizations.find(
+            (item) =>
+              item.organization_id ===
+              activeOrganization.id
+          ) ??
+          null
+        );
+      },
+      [
+        accessMatrix,
+        activeOrganization,
+      ]
+    );
+
+
+  /*
+   * Permissões que realmente valem
+   * para a organização inteira.
+   */
+  const organizationPermissions =
+    useMemo(
+      () =>
+        activeAccess
+          ?.organization_permissions ??
+        [],
+      [
+        activeAccess,
+      ]
+    );
+
+
+  /*
+   * Permissões efetivas na unidade ativa.
+   *
+   * É este campo que substitui a antiga
+   * lista genérica de get_my_context().
+   */
   const permissions =
-    activeOrganization?.permissions ?? [];
+    useMemo(
+      () => {
+        if (
+          !activeAccess
+        ) {
+          return [];
+        }
 
-  const value = useMemo(
-    () => ({
-      profile,
-      organizations,
-      activeOrganization,
-      activeUnit,
-      permissions,
-      loading,
-      errorMessage,
-      refreshContext,
-      selectOrganization,
-      selectUnit,
-      clearOrganizationSelection,
-    }),
-    [
-      profile,
-      organizations,
-      activeOrganization,
-      activeUnit,
-      permissions,
-      loading,
-      errorMessage,
-      refreshContext,
-      selectOrganization,
-      selectUnit,
-      clearOrganizationSelection,
-    ]
-  );
+
+        if (!activeUnit) {
+          return (
+            activeAccess
+              .organization_permissions
+          );
+        }
+
+
+        return (
+          activeAccess.units.find(
+            (item) =>
+              item.unit_id ===
+              activeUnit.id
+          )?.permissions ??
+          []
+        );
+      },
+      [
+        activeAccess,
+        activeUnit,
+      ]
+    );
+
+
+  const can =
+    useCallback(
+      (
+        permissionKey:
+          string,
+
+        unitId?: string
+      ) => {
+        if (
+          !activeAccess
+        ) {
+          return false;
+        }
+
+
+        const targetUnitId =
+          unitId ??
+          activeUnit?.id ??
+          null;
+
+
+        if (
+          !targetUnitId
+        ) {
+          return (
+            activeAccess
+              .organization_permissions
+              .includes(
+                permissionKey
+              )
+          );
+        }
+
+
+        const unitAccess =
+          activeAccess.units.find(
+            (item) =>
+              item.unit_id ===
+              targetUnitId
+          );
+
+
+        return (
+          unitAccess
+            ?.permissions
+            .includes(
+              permissionKey
+            ) ??
+          false
+        );
+      },
+      [
+        activeAccess,
+        activeUnit,
+      ]
+    );
+
+
+  const canAtOrganization =
+    useCallback(
+      (
+        permissionKey:
+          string
+      ) =>
+        activeAccess
+          ?.organization_permissions
+          .includes(
+            permissionKey
+          ) ??
+        false,
+      [
+        activeAccess,
+      ]
+    );
+
+
+  const value =
+    useMemo(
+      () => ({
+        profile,
+        organizations,
+        activeOrganization,
+        activeUnit,
+
+        permissions,
+        organizationPermissions,
+
+        loading,
+        errorMessage,
+
+        can,
+        canAtOrganization,
+
+        refreshContext,
+        selectOrganization,
+        selectUnit,
+        clearOrganizationSelection,
+      }),
+      [
+        profile,
+        organizations,
+        activeOrganization,
+        activeUnit,
+
+        permissions,
+        organizationPermissions,
+
+        loading,
+        errorMessage,
+
+        can,
+        canAtOrganization,
+
+        refreshContext,
+        selectOrganization,
+        selectUnit,
+        clearOrganizationSelection,
+      ]
+    );
+
 
   return (
     <OrganizationContext.Provider
-      value={value}
+      value={
+        value
+      }
     >
       {children}
     </OrganizationContext.Provider>
   );
 }
 
+
 export function useOrganization() {
   const context =
-    useContext(OrganizationContext);
+    useContext(
+      OrganizationContext
+    );
+
 
   if (!context) {
     throw new Error(
       "useOrganization deve ser usado dentro de OrganizationProvider."
     );
   }
+
 
   return context;
 }

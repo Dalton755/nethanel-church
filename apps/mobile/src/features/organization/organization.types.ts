@@ -1,4 +1,4 @@
-    export type OrganizationProfile = {
+export type OrganizationProfile = {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
@@ -47,10 +47,52 @@ export type OrganizationContextItem = {
 
   roles: OrganizationRole[];
 
+  /*
+   * Mantido porque get_my_context
+   * ainda retorna este campo.
+   *
+   * O aplicativo não usará mais
+   * esta lista como fonte autoritativa
+   * de autorização.
+   */
   permissions: string[];
 };
 
 export type MyContextResponse = {
   profile: OrganizationProfile | null;
   organizations: OrganizationContextItem[];
+};
+
+
+/*
+ * ============================================================
+ * MATRIZ DE ACESSO
+ * ============================================================
+ */
+
+export type AccessMatrixUnit = {
+  unit_id: string;
+  permissions: string[];
+};
+
+export type AccessMatrixOrganization = {
+  organization_id: string;
+
+  /*
+   * Permissões que realmente valem
+   * para toda a organização.
+   */
+  organization_permissions: string[];
+
+  /*
+   * Permissões efetivas em cada unidade.
+   *
+   * Perfis globais aparecem aqui também,
+   * pois são válidos naquela unidade.
+   */
+  units: AccessMatrixUnit[];
+};
+
+export type MyAccessMatrixResponse = {
+  organizations: AccessMatrixOrganization[];
 };
