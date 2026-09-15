@@ -20,3 +20,10 @@ node_modules
 # OS
 .DS_Store
 Thumbs.db
+
+# VS Code local
+.vscode/
+
+# Expo native generated at repository root
+/android/
+/app.json

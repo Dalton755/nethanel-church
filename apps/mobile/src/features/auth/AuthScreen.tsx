@@ -88,9 +88,14 @@ export function AuthScreen() {
         } = await supabase.auth.signUp({
           email: normalizedEmail,
           password,
+
           options: {
+            emailRedirectTo:
+              "nethanelchurch://auth/confirm",
+
             data: {
-              full_name: fullName.trim(),
+              full_name:
+                fullName.trim(),
             },
           },
         });
@@ -263,10 +268,10 @@ export function AuthScreen() {
                 style={({ pressed }) => [
                   styles.primaryButton,
                   pressed &&
-                    !loading &&
-                    styles.buttonPressed,
+                  !loading &&
+                  styles.buttonPressed,
                   loading &&
-                    styles.buttonDisabled,
+                  styles.buttonDisabled,
                 ]}
               >
                 {loading ? (

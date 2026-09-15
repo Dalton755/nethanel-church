@@ -1,15 +1,20 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Nethanel Church",
+    "slug": "nethanel-church",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "nethanelchurch",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "br.com.nethanel.church"
     },
+
     "android": {
+      "package": "br.com.nethanel.church",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -18,9 +23,11 @@
       },
       "predictiveBackGestureEnabled": false
     },
+
     "web": {
       "favicon": "./assets/favicon.png"
     },
+
     "plugins": [
       "@react-native-community/datetimepicker"
     ]
