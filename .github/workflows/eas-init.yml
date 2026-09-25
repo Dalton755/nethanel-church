@@ -1,0 +1,76 @@
+name: Initialize Expo EAS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve Expo account
+        id: expo-account
+        run: |
+          ACCOUNT="$(eas whoami)"
+          if [ -z "$ACCOUNT" ]; then
+            echo "Expo account not resolved."
+            exit 1
+          fi
+          echo "account=$ACCOUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Initialize EAS project
+        working-directory: apps/mobile
+        run: |
+          eas init \
+            --account "${{ steps.expo-account.outputs.account }}" \
+            --force \
+            --non-interactive
+
+      - name: Validate project id
+        working-directory: apps/mobile
+        run: |
+          node - <<'NODE'
+          const app = require("./app.json");
+          const projectId = app?.expo?.extra?.eas?.projectId;
+
+          if (!projectId) {
+            console.error("EAS projectId was not written to app.json.");
+            process.exit(1);
+          }
+
+          console.log("EAS project linked successfully.");
+          NODE
+
+      - name: Commit EAS project link
+        run: |
+          if git diff --quiet -- apps/mobile/app.json; then
+            echo "No app.json changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/mobile/app.json
+          git commit -m "chore: link mobile app to Expo EAS project"
+          git push origin HEAD:main
