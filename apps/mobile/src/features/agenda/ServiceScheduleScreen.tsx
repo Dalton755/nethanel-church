@@ -224,6 +224,9 @@ export function ServiceScheduleScreen({
       Number.parseInt(minRestDays.replace(/\D/g, ""), 10) || 0
     );
 
+    const departmentId = selectedDepartmentId;
+    const normalizedRole = roleLabel.trim();
+
     setSaving(true);
 
     try {
@@ -231,9 +234,9 @@ export function ServiceScheduleScreen({
         "save_event_schedule_rule",
         {
           p_organization_id: activeOrganization.id,
-          p_department_id: selectedDepartmentId,
+          p_department_id: departmentId,
           p_event_id: service.id,
-          p_role_label: roleLabel.trim(),
+          p_role_label: normalizedRole,
           p_required_count: count,
           p_rotation_mode: rotationMode,
           p_min_rest_days: rest,
@@ -261,9 +264,9 @@ export function ServiceScheduleScreen({
       if (
         current.filter(
           (item) =>
-            item.department_id === selectedDepartmentId &&
+            item.department_id === departmentId &&
             item.role_label.toLowerCase() ===
-              roleLabel.trim().toLowerCase()
+              normalizedRole.toLowerCase()
         ).length === 0
       ) {
         Alert.alert(
