@@ -13,6 +13,7 @@ import { supabase } from "../../lib/supabase";
 import { OrganizationSelectorScreen } from "../organization/OrganizationSelectorScreen";
 import { OrganizationSetupScreen } from "../organization/OrganizationSetupScreen";
 import { MainTabs } from "../../navigation/MainTabs";
+import { PushNotificationRegistration } from "../notifications/PushNotificationRegistration";
 
 export function AuthenticatedScreen() {
   const {
@@ -119,7 +120,12 @@ export function AuthenticatedScreen() {
       (role) => role.is_owner
     );
 
-  return <MainTabs />;
+  return (
+    <>
+      <PushNotificationRegistration />
+      <MainTabs />
+    </>
+  );
 }
 
 const styles = StyleSheet.create({
