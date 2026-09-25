@@ -40,6 +40,15 @@
         {
           "experimentalLauncherActivity": false
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permita que o Nethanel Elo use a câmera para ler códigos QR.",
+          "microphonePermission": "O Nethanel Elo não usa o microfone para o leitor de QR.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
       ]
     ],
     "extra": {

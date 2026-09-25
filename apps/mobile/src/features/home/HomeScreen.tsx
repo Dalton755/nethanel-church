@@ -1,103 +1,50 @@
-import {
-  useCallback,
-  useState,
-} from "react";
-
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import * as Phosphor from "phosphor-react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  useFocusEffect,
-  useNavigation,
-} from "@react-navigation/native";
+import { EloLogo } from "../../branding/EloBrand";
+import { useOrganization } from "../../contexts/OrganizationContext";
+import { supabase } from "../../lib/supabase";
+import type { MainTabParamList } from "../../navigation/MainTabs";
+import { useUnreadNotifications } from "../notifications/useUnreadNotifications";
+import { eloColors } from "../elo/EloUi";
 
-import type {
-  BottomTabNavigationProp,
-} from "@react-navigation/bottom-tabs";
+const P = Phosphor as any;
 
-import {
-  Ionicons,
-} from "@expo/vector-icons";
+type ScheduleSummary = {
+  assignment_id: string;
+  event_title: string;
+  department_name: string;
+  role_label: string;
+  status: string;
+  starts_at: string;
+};
 
-import {
-  SafeAreaView,
-} from "react-native-safe-area-context";
-
-import {
-  useOrganization,
-} from "../../contexts/OrganizationContext";
-
-import {
-  supabase,
-} from "../../lib/supabase";
-
-import type {
-  MainTabParamList,
-} from "../../navigation/MainTabs";
-
-import {
-  useUnreadNotifications,
-} from "../notifications/useUnreadNotifications";
-
-type HomeEvent = {
+type EventSummary = {
   id: string;
   title: string;
   starts_at: string;
-  ends_at: string | null;
   location_name: string | null;
-  cover_image_path: string | null;
 };
 
-type NextService = HomeEvent & {
-  cover_image_url: string | null;
-};
-
-function formatTime(
-  isoValue: string
-) {
-  return new Intl.DateTimeFormat(
-    "pt-BR",
-    {
-      hour: "2-digit",
-      minute: "2-digit",
-    }
-  ).format(new Date(isoValue));
-}
-
-function getTodayRange() {
-  const now = new Date();
-
-  const start = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    0,
-    0,
-    0,
-    0
-  );
-
-  const end = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + 1,
-    0,
-    0,
-    0,
-    0
-  );
-
-  return {
-    start: start.toISOString(),
-    end: end.toISOString(),
-  };
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 export function HomeScreen() {
@@ -108,766 +55,525 @@ export function HomeScreen() {
   } = useOrganization();
 
   const navigation =
-    useNavigation<
-      BottomTabNavigationProp<
-        MainTabParamList
-      >
-    >();
+    useNavigation<BottomTabNavigationProp<MainTabParamList>>();
 
-  const {
-    unreadCount,
-  } =
-    useUnreadNotifications(
-      activeOrganization?.id
-    );
+  const { unreadCount } = useUnreadNotifications(activeOrganization?.id);
 
-  const [
-    nextService,
-    setNextService,
-  ] = useState<NextService | null>(
-    null
-  );
-
-  const [
-    todayEvents,
-    setTodayEvents,
-  ] = useState<HomeEvent[]>([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] = useState<string | null>(null);
+  const [schedule, setSchedule] = useState<ScheduleSummary | null>(null);
+  const [nextEvent, setNextEvent] = useState<EventSummary | null>(null);
+  const [todayCount, setTodayCount] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   const firstName =
-    profile?.display_name
-      ?.trim()
-      .split(/\s+/)[0] ?? "";
+    profile?.display_name?.trim().split(/\s+/)[0] || "";
 
-  const today =
-    new Intl.DateTimeFormat(
-      "pt-BR",
-      {
-        weekday: "long",
-        day: "2-digit",
-        month: "long",
+  const load = useCallback(async () => {
+    if (!activeOrganization || !activeUnit) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const now = new Date();
+      const dayStart = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        0, 0, 0, 0
+      );
+      const dayEnd = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,
+        0, 0, 0, 0
+      );
+
+      const [scheduleResponse, eventResponse, todayResponse] = await Promise.all([
+        supabase
+          .from("my_schedule")
+          .select("assignment_id,event_title,department_name,role_label,status,starts_at")
+          .eq("organization_id", activeOrganization.id)
+          .gte("starts_at", now.toISOString())
+          .order("starts_at", { ascending: true })
+          .limit(1)
+          .maybeSingle(),
+
+        supabase
+          .from("events")
+          .select("id,title,starts_at,location_name")
+          .eq("organization_id", activeOrganization.id)
+          .eq("unit_id", activeUnit.id)
+          .eq("status", "published")
+          .gte("starts_at", now.toISOString())
+          .order("starts_at", { ascending: true })
+          .limit(1)
+          .maybeSingle(),
+
+        supabase
+          .from("events")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", activeOrganization.id)
+          .eq("unit_id", activeUnit.id)
+          .neq("status", "cancelled")
+          .gte("starts_at", dayStart.toISOString())
+          .lt("starts_at", dayEnd.toISOString()),
+      ]);
+
+      if (!scheduleResponse.error) {
+        setSchedule((scheduleResponse.data ?? null) as ScheduleSummary | null);
       }
-    ).format(new Date());
 
-  const loadHome = useCallback(
-    async () => {
-      if (
-        !activeOrganization ||
-        !activeUnit
-      ) {
-        setNextService(null);
-        setTodayEvents([]);
-        setLoading(false);
-        return;
+      if (!eventResponse.error) {
+        setNextEvent((eventResponse.data ?? null) as EventSummary | null);
       }
 
-      setLoading(true);
-      setErrorMessage(null);
-
-      try {
-        // --------------------------------
-        // Descobrir o tipo "Culto"
-        // --------------------------------
-
-        const {
-          data: serviceType,
-          error: serviceTypeError,
-        } = await supabase
-          .from("event_types")
-          .select("id")
-          .eq(
-            "organization_id",
-            activeOrganization.id
-          )
-          .eq("type_key", "service")
-          .eq("is_active", true)
-          .single();
-
-        if (serviceTypeError) {
-          throw serviceTypeError;
-        }
-
-        const nowIso =
-          new Date().toISOString();
-
-        const todayRange =
-          getTodayRange();
-
-        // --------------------------------
-        // Próximo culto + agenda de hoje
-        // --------------------------------
-
-        const [
-          nextServiceResponse,
-          todayEventsResponse,
-        ] = await Promise.all([
-          supabase
-            .from("events")
-            .select(
-              `
-                id,
-                title,
-                starts_at,
-                ends_at,
-                location_name,
-                cover_image_path
-              `
-            )
-            .eq(
-              "organization_id",
-              activeOrganization.id
-            )
-            .eq(
-              "unit_id",
-              activeUnit.id
-            )
-            .eq(
-              "event_type_id",
-              serviceType.id
-            )
-            .eq(
-              "status",
-              "published"
-            )
-            .gte(
-              "starts_at",
-              nowIso
-            )
-            .order(
-              "starts_at",
-              {
-                ascending: true,
-              }
-            )
-            .limit(1)
-            .maybeSingle(),
-
-          supabase
-            .from("events")
-            .select(
-              `
-                id,
-                title,
-                starts_at,
-                ends_at,
-                location_name,
-                cover_image_path
-              `
-            )
-            .eq(
-              "organization_id",
-              activeOrganization.id
-            )
-            .eq(
-              "unit_id",
-              activeUnit.id
-            )
-            .neq(
-              "status",
-              "cancelled"
-            )
-            .gte(
-              "starts_at",
-              todayRange.start
-            )
-            .lt(
-              "starts_at",
-              todayRange.end
-            )
-            .order(
-              "starts_at",
-              {
-                ascending: true,
-              }
-            ),
-        ]);
-
-        if (
-          nextServiceResponse.error
-        ) {
-          throw nextServiceResponse.error;
-        }
-
-        if (
-          todayEventsResponse.error
-        ) {
-          throw todayEventsResponse.error;
-        }
-
-        const rawNextService =
-          nextServiceResponse.data as
-            | HomeEvent
-            | null;
-
-        let nextServiceWithImage:
-          | NextService
-          | null = null;
-
-        if (rawNextService) {
-          let signedUrl:
-            | string
-            | null = null;
-
-          if (
-            rawNextService.cover_image_path
-          ) {
-            const {
-              data: imageData,
-              error: imageError,
-            } =
-              await supabase.storage
-                .from(
-                  "event-covers"
-                )
-                .createSignedUrl(
-                  rawNextService.cover_image_path,
-                  60 * 60
-                );
-
-            if (!imageError) {
-              signedUrl =
-                imageData?.signedUrl ??
-                null;
-            }
-          }
-
-          nextServiceWithImage = {
-            ...rawNextService,
-            cover_image_url:
-              signedUrl,
-          };
-        }
-
-        setNextService(
-          nextServiceWithImage
-        );
-
-        setTodayEvents(
-          (todayEventsResponse.data ??
-            []) as HomeEvent[]
-        );
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Não foi possível carregar a página inicial.";
-
-        setErrorMessage(message);
-        setNextService(null);
-        setTodayEvents([]);
-      } finally {
-        setLoading(false);
+      if (!todayResponse.error) {
+        setTodayCount(todayResponse.count ?? 0);
       }
-    },
-    [
-      activeOrganization,
-      activeUnit,
-    ]
-  );
+    } finally {
+      setLoading(false);
+    }
+  }, [activeOrganization, activeUnit]);
 
-  /*
-   * Atualiza sempre que o usuário
-   * retorna para a aba Início.
-   */
   useFocusEffect(
     useCallback(() => {
-      void loadHome();
-    }, [loadHome])
+      void load();
+    }, [load])
   );
 
-  return (
-    <SafeAreaView
-      edges={["top"]}
-      style={styles.safeArea}
-    >
-      <ScrollView
-        contentContainerStyle={
-          styles.content
-        }
-        showsVerticalScrollIndicator={
-          false
-        }
-      >
-        <View style={styles.context}>
-          <View
-            style={
-              styles.contextText
-            }
-          >
-            <Text
-              style={styles.organization}
-            >
-              {activeOrganization?.name}
-            </Text>
+  function openModule(module: "schedules" | "events" | "kids" | "departments") {
+    navigation.navigate("Elo", {
+      module,
+      nonce: Date.now(),
+    });
+  }
 
-            <Text style={styles.unit}>
-              {activeUnit?.name}
-            </Text>
-          </View>
+  const greeting =
+    new Date().getHours() < 12
+      ? "Bom dia"
+      : new Date().getHours() < 18
+        ? "Boa tarde"
+        : "Boa noite";
+
+  return (
+    <SafeAreaView edges={["top"]} style={styles.safeArea}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.topBar}>
+          <EloLogo compact />
 
           <Pressable
             accessibilityLabel="Abrir notificações"
-            onPress={() =>
-              navigation.navigate(
-                "Notificacoes"
-              )
-            }
-            style={({
-              pressed,
-            }) => [
-              styles.notificationButton,
-              pressed &&
-                styles.notificationButtonPressed,
-            ]}
+            onPress={() => navigation.navigate("Notificacoes")}
+            style={styles.notificationButton}
           >
-            <Ionicons
-              name="notifications-outline"
-              size={21}
-              color="#333333"
-            />
+            <P.BellIcon size={21} color={eloColors.ink} weight="regular" />
 
-            {unreadCount >
-              0 && (
-              <View
-                style={
-                  styles.notificationBadge
-                }
-              >
-                <Text
-                  style={
-                    styles.notificationBadgeText
-                  }
-                >
-                  {unreadCount >
-                  99
-                    ? "99+"
-                    : unreadCount}
+            {unreadCount > 0 ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
                 </Text>
               </View>
-            )}
+            ) : null}
           </Pressable>
         </View>
 
-        <View style={styles.greeting}>
-          <Text style={styles.title}>
-            {firstName
-              ? `Bom dia, ${firstName}`
-              : "Bom dia"}
-          </Text>
-
-          <Text style={styles.date}>
-            {today}
+        <View style={styles.context}>
+          <View style={styles.contextDot} />
+          <Text style={styles.contextText}>
+            {activeOrganization?.name}
+            {activeUnit?.name && activeUnit.name !== activeOrganization?.name
+              ? ` • ${activeUnit.name}`
+              : ""}
           </Text>
         </View>
+
+        <Text style={styles.greeting}>
+          {greeting}{firstName ? `, ${firstName}` : ""}
+        </Text>
+
+        <Text style={styles.helper}>
+          Aqui está o que merece sua atenção agora.
+        </Text>
 
         {loading ? (
           <View style={styles.loading}>
             <ActivityIndicator />
           </View>
-        ) : errorMessage ? (
-          <View style={styles.errorBox}>
-            <Text
-              style={styles.errorText}
-            >
-              {errorMessage}
-            </Text>
-          </View>
         ) : (
-          <View style={styles.sections}>
-            <View style={styles.section}>
-              <Text
-                style={
-                  styles.sectionTitle
-                }
+          <>
+            <View style={styles.heroGrid}>
+              <Pressable
+                onPress={() => openModule("schedules")}
+                style={({ pressed }) => [
+                  styles.heroCard,
+                  pressed && styles.pressed,
+                ]}
               >
-                Próximo culto
-              </Text>
-
-              {nextService ? (
-                <>
-                  {nextService.cover_image_url && (
-                    <Image
-                      source={{
-                        uri: nextService.cover_image_url,
-                      }}
-                      style={
-                        styles.serviceImage
-                      }
-                    />
-                  )}
-
-                  <Text
-                    style={
-                      styles.serviceTitle
-                    }
-                  >
-                    {nextService.title}
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.serviceMeta
-                    }
-                  >
-                    {new Intl.DateTimeFormat(
-                      "pt-BR",
-                      {
-                        weekday: "long",
-                        day: "2-digit",
-                        month: "long",
-                      }
-                    ).format(
-                      new Date(
-                        nextService.starts_at
-                      )
-                    )}
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.serviceMeta
-                    }
-                  >
-                    {formatTime(
-                      nextService.starts_at
-                    )}
-
-                    {nextService.ends_at
-                      ? ` – ${formatTime(
-                          nextService.ends_at
-                        )}`
-                      : ""}
-
-                    {nextService.location_name
-                      ? ` • ${nextService.location_name}`
-                      : ""}
-                  </Text>
-                </>
-              ) : (
-                <Text
-                  style={
-                    styles.sectionDescription
-                  }
-                >
-                  Nenhum culto agendado.
-                </Text>
-              )}
-            </View>
-
-            <View style={styles.section}>
-              <Text
-                style={
-                  styles.sectionTitle
-                }
-              >
-                Agenda de hoje
-              </Text>
-
-              {todayEvents.length ===
-              0 ? (
-                <Text
-                  style={
-                    styles.sectionDescription
-                  }
-                >
-                  Nenhum compromisso para
-                  hoje.
-                </Text>
-              ) : (
-                <View
-                  style={
-                    styles.todayList
-                  }
-                >
-                  {todayEvents
-                    .slice(0, 3)
-                    .map((event) => (
-                      <View
-                        key={event.id}
-                        style={
-                          styles.todayItem
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.todayTime
-                          }
-                        >
-                          {formatTime(
-                            event.starts_at
-                          )}
-                        </Text>
-
-                        <Text
-                          style={
-                            styles.todayTitle
-                          }
-                          numberOfLines={1}
-                        >
-                          {event.title}
-                        </Text>
-                      </View>
-                    ))}
-
-                  {todayEvents.length >
-                    3 && (
-                    <Text
-                      style={
-                        styles.moreEvents
-                      }
-                    >
-                      +
-                      {todayEvents.length -
-                        3}{" "}
-                      compromisso
-                      {todayEvents.length -
-                        3 ===
-                      1
-                        ? ""
-                        : "s"}
-                    </Text>
-                  )}
+                <View style={styles.heroIconBlue}>
+                  <P.ClipboardTextIcon
+                    size={22}
+                    color={eloColors.blue}
+                    weight="duotone"
+                  />
                 </View>
-              )}
+
+                <Text style={styles.heroLabel}>Minha próxima escala</Text>
+
+                {schedule ? (
+                  <>
+                    <Text style={styles.heroValue} numberOfLines={2}>
+                      {schedule.event_title}
+                    </Text>
+                    <Text style={styles.heroMeta}>
+                      {schedule.department_name} • {schedule.role_label}
+                    </Text>
+                    <Text style={styles.heroMeta}>
+                      {formatDateTime(schedule.starts_at)}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.heroEmpty}>
+                    Nada pendente para servir.
+                  </Text>
+                )}
+              </Pressable>
+
+              <Pressable
+                onPress={() => navigation.navigate("Agenda")}
+                style={({ pressed }) => [
+                  styles.heroCard,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={styles.heroIconGreen}>
+                  <P.CalendarDotsIcon
+                    size={22}
+                    color={eloColors.green}
+                    weight="duotone"
+                  />
+                </View>
+
+                <Text style={styles.heroLabel}>Hoje</Text>
+                <Text style={styles.bigNumber}>{todayCount}</Text>
+                <Text style={styles.heroMeta}>
+                  compromisso{todayCount === 1 ? "" : "s"} na agenda
+                </Text>
+              </Pressable>
             </View>
 
-            <HomeSection
-              title="Pendências"
-              description="Você não possui pendências."
-            />
+            <Text style={styles.sectionTitle}>Próximo na igreja</Text>
 
-            <HomeSection
-              title="Avisos"
-              description="Nenhum aviso publicado."
-            />
-          </View>
+            <Pressable
+              onPress={() => openModule("events")}
+              style={({ pressed }) => [
+                styles.nextCard,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.nextIcon}>
+                <P.ChurchIcon
+                  size={23}
+                  color={eloColors.yellow}
+                  weight="duotone"
+                />
+              </View>
+
+              <View style={styles.nextCopy}>
+                <Text style={styles.nextTitle}>
+                  {nextEvent?.title ?? "Nenhum culto ou evento agendado"}
+                </Text>
+
+                <Text style={styles.nextMeta}>
+                  {nextEvent
+                    ? `${formatDateTime(nextEvent.starts_at)}${nextEvent.location_name ? ` • ${nextEvent.location_name}` : ""}`
+                    : "Quando a liderança publicar, aparece aqui."}
+                </Text>
+              </View>
+
+              <P.CaretRightIcon
+                size={18}
+                color="#9AA4AE"
+                weight="bold"
+              />
+            </Pressable>
+
+            <Text style={styles.sectionTitle}>Ações rápidas</Text>
+
+            <View style={styles.quickGrid}>
+              <QuickAction
+                icon="ClipboardTextIcon"
+                label="Escalas"
+                onPress={() => openModule("schedules")}
+              />
+              <QuickAction
+                icon="TicketIcon"
+                label="Eventos"
+                onPress={() => openModule("events")}
+              />
+              <QuickAction
+                icon="BabyIcon"
+                label="Elo Kids"
+                onPress={() => openModule("kids")}
+              />
+              <QuickAction
+                icon="UsersThreeIcon"
+                label="Departamentos"
+                onPress={() => openModule("departments")}
+              />
+            </View>
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-type HomeSectionProps = {
-  title: string;
-  description: string;
-};
+function QuickAction({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+}) {
+  const Icon = P[icon] ?? P.SquaresFourIcon;
 
-function HomeSection({
-  title,
-  description,
-}: HomeSectionProps) {
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>
-        {title}
-      </Text>
-
-      <Text
-        style={
-          styles.sectionDescription
-        }
-      >
-        {description}
-      </Text>
-    </View>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.quickAction,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.quickIcon}>
+        <Icon size={21} color={eloColors.blue} weight="duotone" />
+      </View>
+      <Text style={styles.quickLabel}>{label}</Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f7f7f6",
+    backgroundColor: eloColors.background,
   },
-
   content: {
+    flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 32,
+    paddingTop: 10,
+    paddingBottom: 36,
   },
-
-  context: {
+  topBar: {
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 14,
-    paddingBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e5e2",
   },
-
-  contextText: {
-    flex: 1,
-  },
-
   notificationButton: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#dededb",
-    borderRadius: 13,
-    backgroundColor: "#ffffff",
+    borderColor: eloColors.line,
+    borderRadius: 15,
+    backgroundColor: "#FFFFFF",
   },
-
-  notificationButtonPressed: {
-    opacity: 0.7,
-  },
-
-  notificationBadge: {
+  badge: {
     position: "absolute",
-    top: -5,
-    right: -6,
-    minWidth: 19,
-    height: 19,
+    top: -4,
+    right: -5,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 4,
-    borderWidth: 2,
-    borderColor: "#f7f7f6",
-    borderRadius: 10,
-    backgroundColor: "#222222",
+    borderRadius: 9,
+    backgroundColor: eloColors.danger,
   },
-
-  notificationBadgeText: {
+  badgeText: {
     fontSize: 9,
-    fontWeight: "800",
-    color: "#ffffff",
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
-
-  organization: {
-    fontSize: 15,
+  context: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  contextDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: eloColors.green,
+  },
+  contextText: {
+    fontSize: 12,
     fontWeight: "700",
-    color: "#181818",
+    color: eloColors.muted,
   },
-
-  unit: {
-    marginTop: 3,
-    fontSize: 13,
-    color: "#737373",
-  },
-
   greeting: {
-    paddingTop: 28,
-    paddingBottom: 26,
+    marginTop: 18,
+    fontSize: 32,
+    lineHeight: 38,
+    fontWeight: "900",
+    color: eloColors.ink,
   },
-
-  title: {
-    fontSize: 27,
-    lineHeight: 33,
-    fontWeight: "700",
-    color: "#111111",
-  },
-
-  date: {
-    marginTop: 5,
+  helper: {
+    marginTop: 6,
     fontSize: 14,
-    color: "#707070",
+    color: eloColors.muted,
   },
-
   loading: {
-    paddingVertical: 60,
+    paddingVertical: 70,
     alignItems: "center",
   },
-
-  sections: {
-    gap: 12,
-  },
-
-  section: {
-    paddingHorizontal: 17,
-    paddingVertical: 16,
-    borderWidth: 1,
-    borderColor: "#e1e1de",
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-  },
-
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#1d1d1d",
-  },
-
-  sectionDescription: {
-    marginTop: 7,
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#737373",
-  },
-
-  serviceImage: {
-    width: "100%",
-    aspectRatio: 16 / 9,
-    marginTop: 14,
-    marginBottom: 14,
-    borderRadius: 10,
-    resizeMode: "contain",
-    backgroundColor: "#f2f2f0",
-  },
-
-  serviceTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#171717",
-  },
-
-  serviceMeta: {
-    marginTop: 5,
-    fontSize: 13,
-    lineHeight: 19,
-    color: "#6c6c6c",
-    textTransform: "capitalize",
-  },
-
-  todayList: {
-    marginTop: 12,
+  heroGrid: {
+    marginTop: 24,
+    flexDirection: "row",
     gap: 10,
   },
-
-  todayItem: {
+  heroCard: {
+    flex: 1,
+    minHeight: 176,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: eloColors.line,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+  },
+  heroIconBlue: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    backgroundColor: eloColors.surfaceSoft,
+  },
+  heroIconGreen: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    backgroundColor: eloColors.successSoft,
+  },
+  heroLabel: {
+    marginTop: 14,
+    fontSize: 11,
+    fontWeight: "800",
+    color: eloColors.muted,
+  },
+  heroValue: {
+    marginTop: 5,
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: "900",
+    color: eloColors.ink,
+  },
+  heroMeta: {
+    marginTop: 4,
+    fontSize: 10,
+    lineHeight: 14,
+    color: eloColors.muted,
+  },
+  heroEmpty: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 17,
+    color: eloColors.muted,
+  },
+  bigNumber: {
+    marginTop: 4,
+    fontSize: 38,
+    lineHeight: 43,
+    fontWeight: "900",
+    color: eloColors.ink,
+  },
+  sectionTitle: {
+    marginTop: 26,
+    marginBottom: 10,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: eloColors.muted,
+  },
+  nextCard: {
+    minHeight: 84,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: eloColors.line,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
   },
-
-  todayTime: {
-    width: 45,
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#666666",
+  nextIcon: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: "#FFF7E5",
   },
-
-  todayTitle: {
+  nextCopy: {
     flex: 1,
+  },
+  nextTitle: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#242424",
+    fontWeight: "900",
+    color: eloColors.ink,
   },
-
-  moreEvents: {
-    marginTop: 3,
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#747474",
+  nextMeta: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 16,
+    color: eloColors.muted,
   },
-
-  errorBox: {
-    padding: 16,
+  quickGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  quickAction: {
+    width: "48%",
+    minHeight: 78,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: eloColors.line,
+    borderRadius: 17,
+    backgroundColor: "#FFFFFF",
+  },
+  quickIcon: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
     borderRadius: 12,
-    backgroundColor: "#fff1f1",
+    backgroundColor: eloColors.surfaceSoft,
   },
-
-  errorText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#8b1e1e",
+  quickLabel: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "800",
+    color: eloColors.ink,
+  },
+  pressed: {
+    opacity: 0.76,
   },
 });
