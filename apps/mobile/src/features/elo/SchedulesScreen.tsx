@@ -75,7 +75,16 @@ function statusLabel(status: string) {
 }
 
 export function SchedulesScreen({ onBack }: { onBack: () => void }) {
-  const { activeOrganization } = useOrganization();
+  const {
+    activeOrganization,
+    can,
+    canAtOrganization,
+  } = useOrganization();
+
+  const canManage =
+    can("schedules.manage") ||
+    canAtOrganization("schedules.manage");
+
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [workingId, setWorkingId] = useState<string | null>(null);
@@ -103,6 +112,7 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
       });
 
       if (error) throw error;
+
       const nextItems = ((data ?? []) as ScheduleItem[])
         .filter(
           (item) =>
@@ -119,7 +129,9 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
       setItems(nextItems);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Não foi possível carregar suas escalas."
+        error instanceof Error
+          ? error.message
+          : "Não foi possível carregar suas escalas."
       );
     } finally {
       setLoading(false);
@@ -130,7 +142,10 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
     void load();
   }, [load]);
 
-  async function respond(item: ScheduleItem, response: "confirmed" | "declined") {
+  async function respond(
+    item: ScheduleItem,
+    response: "confirmed" | "declined"
+  ) {
     setWorkingId(item.assignment_id);
     setErrorMessage(null);
 
@@ -156,10 +171,13 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
     setWorkingId(item.assignment_id);
 
     try {
-      const { error } = await supabase.rpc("request_schedule_substitution", {
-        p_assignment_id: item.assignment_id,
-        p_reason: "Solicitado pelo aplicativo Nethanel Elo",
-      });
+      const { error } = await supabase.rpc(
+        "request_schedule_substitution",
+        {
+          p_assignment_id: item.assignment_id,
+          p_reason: "Solicitado pelo aplicativo Nethanel Elo",
+        }
+      );
 
       if (error) throw error;
       await load();
@@ -197,16 +215,21 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
     setWorkingId(item.assignment_id);
 
     try {
-      const { data, error } = await supabase.rpc("issue_my_schedule_qr", {
-        p_assignment_id: item.assignment_id,
-      });
+      const { data, error } = await supabase.rpc(
+        "issue_my_schedule_qr",
+        {
+          p_assignment_id: item.assignment_id,
+        }
+      );
 
       if (error) throw error;
       setQr((data ?? null) as QrPayload | null);
     } catch (error) {
       Alert.alert(
         "QR indisponível",
-        error instanceof Error ? error.message : "O QR abre próximo ao horário da escala."
+        error instanceof Error
+          ? error.message
+          : "O QR abre próximo ao horário da escala."
       );
     } finally {
       setWorkingId(null);
@@ -220,7 +243,9 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
         eyebrow="ELO • SERVIR"
         subtitle={
           pendingCount > 0
-            ? `Você tem ${pendingCount} escala${pendingCount > 1 ? "s" : ""} aguardando resposta.`
+            ? `Você tem ${pendingCount} escala${
+                pendingCount > 1 ? "s" : ""
+              } aguardando resposta.`
             : "Confirme sua presença, peça substituição ou faça check-in no horário certo."
         }
         onBack={onBack}
@@ -230,17 +255,33 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
             <ActivityIndicator />
           </View>
         ) : errorMessage ? (
-          <EloState
-            title="Não conseguimos carregar as escalas"
-            description={errorMessage}
-            icon="WarningCircleIcon"
-          />
+          <>
+            <EloState
+              title="Não conseguimos carregar as escalas"
+              description={errorMessage}
+              icon="WarningCircleIcon"
+            />
+            <View style={styles.retry}>
+              <EloActionButton
+                label="Tentar novamente"
+                variant="secondary"
+                icon="ArrowsClockwiseIcon"
+                onPress={() => void load()}
+              />
+            </View>
+          </>
         ) : items.length === 0 ? (
-          <EloState
-            title="Nenhuma escala por enquanto"
-            description="Quando você for escalado em um departamento, aparecerá aqui."
-            icon="ClipboardTextIcon"
-          />
+          <>
+            <EloState
+              title="Nenhuma escala por enquanto"
+              description={
+                canManage
+                  ? "Ainda não há escala para você. Para gerar escalas, volte ao Meu Elo e abra Gestão de escalas."
+                  : "Quando você for escalado em um departamento, aparecerá aqui."
+              }
+              icon="ClipboardTextIcon"
+            />
+          </>
         ) : (
           <View style={styles.list}>
             {items.map((item) => {
@@ -258,31 +299,51 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
                     </View>
 
                     <View style={styles.cardHeaderCopy}>
-                      <Text style={eloSharedStyles.cardTitle}>{item.event_title}</Text>
+                      <Text style={eloSharedStyles.cardTitle}>
+                        {item.event_title}
+                      </Text>
                       <Text style={styles.department}>
                         {item.department_name} • {item.role_label}
                       </Text>
                     </View>
 
-                    <Text style={styles.status}>{statusLabel(item.status)}</Text>
+                    <Text style={styles.status}>
+                      {statusLabel(item.status)}
+                    </Text>
                   </View>
 
                   <View style={styles.metaRow}>
-                    <P.ClockIcon size={16} color={eloColors.muted} />
-                    <Text style={styles.meta}>{formatDateTime(item.starts_at)}</Text>
+                    <P.ClockIcon
+                      size={16}
+                      color={eloColors.muted}
+                    />
+                    <Text style={styles.meta}>
+                      {formatDateTime(item.starts_at)}
+                    </Text>
                   </View>
 
                   {item.location_name ? (
                     <View style={styles.metaRow}>
-                      <P.MapPinIcon size={16} color={eloColors.muted} />
-                      <Text style={styles.meta}>{item.location_name}</Text>
+                      <P.MapPinIcon
+                        size={16}
+                        color={eloColors.muted}
+                      />
+                      <Text style={styles.meta}>
+                        {item.location_name}
+                      </Text>
                     </View>
                   ) : null}
 
                   {item.checked_in_at ? (
                     <View style={styles.doneRow}>
-                      <P.CheckCircleIcon size={17} color={eloColors.green} weight="fill" />
-                      <Text style={styles.doneText}>Chegada registrada</Text>
+                      <P.CheckCircleIcon
+                        size={17}
+                        color={eloColors.green}
+                        weight="fill"
+                      />
+                      <Text style={styles.doneText}>
+                        Chegada registrada
+                      </Text>
                     </View>
                   ) : null}
 
@@ -294,7 +355,9 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
                             label="Confirmar"
                             icon="CheckIcon"
                             loading={busy}
-                            onPress={() => void respond(item, "confirmed")}
+                            onPress={() =>
+                              void respond(item, "confirmed")
+                            }
                           />
                         </View>
                         <View style={styles.half}>
@@ -303,14 +366,17 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
                             variant="secondary"
                             icon="XIcon"
                             disabled={busy}
-                            onPress={() => void respond(item, "declined")}
+                            onPress={() =>
+                              void respond(item, "declined")
+                            }
                           />
                         </View>
                       </>
                     ) : null}
 
-                    {["confirmed", "replacement_requested"].includes(item.status) &&
-                    !item.checked_in_at ? (
+                    {["confirmed", "replacement_requested"].includes(
+                      item.status
+                    ) && !item.checked_in_at ? (
                       <>
                         {item.can_checkin ? (
                           <View style={styles.half}>
@@ -344,8 +410,13 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
                       onPress={() => void requestReplacement(item)}
                       style={styles.textAction}
                     >
-                      <P.ArrowsClockwiseIcon size={16} color={eloColors.muted} />
-                      <Text style={styles.textActionLabel}>Preciso de substituição</Text>
+                      <P.ArrowsClockwiseIcon
+                        size={16}
+                        color={eloColors.muted}
+                      />
+                      <Text style={styles.textActionLabel}>
+                        Preciso de substituição
+                      </Text>
                     </Pressable>
                   ) : null}
                 </EloCard>
@@ -360,7 +431,9 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
         title={qr?.event_title ?? "QR da escala"}
         subtitle={
           qr?.department_name
-            ? `${qr.department_name}${qr.role_label ? ` • ${qr.role_label}` : ""}`
+            ? `${qr.department_name}${
+                qr.role_label ? ` • ${qr.role_label}` : ""
+              }`
             : "Apresente este QR na chegada."
         }
         token={qr?.token ?? null}
@@ -375,6 +448,9 @@ const styles = StyleSheet.create({
   loading: {
     paddingVertical: 44,
     alignItems: "center",
+  },
+  retry: {
+    marginTop: 10,
   },
   list: {
     marginTop: 22,
