@@ -12,6 +12,10 @@ import * as Phosphor from "phosphor-react-native";
 import { useOrganization } from "../../contexts/OrganizationContext";
 import { supabase } from "../../lib/supabase";
 import {
+  DepartmentDetailsScreen,
+  type DepartmentSummary,
+} from "./DepartmentDetailsScreen";
+import {
   EloActionButton,
   EloCard,
   EloScreen,
@@ -21,17 +25,6 @@ import {
 } from "./EloUi";
 
 const P = Phosphor as any;
-
-type Department = {
-  id: string;
-  name: string;
-  description: string | null;
-  leader_person_id: string | null;
-  leader_name: string | null;
-  member_count: number;
-  function_count: number;
-  active: boolean;
-};
 
 export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
   const {
@@ -45,13 +38,16 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
     can("departments.manage") ||
     canAtOrganization("departments.manage");
 
-  const [items, setItems] = useState<Department[]>([]);
+  const [items, setItems] = useState<DepartmentSummary[]>([]);
+  const [selected, setSelected] =
+    useState<DepartmentSummary | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] =
+    useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!activeOrganization || !activeUnit) {
@@ -64,16 +60,21 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
     setErrorMessage(null);
 
     try {
-      const { data, error } = await supabase.rpc("list_departments_detailed", {
-        p_organization_id: activeOrganization.id,
-        p_unit_id: activeUnit.id,
-      });
+      const { data, error } = await supabase.rpc(
+        "list_departments_detailed",
+        {
+          p_organization_id: activeOrganization.id,
+          p_unit_id: activeUnit.id,
+        }
+      );
 
       if (error) throw error;
-      setItems((data ?? []) as Department[]);
+      setItems((data ?? []) as DepartmentSummary[]);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Não foi possível carregar os departamentos."
+        error instanceof Error
+          ? error.message
+          : "Não foi possível carregar os departamentos."
       );
     } finally {
       setLoading(false);
@@ -86,8 +87,12 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
 
   async function createDepartment() {
     if (!activeOrganization || !activeUnit) return;
+
     if (name.trim().length < 2) {
-      Alert.alert("Nome necessário", "Informe o nome do departamento.");
+      Alert.alert(
+        "Nome necessário",
+        "Informe o nome do departamento."
+      );
       return;
     }
 
@@ -118,11 +123,23 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
     }
   }
 
+  if (selected) {
+    return (
+      <DepartmentDetailsScreen
+        department={selected}
+        onBack={async () => {
+          setSelected(null);
+          await load();
+        }}
+      />
+    );
+  }
+
   return (
     <EloScreen
       title="Departamentos"
       eyebrow="ELO • EQUIPES"
-      subtitle="Ministérios, equipes e pessoas que fazem a igreja funcionar."
+      subtitle="Monte as equipes e conecte cada departamento às escalas automáticas."
       onBack={onBack}
     >
       {canManage ? (
@@ -138,13 +155,16 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
 
       {showCreate ? (
         <EloCard>
-          <Text style={eloSharedStyles.cardTitle}>Novo departamento</Text>
+          <Text style={eloSharedStyles.cardTitle}>
+            Novo departamento
+          </Text>
 
           <Text style={styles.label}>Nome</Text>
           <TextInput
             value={name}
             onChangeText={setName}
             placeholder="Ex.: Louvor"
+            placeholderTextColor="#A1A9B0"
             style={styles.input}
           />
 
@@ -153,6 +173,7 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
             value={description}
             onChangeText={setDescription}
             placeholder="Opcional"
+            placeholderTextColor="#A1A9B0"
             multiline
             style={[styles.input, styles.textarea]}
           />
@@ -181,7 +202,7 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
             title="Nenhum departamento ainda"
             description={
               canManage
-                ? "Crie o primeiro departamento para começar a organizar equipes e escalas."
+                ? "Crie o primeiro departamento para adicionar pessoas e montar escalas."
                 : "A liderança ainda não publicou departamentos para esta unidade."
             }
             icon="UsersThreeIcon"
@@ -201,17 +222,33 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
                 </View>
 
                 <View style={styles.headerCopy}>
-                  <Text style={eloSharedStyles.cardTitle}>{item.name}</Text>
+                  <Text style={eloSharedStyles.cardTitle}>
+                    {item.name}
+                  </Text>
                   <Text style={styles.meta}>
-                    {item.member_count} membro{item.member_count === 1 ? "" : "s"}
-                    {item.leader_name ? ` • Líder: ${item.leader_name}` : ""}
+                    {item.member_count} membro
+                    {item.member_count === 1 ? "" : "s"}
+                    {item.leader_name
+                      ? ` • Líder: ${item.leader_name}`
+                      : ""}
                   </Text>
                 </View>
               </View>
 
               {item.description ? (
-                <Text style={eloSharedStyles.cardText}>{item.description}</Text>
+                <Text style={eloSharedStyles.cardText}>
+                  {item.description}
+                </Text>
               ) : null}
+
+              <View style={styles.openAction}>
+                <EloActionButton
+                  label="Equipe e escalas"
+                  variant="secondary"
+                  icon="CalendarCheckIcon"
+                  onPress={() => setSelected(item)}
+                />
+              </View>
             </EloCard>
           ))}
         </View>
@@ -279,5 +316,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 11,
     color: eloColors.muted,
+  },
+  openAction: {
+    marginTop: 14,
   },
 });
