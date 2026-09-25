@@ -27,3 +27,8 @@ Thumbs.db
 # Expo native generated at repository root
 /android/
 /app.json
+
+# Firebase / Expo private credentials
+**/firebase-service-account*.json
+**/*service-account-key*.json
+**/credentials.json
