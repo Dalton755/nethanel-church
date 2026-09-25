@@ -225,7 +225,7 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
 
   async function respond(
     item: ScheduleItem,
-    response: "confirmed" | "declined"
+    response: "confirm" | "decline"
   ) {
     setWorkingId(item.assignment_id);
     setErrorMessage(null);
@@ -437,7 +437,7 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
                                 icon="CheckIcon"
                                 loading={busy}
                                 onPress={() =>
-                                  void respond(item, "confirmed")
+                                  void respond(item, "confirm")
                                 }
                               />
                             </View>
@@ -448,7 +448,7 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
                                 icon="XIcon"
                                 disabled={busy}
                                 onPress={() =>
-                                  void respond(item, "declined")
+                                  void respond(item, "decline")
                                 }
                               />
                             </View>
