@@ -173,8 +173,8 @@ export function EloHubScreen({ route }: EloHubProps) {
       {permissions.schedulesManage ? (
         <EloModuleCard
           icon="CalendarCheckIcon"
-          title="Gestão de escalas"
-          description="Adicione pessoas aos departamentos, crie funções e deixe o Elo montar o rodízio."
+          title="Equipes para escala"
+          description="Organize os departamentos e as pessoas disponíveis. A escala é criada na data específica de cada culto."
           badge="Admin"
           onPress={() => setActiveModule("departments")}
         />
