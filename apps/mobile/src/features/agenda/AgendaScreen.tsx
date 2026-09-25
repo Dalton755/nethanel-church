@@ -25,6 +25,11 @@ import {
   type ServiceEditorData,
 } from "./NewServiceScreen";
 import { ServiceDetailsScreen } from "./ServiceDetailsScreen";
+import { ServiceOccurrenceEditorScreen } from "./ServiceOccurrenceEditorScreen";
+import {
+  ServiceSeriesScreen,
+  type SeriesRoutine,
+} from "./ServiceSeriesScreen";
 
 const P = Phosphor as any;
 
@@ -61,6 +66,18 @@ type Occurrence = {
   original_date: string;
 };
 
+type ServiceSeries = {
+  id: string;
+  routine_id: string;
+  name: string;
+  mode: "DAYS" | "OCCURRENCES" | "UNTIL_DATE";
+  start_date: string;
+  total_days: number | null;
+  total_occurrences: number | null;
+  until_date: string | null;
+  status: "scheduled" | "active" | "completed" | "cancelled";
+};
+
 const WEEKDAYS = [
   "domingo",
   "segunda",
@@ -90,6 +107,68 @@ function routineTime(value: string) {
   return value.slice(0, 5);
 }
 
+function dateOnlyParts(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return { year, month, day };
+}
+
+function dayDiff(from: string, to: Date) {
+  const start = dateOnlyParts(from);
+  const startUtc = Date.UTC(start.year, start.month - 1, start.day);
+  const endUtc = Date.UTC(
+    to.getFullYear(),
+    to.getMonth(),
+    to.getDate()
+  );
+  return Math.floor((endUtc - startUtc) / 86400000);
+}
+
+function addDateOnlyDays(value: string, days: number) {
+  const parts = dateOnlyParts(value);
+  const date = new Date(
+    Date.UTC(parts.year, parts.month - 1, parts.day + days)
+  );
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "UTC",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatDateOnly(value: string) {
+  const parts = dateOnlyParts(value);
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "UTC",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(Date.UTC(parts.year, parts.month - 1, parts.day)));
+}
+
+function seriesStatus(series: ServiceSeries) {
+  if (series.mode !== "DAYS" || !series.total_days) {
+    if (series.status === "scheduled") {
+      return `Começa em ${formatDateOnly(series.start_date)}`;
+    }
+
+    return series.status === "active" ? "Em andamento" : "Programada";
+  }
+
+  const diff = dayDiff(series.start_date, new Date());
+
+  if (diff < 0 || series.status === "scheduled") {
+    return `Começa em ${formatDateOnly(series.start_date)}`;
+  }
+
+  const current = Math.min(
+    series.total_days,
+    Math.max(1, diff + 1)
+  );
+
+  return `Dia ${current}/${series.total_days}`;
+}
+
 export function AgendaScreen() {
   const {
     activeOrganization,
@@ -99,12 +178,17 @@ export function AgendaScreen() {
 
   const [events, setEvents] = useState<AgendaEvent[]>([]);
   const [routines, setRoutines] = useState<Routine[]>([]);
+  const [series, setSeries] = useState<ServiceSeries[]>([]);
   const [loading, setLoading] = useState(true);
   const [creatingService, setCreatingService] = useState(false);
   const [editingService, setEditingService] =
     useState<ServiceEditorData | null>(null);
   const [viewingService, setViewingService] =
     useState<ServiceEditorData | null>(null);
+  const [editingOccurrence, setEditingOccurrence] =
+    useState<ServiceEditorData | null>(null);
+  const [seriesRoutine, setSeriesRoutine] =
+    useState<SeriesRoutine | null>(null);
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
 
@@ -117,10 +201,33 @@ export function AgendaScreen() {
     [routines]
   );
 
+  const seriesByRoutine = useMemo(() => {
+    const map = new Map<string, ServiceSeries>();
+
+    for (const item of series) {
+      const existing = map.get(item.routine_id);
+
+      if (!existing) {
+        map.set(item.routine_id, item);
+        continue;
+      }
+
+      if (
+        item.status === "active" &&
+        existing.status !== "active"
+      ) {
+        map.set(item.routine_id, item);
+      }
+    }
+
+    return map;
+  }, [series]);
+
   const loadAgenda = useCallback(async () => {
     if (!activeOrganization || !activeUnit) {
       setEvents([]);
       setRoutines([]);
+      setSeries([]);
       setLoading(false);
       return;
     }
@@ -142,38 +249,52 @@ export function AgendaScreen() {
       if (typeError) throw typeError;
 
       if (!serviceType?.id) {
-        throw new Error("O tipo Culto ainda não foi configurado nesta igreja.");
+        throw new Error(
+          "O tipo Culto ainda não foi configurado nesta igreja."
+        );
       }
 
-      const [eventsResponse, routinesResponse] =
-        await Promise.all([
-          supabase
-            .from("events")
-            .select(
-              "id,title,description,starts_at,ends_at,location_name,status,visibility,cover_image_path"
-            )
-            .eq("organization_id", activeOrganization.id)
-            .eq("unit_id", activeUnit.id)
-            .eq("event_type_id", serviceType.id)
-            .neq("status", "cancelled")
-            .gte(
-              "starts_at",
-              new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString()
-            )
-            .order("starts_at", { ascending: true })
-            .limit(60),
+      const [
+        eventsResponse,
+        routinesResponse,
+        seriesResponse,
+      ] = await Promise.all([
+        supabase
+          .from("events")
+          .select(
+            "id,title,description,starts_at,ends_at,location_name,status,visibility,cover_image_path"
+          )
+          .eq("organization_id", activeOrganization.id)
+          .eq("unit_id", activeUnit.id)
+          .eq("event_type_id", serviceType.id)
+          .neq("status", "cancelled")
+          .gte(
+            "starts_at",
+            new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString()
+          )
+          .order("starts_at", { ascending: true })
+          .limit(60),
 
-          supabase
-            .from("service_routines")
-            .select(
-              "id,name,weekday,start_time,duration_minutes,start_date,location_name,active"
-            )
-            .eq("organization_id", activeOrganization.id)
-            .eq("unit_id", activeUnit.id)
-            .eq("active", true)
-            .order("weekday", { ascending: true })
-            .order("start_time", { ascending: true }),
-        ]);
+        supabase
+          .from("service_routines")
+          .select(
+            "id,name,weekday,start_time,duration_minutes,start_date,location_name,active"
+          )
+          .eq("organization_id", activeOrganization.id)
+          .eq("unit_id", activeUnit.id)
+          .eq("active", true)
+          .order("weekday", { ascending: true })
+          .order("start_time", { ascending: true }),
+
+        supabase
+          .from("service_series")
+          .select(
+            "id,routine_id,name,mode,start_date,total_days,total_occurrences,until_date,status"
+          )
+          .eq("organization_id", activeOrganization.id)
+          .in("status", ["active", "scheduled"])
+          .order("start_date", { ascending: true }),
+      ]);
 
       if (eventsResponse.error) throw eventsResponse.error;
       if (routinesResponse.error) throw routinesResponse.error;
@@ -229,6 +350,11 @@ export function AgendaScreen() {
 
       setEvents(withImages);
       setRoutines((routinesResponse.data ?? []) as Routine[]);
+      setSeries(
+        seriesResponse.error
+          ? []
+          : ((seriesResponse.data ?? []) as ServiceSeries[])
+      );
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -237,6 +363,7 @@ export function AgendaScreen() {
       );
       setEvents([]);
       setRoutines([]);
+      setSeries([]);
     } finally {
       setLoading(false);
     }
@@ -347,6 +474,32 @@ export function AgendaScreen() {
     );
   }
 
+  if (seriesRoutine) {
+    return (
+      <ServiceSeriesScreen
+        routine={seriesRoutine}
+        onBack={() => setSeriesRoutine(null)}
+        onSaved={async () => {
+          setSeriesRoutine(null);
+          await loadAgenda();
+        }}
+      />
+    );
+  }
+
+  if (editingOccurrence) {
+    return (
+      <ServiceOccurrenceEditorScreen
+        service={editingOccurrence}
+        onBack={() => setEditingOccurrence(null)}
+        onSaved={async () => {
+          setEditingOccurrence(null);
+          await loadAgenda();
+        }}
+      />
+    );
+  }
+
   if (viewingService) {
     return (
       <ServiceDetailsScreen
@@ -354,15 +507,11 @@ export function AgendaScreen() {
         canManage={canManage}
         onBack={() => setViewingService(null)}
         onEdit={() => {
-          if (viewingService.recurring) {
-            Alert.alert(
-              "Culto recorrente",
-              "Esta ocorrência é controlada pela rotina semanal. A edição individual será feita pelo fluxo de exceção da rotina para não ser sobrescrita pelo motor."
-            );
-            return;
-          }
-
           setEditingService(viewingService);
+          setViewingService(null);
+        }}
+        onEditDetails={() => {
+          setEditingOccurrence(viewingService);
           setViewingService(null);
         }}
         onDelete={() => {
@@ -393,7 +542,7 @@ export function AgendaScreen() {
     <EloScreen
       title="Agenda"
       eyebrow="ELO • CULTOS"
-      subtitle="Cultos únicos e rotinas semanais organizados em uma única agenda."
+      subtitle="Cultos únicos, rotinas semanais e séries organizados no mesmo fluxo."
       right={
         canManage ? (
           <Pressable
@@ -426,43 +575,99 @@ export function AgendaScreen() {
           </Text>
 
           <View style={styles.routineList}>
-            {routines.map((routine) => (
-              <EloCard key={routine.id}>
-                <View style={styles.routineHeader}>
-                  <View style={styles.routineIcon}>
-                    <P.ArrowsClockwiseIcon
-                      size={21}
-                      color={eloColors.blue}
-                      weight="duotone"
-                    />
-                  </View>
+            {routines.map((routine) => {
+              const activeSeries = seriesByRoutine.get(routine.id);
 
-                  <View style={styles.routineCopy}>
-                    <Text style={eloSharedStyles.cardTitle}>
-                      {routine.name}
-                    </Text>
+              return (
+                <EloCard key={routine.id}>
+                  <View style={styles.routineHeader}>
+                    <View style={styles.routineIcon}>
+                      <P.ArrowsClockwiseIcon
+                        size={21}
+                        color={eloColors.blue}
+                        weight="duotone"
+                      />
+                    </View>
 
-                    <Text style={styles.routineMeta}>
-                      {"Toda " +
-                        WEEKDAYS[routine.weekday] +
-                        " • " +
-                        routineTime(routine.start_time) +
-                        " • " +
-                        routine.duration_minutes +
-                        " min"}
-                    </Text>
-
-                    {routine.location_name ? (
-                      <Text style={styles.routineLocation}>
-                        {routine.location_name}
+                    <View style={styles.routineCopy}>
+                      <Text style={eloSharedStyles.cardTitle}>
+                        {routine.name}
                       </Text>
-                    ) : null}
+
+                      <Text style={styles.routineMeta}>
+                        {"Toda " +
+                          WEEKDAYS[routine.weekday] +
+                          " • " +
+                          routineTime(routine.start_time) +
+                          " • " +
+                          routine.duration_minutes +
+                          " min"}
+                      </Text>
+
+                      {routine.location_name ? (
+                        <Text style={styles.routineLocation}>
+                          {routine.location_name}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    <Text style={styles.activeBadge}>Ativa</Text>
                   </View>
 
-                  <Text style={styles.activeBadge}>Ativa</Text>
-                </View>
-              </EloCard>
-            ))}
+                  {activeSeries ? (
+                    <View style={styles.seriesBox}>
+                      <View style={styles.seriesTop}>
+                        <View style={styles.seriesIcon}>
+                          <P.BookOpenTextIcon
+                            size={18}
+                            color={eloColors.blue}
+                            weight="duotone"
+                          />
+                        </View>
+                        <View style={styles.seriesCopy}>
+                          <Text style={styles.seriesName}>
+                            {activeSeries.name}
+                          </Text>
+                          <Text style={styles.seriesProgress}>
+                            {seriesStatus(activeSeries)}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {activeSeries.mode === "DAYS" &&
+                      activeSeries.total_days ? (
+                        <Text style={styles.seriesEnd}>
+                          Término:{" "}
+                          {addDateOnlyDays(
+                            activeSeries.start_date,
+                            activeSeries.total_days - 1
+                          )}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : canManage ? (
+                    <Pressable
+                      onPress={() =>
+                        setSeriesRoutine({
+                          id: routine.id,
+                          name: routine.name,
+                        })
+                      }
+                      style={styles.addSeries}
+                    >
+                      <P.PlusCircleIcon
+                        size={17}
+                        color={eloColors.blue}
+                        weight="duotone"
+                      />
+                      <Text style={styles.addSeriesText}>
+                        Adicionar série
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </EloCard>
+              );
+            })}
           </View>
         </>
       ) : null}
@@ -621,6 +826,61 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "900",
     color: eloColors.green,
+  },
+  seriesBox: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 15,
+    backgroundColor: "#F2F9FD",
+  },
+  seriesTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  seriesIcon: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    backgroundColor: "#E4F2FA",
+  },
+  seriesCopy: {
+    flex: 1,
+  },
+  seriesName: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: eloColors.ink,
+  },
+  seriesProgress: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: "900",
+    color: eloColors.blue,
+  },
+  seriesEnd: {
+    marginTop: 8,
+    fontSize: 10,
+    color: eloColors.muted,
+  },
+  addSeries: {
+    minHeight: 42,
+    marginTop: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    borderWidth: 1,
+    borderColor: "#B9D9EC",
+    borderRadius: 13,
+    backgroundColor: "#F7FBFE",
+  },
+  addSeriesText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: eloColors.blue,
   },
   loading: {
     paddingVertical: 45,
