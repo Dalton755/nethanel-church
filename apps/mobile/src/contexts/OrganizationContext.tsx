@@ -82,7 +82,9 @@ type OrganizationContextValue = {
   ) => boolean;
 
   refreshContext:
-    () => Promise<void>;
+    (options?: {
+      silent?: boolean;
+    }) => Promise<void>;
 
   selectOrganization: (
     organizationId: string
@@ -206,12 +208,31 @@ export function OrganizationProvider({
 
   const refreshContext =
     useCallback(
-      async () => {
-        setLoading(true);
+      async (
+        options?: {
+          silent?: boolean;
+        }
+      ) => {
+        const silent =
+          options?.silent ??
+          false;
 
-        setErrorMessage(
-          null
-        );
+        /*
+         * Um refresh disparado ao voltar de
+         * câmera, galeria, navegador ou outro
+         * app não pode desmontar a navegação.
+         *
+         * Se loading=true aqui, AuthenticatedScreen
+         * troca MainTabs pela tela de loading e
+         * destrói formulários em andamento.
+         */
+        if (!silent) {
+          setLoading(true);
+
+          setErrorMessage(
+            null
+          );
+        }
 
         try {
           /*
@@ -393,6 +414,17 @@ export function OrganizationProvider({
             );
           }
         } catch (error) {
+          /*
+           * Em atualização silenciosa (por exemplo,
+           * retorno do seletor de fotos) preservamos
+           * o contexto atual diante de uma falha
+           * transitória. O backend continua sendo
+           * autoritativo para qualquer ação.
+           */
+          if (silent) {
+            return;
+          }
+
           const message =
             error instanceof Error
               ? error.message
@@ -430,9 +462,11 @@ export function OrganizationProvider({
             organizations: [],
           });
         } finally {
-          setLoading(
-            false
-          );
+          if (!silent) {
+            setLoading(
+              false
+            );
+          }
         }
       },
       [
@@ -467,7 +501,9 @@ export function OrganizationProvider({
           if (
             state === "active"
           ) {
-            void refreshContext();
+            void refreshContext({
+              silent: true,
+            });
           }
         }
       );
