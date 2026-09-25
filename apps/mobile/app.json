@@ -4,7 +4,10 @@
     "slug": "nethanel-church",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "nethanelchurch",
+    "scheme": [
+      "nethanelelo",
+      "nethanelchurch"
+    ],
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
@@ -14,16 +17,14 @@
     "android": {
       "package": "br.com.nethanel.church",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#F7F9FC",
+        "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
       "googleServicesFile": "./google-services.json"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
       "@react-native-community/datetimepicker",
@@ -40,6 +41,11 @@
         "projectId": "d35d3c12-a2b2-4e2e-af58-d2dcb512e9e2"
       }
     },
-    "owner": "dalton_silva"
+    "owner": "dalton_silva",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F7F9FC"
+    }
   }
 }

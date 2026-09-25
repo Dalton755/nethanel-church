@@ -49,6 +49,23 @@ import {
 const INVITE_PENDING_PREFIX =
   "@nethanel/invite-pending/";
 
+const AUTH_SCHEMES = [
+  "nethanelelo",
+  "nethanelchurch",
+] as const;
+
+function matchesAuthUrl(
+  url: string,
+  path: "invite" | "confirm"
+) {
+  return AUTH_SCHEMES.some(
+    (scheme) =>
+      url.startsWith(
+        `${scheme}://auth/${path}`
+      )
+  );
+}
+
 
 function getUrlParameters(
   url: string
@@ -175,13 +192,15 @@ export default function App() {
 
 
         const isInvite =
-          url.startsWith(
-            "nethanelchurch://auth/invite"
+          matchesAuthUrl(
+            url,
+            "invite"
           );
 
         const isConfirmation =
-          url.startsWith(
-            "nethanelchurch://auth/confirm"
+          matchesAuthUrl(
+            url,
+            "confirm"
           );
 
         if (
@@ -392,11 +411,13 @@ export default function App() {
 
 
       if (
-        initialUrl?.startsWith(
-          "nethanelchurch://auth/invite"
+        matchesAuthUrl(
+          initialUrl ?? "",
+          "invite"
         ) ||
-        initialUrl?.startsWith(
-          "nethanelchurch://auth/confirm"
+        matchesAuthUrl(
+          initialUrl ?? "",
+          "confirm"
         )
       ) {
         await handleAuthUrl(
