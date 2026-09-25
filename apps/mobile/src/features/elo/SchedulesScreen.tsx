@@ -98,16 +98,25 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
     setErrorMessage(null);
 
     try {
-      const { data, error } = await supabase
-        .from("my_schedule")
-        .select("*")
-        .eq("organization_id", activeOrganization.id)
-        .gte("starts_at", new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString())
-        .order("starts_at", { ascending: true })
-        .limit(50);
+      const { data, error } = await supabase.rpc("list_my_schedule", {
+        p_organization_id: activeOrganization.id,
+      });
 
       if (error) throw error;
-      setItems((data ?? []) as ScheduleItem[]);
+      const nextItems = ((data ?? []) as ScheduleItem[])
+        .filter(
+          (item) =>
+            new Date(item.starts_at).getTime() >=
+            Date.now() - 1000 * 60 * 60 * 12
+        )
+        .sort(
+          (a, b) =>
+            new Date(a.starts_at).getTime() -
+            new Date(b.starts_at).getTime()
+        )
+        .slice(0, 50);
+
+      setItems(nextItems);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Não foi possível carregar suas escalas."
