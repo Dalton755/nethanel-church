@@ -34,6 +34,12 @@
           "defaultChannel": "elo-geral",
           "color": "#111111"
         }
+      ],
+      [
+        "expo-web-browser",
+        {
+          "experimentalLauncherActivity": false
+        }
       ]
     ],
     "extra": {
