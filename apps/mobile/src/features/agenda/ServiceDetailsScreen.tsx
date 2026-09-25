@@ -22,6 +22,7 @@ type Props = {
   canManage: boolean;
   onBack: () => void;
   onEdit: () => void;
+  onEditDetails: () => void;
   onDelete: () => void;
 };
 
@@ -48,6 +49,7 @@ export function ServiceDetailsScreen({
   canManage,
   onBack,
   onEdit,
+  onEditDetails,
   onDelete,
 }: Props) {
   return (
@@ -66,6 +68,17 @@ export function ServiceDetailsScreen({
           source={{ uri: service.cover_image_url }}
           style={styles.cover}
         />
+      ) : canManage ? (
+        <View style={styles.noCover}>
+          <P.ImageIcon
+            size={24}
+            color={eloColors.muted}
+            weight="duotone"
+          />
+          <Text style={styles.noCoverText}>
+            Este culto ainda não tem foto de capa.
+          </Text>
+        </View>
       ) : null}
 
       {service.recurring ? (
@@ -80,8 +93,8 @@ export function ServiceDetailsScreen({
               Faz parte de uma rotina semanal
             </Text>
             <Text style={styles.noticeText}>
-              Alterações nesta ocorrência são tratadas como exceção,
-              sem interromper os próximos cultos da rotina.
+              Foto, pregador, tema e referência podem ser personalizados
+              nesta ocorrência sem alterar os próximos cultos.
             </Text>
           </View>
         </View>
@@ -135,10 +148,17 @@ export function ServiceDetailsScreen({
 
       {canManage ? (
         <View style={styles.actions}>
+          <EloActionButton
+            label="Foto, pregador e referência"
+            icon="ImageIcon"
+            onPress={onEditDetails}
+          />
+
           {!service.recurring ? (
             <EloActionButton
-              label="Editar culto"
+              label="Editar data e culto"
               icon="PencilSimpleIcon"
+              variant="secondary"
               onPress={onEdit}
             />
           ) : null}
@@ -220,6 +240,24 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     resizeMode: "cover",
     backgroundColor: eloColors.surfaceSoft,
+  },
+  noCover: {
+    minHeight: 84,
+    marginTop: 22,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    padding: 14,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: eloColors.line,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+  },
+  noCoverText: {
+    fontSize: 12,
+    color: eloColors.muted,
   },
   recurringNotice: {
     marginTop: 18,
