@@ -8,7 +8,8 @@ on:
     paths:
       - "apps/mobile/app.json"
       - "apps/mobile/src/branding/**"
-      - "apps/mobile/scripts/prepare_elo_assets.py"
+      - "apps/mobile/scripts/generate_elo_native_assets.py"
+      - ".github/workflows/android-preview-build.yml"
 
 permissions:
   contents: read
@@ -46,7 +47,7 @@ jobs:
       - name: Prepare Nethanel Elo native assets
         run: |
           python -m pip install --disable-pip-version-check pillow
-          python apps/mobile/scripts/prepare_elo_assets.py
+          python apps/mobile/scripts/generate_elo_native_assets.py
 
       - name: Start Android preview build
         working-directory: apps/mobile
