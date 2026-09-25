@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "832888889753",
+    "project_id": "nethanel-elo",
+    "storage_bucket": "nethanel-elo.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:832888889753:android:c643a060ffb81c380af308",
+        "android_client_info": {
+          "package_name": "br.com.nethanel.church"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCjrR1OttfFbdRO6bku24ST5qPCJETgdFg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
