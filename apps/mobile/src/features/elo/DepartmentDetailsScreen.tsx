@@ -87,6 +87,12 @@ export function DepartmentDetailsScreen({
   const [personSearch, setPersonSearch] = useState("");
   const [functionName, setFunctionName] = useState("");
   const [savingMember, setSavingMember] = useState(false);
+  const [leaderName, setLeaderName] = useState<string | null>(
+    department.leader_name
+  );
+  const [showLeaderPicker, setShowLeaderPicker] = useState(false);
+  const [leaderSearch, setLeaderSearch] = useState("");
+  const [savingLeader, setSavingLeader] = useState(false);
 
   const activeMembers = useMemo(
     () => members.filter((item) => item.status === "active"),
@@ -97,6 +103,25 @@ export function DepartmentDetailsScreen({
     () => new Set(activeMembers.map((item) => item.person_id)),
     [activeMembers]
   );
+
+  const filteredLeaders = useMemo(() => {
+    const query = leaderSearch.trim().toLowerCase();
+
+    return candidates
+      .filter((candidate) => {
+        if (!query) return true;
+
+        return [
+          candidate.full_name,
+          candidate.preferred_name,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .slice(0, 20);
+  }, [candidates, leaderSearch]);
 
   const filteredCandidates = useMemo(() => {
     const query = personSearch.trim().toLowerCase();
@@ -181,6 +206,36 @@ export function DepartmentDetailsScreen({
     void load();
   }, [load]);
 
+  async function setLeader(person: PersonCandidate | null) {
+    if (!activeOrganization) return;
+
+    setSavingLeader(true);
+
+    try {
+      const { error } = await supabase.rpc(
+        "set_department_leader",
+        {
+          p_organization_id: activeOrganization.id,
+          p_department_id: department.id,
+          p_person_id: person?.person_id ?? null,
+        }
+      );
+
+      if (error) throw error;
+
+      setLeaderName(person ? personLabel(person) : null);
+      setLeaderSearch("");
+      setShowLeaderPicker(false);
+    } catch (error) {
+      Alert.alert(
+        "Liderança não alterada",
+        error instanceof Error ? error.message : "Tente novamente."
+      );
+    } finally {
+      setSavingLeader(false);
+    }
+  }
+
   async function addMember() {
     if (!activeOrganization || !selectedPerson) return;
 
@@ -225,22 +280,92 @@ export function DepartmentDetailsScreen({
       }
       onBack={onBack}
     >
-      {department.leader_name ? (
-        <View style={styles.leaderCard}>
-          <P.CrownSimpleIcon
-            size={19}
-            color={eloColors.blue}
-            weight="duotone"
-          />
-          <View style={styles.grow}>
-            <Text style={styles.leaderLabel}>
-              Líder do departamento
-            </Text>
-            <Text style={styles.leaderName}>
-              {department.leader_name}
-            </Text>
-          </View>
+      <View style={styles.leaderCard}>
+        <P.CrownSimpleIcon
+          size={19}
+          color={eloColors.blue}
+          weight="duotone"
+        />
+
+        <View style={styles.grow}>
+          <Text style={styles.leaderLabel}>
+            Líder do departamento
+          </Text>
+          <Text style={styles.leaderName}>
+            {leaderName || "Nenhum líder definido"}
+          </Text>
         </View>
+
+        {canManage ? (
+          <Pressable
+            disabled={savingLeader}
+            onPress={() => setShowLeaderPicker((value) => !value)}
+            style={styles.leaderAction}
+          >
+            <Text style={styles.leaderActionText}>
+              {showLeaderPicker ? "Fechar" : leaderName ? "Trocar" : "Definir"}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {showLeaderPicker ? (
+        <EloCard>
+          <Text style={eloSharedStyles.cardTitle}>
+            Escolher líder
+          </Text>
+
+          <TextInput
+            value={leaderSearch}
+            onChangeText={setLeaderSearch}
+            placeholder="Buscar pessoa"
+            placeholderTextColor="#A1A9B0"
+            style={[styles.input, styles.search]}
+          />
+
+          <View style={styles.candidateList}>
+            {filteredLeaders.length === 0 ? (
+              <Text style={styles.emptyText}>
+                Nenhuma pessoa disponível.
+              </Text>
+            ) : (
+              filteredLeaders.map((person) => (
+                <Pressable
+                  key={person.person_id}
+                  disabled={savingLeader}
+                  onPress={() => void setLeader(person)}
+                  style={styles.candidate}
+                >
+                  <View style={styles.grow}>
+                    <Text style={styles.candidateName}>
+                      {personLabel(person)}
+                    </Text>
+                    <Text style={styles.meta}>
+                      {person.membership_type}
+                    </Text>
+                  </View>
+
+                  <P.CaretRightIcon
+                    size={17}
+                    color="#9AA4AE"
+                    weight="bold"
+                  />
+                </Pressable>
+              ))
+            )}
+          </View>
+
+          {leaderName ? (
+            <View style={styles.removeLeader}>
+              <EloActionButton
+                label="Remover liderança"
+                variant="secondary"
+                loading={savingLeader}
+                onPress={() => void setLeader(null)}
+              />
+            </View>
+          ) : null}
+        </EloCard>
       ) : null}
 
       <Text style={eloSharedStyles.sectionTitle}>Equipe</Text>
@@ -441,6 +566,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
     color: eloColors.ink,
+  },
+  leaderAction: {
+    minHeight: 36,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+  },
+  leaderActionText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: eloColors.blue,
+  },
+  removeLeader: {
+    marginTop: 12,
   },
   loading: {
     paddingVertical: 36,
