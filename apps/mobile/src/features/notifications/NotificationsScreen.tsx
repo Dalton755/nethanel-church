@@ -21,6 +21,7 @@ import {
 
 import {
   useFocusEffect,
+  useNavigation,
 } from "@react-navigation/native";
 
 import {
@@ -163,6 +164,9 @@ function pushStatusMessage(
 
 
 export function NotificationsScreen() {
+  const navigation =
+    useNavigation();
+
   const {
     activeOrganization,
   } =
@@ -561,25 +565,52 @@ export function NotificationsScreen() {
           styles.header
         }
       >
-        <View>
-          <Text
-            style={
-              styles.title
+        <View
+          style={
+            styles.headerLead
+          }
+        >
+          <Pressable
+            accessibilityLabel="Voltar"
+            onPress={() =>
+              navigation.goBack()
             }
-          >
-            Notificações
-          </Text>
+            style={({
+              pressed,
+            }) => [
+              styles.backButton,
 
-          <Text
-            style={
-              styles.subtitle
-            }
+              pressed &&
+                styles.pressed,
+            ]}
           >
-            {unreadCount >
-            0
-              ? `${unreadCount} não lida${unreadCount === 1 ? "" : "s"}`
-              : "Tudo em dia"}
-          </Text>
+            <Ionicons
+              name="chevron-back"
+              size={22}
+              color="#2b2b2b"
+            />
+          </Pressable>
+
+          <View>
+            <Text
+              style={
+                styles.title
+              }
+            >
+              Notificações
+            </Text>
+
+            <Text
+              style={
+                styles.subtitle
+              }
+            >
+              {unreadCount >
+              0
+                ? `${unreadCount} não lida${unreadCount === 1 ? "" : "s"}`
+                : "Tudo em dia"}
+            </Text>
+          </View>
         </View>
 
 
@@ -929,6 +960,30 @@ const styles =
         "#e3e3e0",
       backgroundColor:
         "#f7f7f6",
+    },
+
+    headerLead: {
+      flex: 1,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 10,
+    },
+
+    backButton: {
+      width: 40,
+      height: 40,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderWidth: 1,
+      borderColor:
+        "#dededb",
+      borderRadius: 12,
+      backgroundColor:
+        "#ffffff",
     },
 
     title: {
