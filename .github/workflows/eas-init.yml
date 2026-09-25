@@ -32,12 +32,12 @@ jobs:
       - name: Resolve Expo account
         id: expo-account
         run: |
-          ACCOUNT="$(eas whoami)"
+          ACCOUNT="$(eas whoami | head -n 1 | awk '{print $1}')"
           if [ -z "$ACCOUNT" ]; then
             echo "Expo account not resolved."
             exit 1
           fi
-          echo "account=$ACCOUNT" >> "$GITHUB_OUTPUT"
+          printf 'account=%s\n' "$ACCOUNT" >> "$GITHUB_OUTPUT"
 
       - name: Initialize EAS project
         working-directory: apps/mobile
