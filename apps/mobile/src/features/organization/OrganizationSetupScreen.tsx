@@ -94,7 +94,7 @@ export function OrganizationSetupScreen({
         >
           <View style={styles.content}>
             <Text style={styles.brand}>
-              NETHANEL CHURCH
+              NETHANEL ELO
             </Text>
 
             <Text style={styles.eyebrow}>

@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { supabase } from "../../lib/supabase";
+import { EloLogo } from "../../branding/EloBrand";
 
 type AuthMode = "login" | "signup";
 
@@ -154,20 +155,18 @@ export function AuthScreen() {
         >
           <View style={styles.content}>
             <View style={styles.header}>
-              <Text style={styles.brand}>
-                NETHANEL CHURCH
-              </Text>
+              <EloLogo />
 
               <Text style={styles.title}>
                 {isSignup
-                  ? "Crie sua conta"
-                  : "Bem-vindo"}
+                  ? "Crie sua conta no Elo"
+                  : "Bem-vindo ao Elo"}
               </Text>
 
               <Text style={styles.subtitle}>
                 {isSignup
                   ? "Comece com seus dados pessoais. A igreja será configurada depois."
-                  : "Entre para acessar sua igreja e continuar de onde parou."}
+                  : "Entre para acessar sua igreja pelo Elo e continuar de onde parou."}
               </Text>
             </View>
 
