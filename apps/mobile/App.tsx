@@ -1,3 +1,5 @@
+import { EloLogo } from "./src/branding/EloBrand";
+
 import {
   useCallback,
   useEffect,
@@ -509,8 +511,12 @@ export default function App() {
             styles.loading
           }
         >
+          <EloLogo />
+          <Text style={styles.loadingText}>
+            Conectando sua igreja
+          </Text>
           <ActivityIndicator
-            size="large"
+            size="small"
           />
         </View>
       ) : invitePending &&
@@ -553,6 +559,13 @@ const styles =
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
+      gap: 14,
       backgroundColor: "#f7f7f6",
+    },
+
+    loadingText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: "#6f6f6f",
     },
   });
