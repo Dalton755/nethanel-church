@@ -1,35 +1,34 @@
+import { useCallback, useState } from "react";
 import {
-  useState,
-} from "react";
-
-import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import * as Phosphor from "phosphor-react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  Ionicons,
-} from "@expo/vector-icons";
+import { EloLogo } from "../../branding/EloBrand";
+import { useOrganization } from "../../contexts/OrganizationContext";
+import { supabase } from "../../lib/supabase";
+import type { MainTabParamList } from "../../navigation/MainTabs";
+import { eloColors } from "../elo/EloUi";
 
-import {
-  SafeAreaView,
-} from "react-native-safe-area-context";
+const P = Phosphor as any;
 
-import {
-  useOrganization,
-} from "../../contexts/OrganizationContext";
+type OrganizationExtra = {
+  join_code: string | null;
+};
 
-import {
-  supabase,
-} from "../../lib/supabase";
-
-import {
-  ChurchManagementScreen,
-} from "../management/ChurchManagementScreen";
-
+type Subscription = {
+  plan_code: string;
+  status: string;
+  current_period_end: string | null;
+};
 
 export function MoreScreen() {
   const {
@@ -39,556 +38,355 @@ export function MoreScreen() {
     activeUnit,
     canAtOrganization,
     clearOrganizationSelection,
-  } =
-    useOrganization();
+  } = useOrganization();
 
+  const navigation =
+    useNavigation<BottomTabNavigationProp<MainTabParamList>>();
 
-  const [
-    showingManagement,
-    setShowingManagement,
-  ] =
-    useState(false);
+  const [extra, setExtra] = useState<OrganizationExtra | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  const canManage =
+    canAtOrganization("security.manage") ||
+    canAtOrganization("organization.manage") ||
+    canAtOrganization("units.manage") ||
+    canAtOrganization("audit.view");
 
-  const canOpenManagement =
-    canAtOrganization(
-      "security.manage"
-    ) ||
-    canAtOrganization(
-      "organization.manage"
-    ) ||
-    canAtOrganization(
-      "units.manage"
-    ) ||
-    canAtOrganization(
-      "audit.view"
-    );
+  const load = useCallback(async () => {
+    if (!activeOrganization) {
+      setLoading(false);
+      return;
+    }
 
+    setLoading(true);
+
+    const [orgResponse, planResponse] = await Promise.all([
+      supabase
+        .from("organizations")
+        .select("join_code")
+        .eq("id", activeOrganization.id)
+        .maybeSingle(),
+
+      supabase
+        .from("organization_subscriptions")
+        .select("plan_code,status,current_period_end")
+        .eq("organization_id", activeOrganization.id)
+        .maybeSingle(),
+    ]);
+
+    if (!orgResponse.error) {
+      setExtra((orgResponse.data ?? null) as OrganizationExtra | null);
+    }
+
+    if (!planResponse.error) {
+      setSubscription((planResponse.data ?? null) as Subscription | null);
+    }
+
+    setLoading(false);
+  }, [activeOrganization]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
 
   async function handleSignOut() {
     await supabase.auth.signOut();
   }
 
-
-  if (
-    showingManagement
-  ) {
-    return (
-      <ChurchManagementScreen
-        onBack={() =>
-          setShowingManagement(
-            false
-          )
-        }
-      />
-    );
-  }
-
-
   return (
-    <SafeAreaView
-      edges={["top"]}
-      style={
-        styles.safeArea
-      }
-    >
+    <SafeAreaView edges={["top"]} style={styles.safeArea}>
       <ScrollView
-        contentContainerStyle={
-          styles.content
-        }
-        showsVerticalScrollIndicator={
-          false
-        }
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
       >
-        <Text
-          style={
-            styles.title
-          }
-        >
-          Mais
+        <EloLogo compact />
+
+        <Text style={styles.eyebrow}>MINHA CONTA</Text>
+        <Text style={styles.title}>{profile?.display_name ?? "Usuário"}</Text>
+        <Text style={styles.context}>
+          {activeOrganization?.name}
+          {activeUnit?.name && activeUnit.name !== activeOrganization?.name
+            ? ` • ${activeUnit.name}`
+            : ""}
         </Text>
 
-
-        <View
-          style={
-            styles.account
-          }
-        >
-          <View
-            style={
-              styles.accountIcon
-            }
-          >
-            <Ionicons
-              name="person-outline"
-              size={22}
-              color="#444444"
-            />
+        {loading ? (
+          <View style={styles.loading}>
+            <ActivityIndicator />
           </View>
+        ) : (
+          <>
+            <Text style={styles.sectionTitle}>Igreja</Text>
 
+            <View style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <P.KeyIcon size={21} color={eloColors.blue} weight="duotone" />
+                </View>
 
-          <View
-            style={
-              styles.accountContent
-            }
-          >
-            <Text
-              style={
-                styles.name
-              }
-            >
-              {profile?.display_name ??
-                "Usuário"}
-            </Text>
-
-            <Text
-              style={
-                styles.organization
-              }
-            >
-              {
-                activeOrganization
-                  ?.name
-              }
-            </Text>
-
-            <Text
-              style={
-                styles.unit
-              }
-            >
-              {
-                activeUnit
-                  ?.name
-              }
-            </Text>
-          </View>
-        </View>
-
-
-        {canOpenManagement && (
-          <View
-            style={
-              styles.section
-            }
-          >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Administração
-            </Text>
-
-
-            <Pressable
-              onPress={() =>
-                setShowingManagement(
-                  true
-                )
-              }
-              style={({
-                pressed,
-              }) => [
-                styles.managementCard,
-
-                pressed &&
-                  styles.pressed,
-              ]}
-            >
-              <View
-                style={
-                  styles.managementIcon
-                }
-              >
-                <Ionicons
-                  name="settings-outline"
-                  size={22}
-                  color="#333333"
-                />
+                <View style={styles.infoCopy}>
+                  <Text style={styles.infoLabel}>Código da igreja</Text>
+                  <Text selectable style={styles.codeValue}>
+                    {extra?.join_code ?? "Não disponível"}
+                  </Text>
+                  <Text style={styles.infoHint}>
+                    Compartilhe com quem precisa entrar nesta igreja.
+                  </Text>
+                </View>
               </View>
+            </View>
 
+            <View style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <P.CrownIcon size={21} color={eloColors.yellow} weight="duotone" />
+                </View>
 
-              <View
-                style={
-                  styles.managementContent
-                }
-              >
-                <Text
-                  style={
-                    styles.managementTitle
-                  }
-                >
-                  Gestão da Igreja
-                </Text>
-
-                <Text
-                  style={
-                    styles.managementDescription
-                  }
-                >
-                  Acessos, perfis, unidades e configurações.
-                </Text>
+                <View style={styles.infoCopy}>
+                  <Text style={styles.infoLabel}>Plano Elo</Text>
+                  <Text style={styles.planValue}>
+                    {subscription?.plan_code ?? "Elo"}
+                  </Text>
+                  <Text style={styles.infoHint}>
+                    {subscription
+                      ? `Status: ${subscription.status}`
+                      : "Sua igreja está usando o Elo."}
+                  </Text>
+                </View>
               </View>
+            </View>
 
+            <Text style={styles.sectionTitle}>Acessos</Text>
 
-              <Ionicons
-                name="chevron-forward"
-                size={18}
-                color="#999999"
+            <View style={styles.actions}>
+              <ActionRow
+                icon="BellIcon"
+                title="Notificações"
+                description="Central de alertas do Elo"
+                onPress={() => navigation.navigate("Notificacoes")}
               />
+
+              {canManage ? (
+                <ActionRow
+                  icon="ShieldCheckIcon"
+                  title="Administração Elo"
+                  description="Acessos, perfis, unidades e segurança"
+                  onPress={() =>
+                    navigation.navigate("Elo", {
+                      module: "management",
+                      nonce: Date.now(),
+                    })
+                  }
+                />
+              ) : null}
+
+              {organizations.length > 1 ? (
+                <ActionRow
+                  icon="ArrowsLeftRightIcon"
+                  title="Trocar igreja"
+                  description="Mudar o contexto ativo"
+                  onPress={() => {
+                    void clearOrganizationSelection();
+                  }}
+                />
+              ) : null}
+            </View>
+
+            <Text style={styles.sectionTitle}>Conta</Text>
+
+            <Pressable onPress={handleSignOut} style={styles.signOut}>
+              <P.SignOutIcon size={19} color={eloColors.danger} weight="bold" />
+              <Text style={styles.signOutText}>Sair da conta</Text>
             </Pressable>
-          </View>
+          </>
         )}
-
-
-        <View
-          style={
-            styles.section
-          }
-        >
-          <Text
-            style={
-              styles.sectionTitle
-            }
-          >
-            Conta
-          </Text>
-
-
-          <View
-            style={
-              styles.actions
-            }
-          >
-            {organizations.length >
-              1 && (
-              <Pressable
-                onPress={() => {
-                  void clearOrganizationSelection();
-                }}
-                style={
-                  styles.action
-                }
-              >
-                <Ionicons
-                  name="swap-horizontal-outline"
-                  size={19}
-                  color="#555555"
-                />
-
-                <Text
-                  style={
-                    styles.actionText
-                  }
-                >
-                  Trocar igreja
-                </Text>
-
-                <Ionicons
-                  name="chevron-forward"
-                  size={17}
-                  color="#aaaaaa"
-                />
-              </Pressable>
-            )}
-
-
-            <Pressable
-              onPress={
-                handleSignOut
-              }
-              style={
-                styles.action
-              }
-            >
-              <Ionicons
-                name="log-out-outline"
-                size={19}
-                color="#555555"
-              />
-
-              <Text
-                style={
-                  styles.actionText
-                }
-              >
-                Sair da conta
-              </Text>
-            </Pressable>
-          </View>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-
-const styles =
-  StyleSheet.create({
-    safeArea: {
-      flex: 1,
-
-      backgroundColor:
-        "#f7f7f6",
-    },
-
-    content: {
-      flexGrow: 1,
-
-      paddingHorizontal:
-        20,
-
-      paddingTop:
-        26,
-
-      paddingBottom:
-        40,
-    },
-
-    title: {
-      fontSize:
-        28,
-
-      fontWeight:
-        "700",
-
-      color:
-        "#111111",
-    },
-
-    account: {
-      marginTop:
-        25,
-
-      flexDirection:
-        "row",
-
-      alignItems:
-        "center",
-
-      gap:
-        12,
-
-      paddingBottom:
-        24,
-
-      borderBottomWidth:
-        1,
-
-      borderBottomColor:
-        "#e1e1de",
-    },
-
-    accountIcon: {
-      width:
-        44,
-
-      height:
-        44,
-
-      alignItems:
-        "center",
-
-      justifyContent:
-        "center",
-
-      borderRadius:
-        22,
-
-      backgroundColor:
-        "#eaeae7",
-    },
-
-    accountContent: {
-      flex:
-        1,
-    },
-
-    name: {
-      fontSize:
-        17,
-
-      fontWeight:
-        "700",
-
-      color:
-        "#1b1b1b",
-    },
-
-    organization: {
-      marginTop:
-        4,
-
-      fontSize:
-        13,
-
-      color:
-        "#555555",
-    },
-
-    unit: {
-      marginTop:
-        2,
-
-      fontSize:
-        12,
-
-      color:
-        "#777777",
-    },
-
-    section: {
-      marginTop:
-        25,
-    },
-
-    sectionTitle: {
-      marginBottom:
-        10,
-
-      fontSize:
-        12,
-
-      fontWeight:
-        "700",
-
-      textTransform:
-        "uppercase",
-
-      letterSpacing:
-        0.4,
-
-      color:
-        "#777777",
-    },
-
-    managementCard: {
-      minHeight:
-        77,
-
-      flexDirection:
-        "row",
-
-      alignItems:
-        "center",
-
-      gap:
-        12,
-
-      paddingHorizontal:
-        14,
-
-      paddingVertical:
-        12,
-
-      borderWidth:
-        1,
-
-      borderColor:
-        "#e0e0dd",
-
-      borderRadius:
-        14,
-
-      backgroundColor:
-        "#ffffff",
-    },
-
-    managementIcon: {
-      width:
-        42,
-
-      height:
-        42,
-
-      alignItems:
-        "center",
-
-      justifyContent:
-        "center",
-
-      borderRadius:
-        12,
-
-      backgroundColor:
-        "#f0f0ed",
-    },
-
-    managementContent: {
-      flex:
-        1,
-    },
-
-    managementTitle: {
-      fontSize:
-        15,
-
-      fontWeight:
-        "700",
-
-      color:
-        "#202020",
-    },
-
-    managementDescription: {
-      marginTop:
-        4,
-
-      fontSize:
-        12,
-
-      lineHeight:
-        17,
-
-      color:
-        "#737373",
-    },
-
-    actions: {
-      borderTopWidth:
-        1,
-
-      borderTopColor:
-        "#e1e1de",
-    },
-
-    action: {
-      minHeight:
-        54,
-
-      flexDirection:
-        "row",
-
-      alignItems:
-        "center",
-
-      gap:
-        11,
-
-      borderBottomWidth:
-        1,
-
-      borderBottomColor:
-        "#e1e1de",
-    },
-
-    actionText: {
-      flex:
-        1,
-
-      fontSize:
-        15,
-
-      fontWeight:
-        "600",
-
-      color:
-        "#222222",
-    },
-
-    pressed: {
-      opacity:
-        0.76,
-    },
-  });
+function ActionRow({
+  icon,
+  title,
+  description,
+  onPress,
+}: {
+  icon: string;
+  title: string;
+  description: string;
+  onPress: () => void;
+}) {
+  const Icon = P[icon] ?? P.SquaresFourIcon;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.actionRow,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.actionIcon}>
+        <Icon size={21} color={eloColors.blue} weight="duotone" />
+      </View>
+
+      <View style={styles.actionCopy}>
+        <Text style={styles.actionTitle}>{title}</Text>
+        <Text style={styles.actionDescription}>{description}</Text>
+      </View>
+
+      <P.CaretRightIcon size={18} color="#9AA4AE" weight="bold" />
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: eloColors.background,
+  },
+  content: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 40,
+  },
+  eyebrow: {
+    marginTop: 22,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.3,
+    color: eloColors.muted,
+  },
+  title: {
+    marginTop: 7,
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: "900",
+    color: eloColors.ink,
+  },
+  context: {
+    marginTop: 5,
+    fontSize: 13,
+    color: eloColors.muted,
+  },
+  loading: {
+    paddingVertical: 60,
+    alignItems: "center",
+  },
+  sectionTitle: {
+    marginTop: 28,
+    marginBottom: 10,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.9,
+    textTransform: "uppercase",
+    color: eloColors.muted,
+  },
+  infoCard: {
+    marginBottom: 10,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: eloColors.line,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  infoIcon: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    backgroundColor: eloColors.surfaceSoft,
+  },
+  infoCopy: {
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: eloColors.muted,
+  },
+  codeValue: {
+    marginTop: 4,
+    fontSize: 21,
+    fontWeight: "900",
+    letterSpacing: 0.9,
+    color: eloColors.ink,
+  },
+  planValue: {
+    marginTop: 4,
+    fontSize: 17,
+    fontWeight: "900",
+    color: eloColors.ink,
+  },
+  infoHint: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 16,
+    color: eloColors.muted,
+  },
+  actions: {
+    gap: 9,
+  },
+  actionRow: {
+    minHeight: 78,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: eloColors.line,
+    borderRadius: 17,
+    backgroundColor: "#FFFFFF",
+  },
+  actionIcon: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    backgroundColor: eloColors.surfaceSoft,
+  },
+  actionCopy: {
+    flex: 1,
+  },
+  actionTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: eloColors.ink,
+  },
+  actionDescription: {
+    marginTop: 3,
+    fontSize: 11,
+    color: eloColors.muted,
+  },
+  signOut: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#F0DADA",
+    borderRadius: 16,
+    backgroundColor: "#FFF8F8",
+  },
+  signOutText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: eloColors.danger,
+  },
+  pressed: {
+    opacity: 0.76,
+  },
+});
