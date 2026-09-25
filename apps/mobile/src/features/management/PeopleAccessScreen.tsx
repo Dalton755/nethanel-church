@@ -1269,7 +1269,7 @@ function PersonAccessEditor({
             ) {
                 Alert.alert(
                     "Conta vinculada",
-                    "Esta pessoa já possuía uma conta no Nethanel Church. O acesso a esta igreja foi vinculado."
+                    "Esta pessoa já possuía uma conta no Nethanel Elo. O acesso a esta igreja foi vinculado."
                 );
             } else if (
                 result.status ===
