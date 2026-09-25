@@ -1,153 +1,105 @@
-import {
-    NavigationContainer,
-} from "@react-navigation/native";
-
-import {
-    createBottomTabNavigator,
-} from "@react-navigation/bottom-tabs";
-
-import { AgendaScreen } from "../features/agenda/AgendaScreen";
-import { HomeScreen } from "../features/home/HomeScreen";
-import { MoreScreen } from "../features/more/MoreScreen";
-import { PeopleScreen } from "../features/people/PeopleScreen";
-import { NotificationsScreen } from "../features/notifications/NotificationsScreen";
-import { Ionicons } from "@expo/vector-icons";
+import { NavigationContainer } from "@react-navigation/native";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import * as Phosphor from "phosphor-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AgendaScreen } from "../features/agenda/AgendaScreen";
+import { EloHubScreen, type EloModuleKey } from "../features/elo/EloHubScreen";
+import { HomeScreen } from "../features/home/HomeScreen";
+import { MoreScreen } from "../features/more/MoreScreen";
+import { NotificationsScreen } from "../features/notifications/NotificationsScreen";
+import { PeopleScreen } from "../features/people/PeopleScreen";
+
+const P = Phosphor as any;
+
 export type MainTabParamList = {
-    Inicio: undefined;
-    Agenda: undefined;
-    Pessoas: undefined;
-    Notificacoes: undefined;
-    Mais: undefined;
+  Inicio: undefined;
+  Agenda: undefined;
+  Elo: { module?: EloModuleKey; nonce?: number } | undefined;
+  Pessoas: undefined;
+  Notificacoes: undefined;
+  Mais: undefined;
 };
 
-const Tab =
-    createBottomTabNavigator<MainTabParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
+
+const iconForRoute: Record<string, [string, string]> = {
+  Inicio: ["HouseIcon", "HouseIcon"],
+  Agenda: ["CalendarDotsIcon", "CalendarIcon"],
+  Elo: ["CirclesThreePlusIcon", "CirclesThreeIcon"],
+  Pessoas: ["UsersThreeIcon", "UsersIcon"],
+  Mais: ["UserCircleIcon", "UserIcon"],
+};
 
 export function MainTabs() {
-    const insets = useSafeAreaInsets();
+  const insets = useSafeAreaInsets();
 
-    return (
-        <NavigationContainer>
-            <Tab.Navigator
-                screenOptions={({ route }) => ({
-                    headerShown: false,
+  return (
+    <NavigationContainer>
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarHideOnKeyboard: true,
+          tabBarActiveTintColor: "#2387C9",
+          tabBarInactiveTintColor: "#7E8994",
+          tabBarIcon: ({ focused, color }) => {
+            const pair = iconForRoute[route.name] ?? ["SquaresFourIcon", "SquaresFourIcon"];
+            const Icon = P[focused ? pair[0] : pair[1]] ?? P.SquaresFourIcon;
 
-                    tabBarHideOnKeyboard: true,
+            return (
+              <Icon
+                size={22}
+                color={color}
+                weight={focused ? "fill" : "regular"}
+              />
+            );
+          },
+          tabBarStyle: {
+            height: 60 + insets.bottom,
+            paddingTop: 7,
+            paddingBottom: Math.max(insets.bottom, 7),
+            borderTopWidth: 1,
+            borderTopColor: "#DEE5EB",
+            backgroundColor: "#FFFFFF",
+          },
+          tabBarLabelStyle: {
+            fontSize: 10,
+            fontWeight: "800",
+            marginTop: 2,
+          },
+        })}
+      >
+        <Tab.Screen
+          name="Inicio"
+          component={HomeScreen}
+          options={{ tabBarLabel: "Início" }}
+        />
 
-                    tabBarActiveTintColor: "#111111",
-                    tabBarInactiveTintColor: "#8a8a8a",
+        <Tab.Screen name="Agenda" component={AgendaScreen} />
 
-                    tabBarIcon: ({
-                        focused,
-                    }) => {
-                        let iconName:
-                            | "home"
-                            | "home-outline"
-                            | "calendar"
-                            | "calendar-outline"
-                            | "people"
-                            | "people-outline"
-                            | "menu"
-                            | "menu-outline";
+        <Tab.Screen
+          name="Elo"
+          component={EloHubScreen}
+          options={{ tabBarLabel: "Meu Elo" }}
+        />
 
-                        switch (route.name) {
-                            case "Inicio":
-                                iconName = focused
-                                    ? "home"
-                                    : "home-outline";
-                                break;
+        <Tab.Screen name="Pessoas" component={PeopleScreen} />
 
-                            case "Agenda":
-                                iconName = focused
-                                    ? "calendar"
-                                    : "calendar-outline";
-                                break;
+        <Tab.Screen
+          name="Notificacoes"
+          component={NotificationsScreen}
+          options={{
+            tabBarButton: () => null,
+            tabBarStyle: { display: "none" },
+          }}
+        />
 
-                            case "Pessoas":
-                                iconName = focused
-                                    ? "people"
-                                    : "people-outline";
-                                break;
-
-                            default:
-                                iconName = focused
-                                    ? "menu"
-                                    : "menu-outline";
-                        }
-
-                        return (
-                            <Ionicons
-                                name={iconName}
-                                size={22}
-                                color={
-                                    focused
-                                        ? "#111111"
-                                        : "#707070"
-                                }
-                            />
-                        );
-                    },
-
-                    tabBarStyle: {
-                        height: 58 + insets.bottom,
-                        paddingTop: 6,
-                        paddingBottom:
-                            Math.max(insets.bottom, 6),
-                        borderTopWidth: 1,
-                        borderTopColor: "#e2e2df",
-                        backgroundColor: "#ffffff",
-                    },
-
-                    tabBarIconStyle: {
-                        marginTop: 1,
-                    },
-
-                    tabBarLabelStyle: {
-                        fontSize: 11,
-                        fontWeight: "600",
-                        marginTop: 2,
-                    },
-                    tabBarItemStyle: {
-                        paddingTop: 2,
-                    },
-                })}
-            >
-                <Tab.Screen
-                    name="Inicio"
-                    component={HomeScreen}
-                    options={{
-                        tabBarLabel: "Início",
-                    }}
-                />
-
-                <Tab.Screen
-                    name="Agenda"
-                    component={AgendaScreen}
-                />
-
-                <Tab.Screen
-                    name="Pessoas"
-                    component={PeopleScreen}
-                />
-
-                <Tab.Screen
-                    name="Notificacoes"
-                    component={NotificationsScreen}
-                    options={{
-                        tabBarButton: () => null,
-                        tabBarStyle: {
-                            display: "none",
-                        },
-                    }}
-                />
-
-                <Tab.Screen
-                    name="Mais"
-                    component={MoreScreen}
-                />
-            </Tab.Navigator>
-        </NavigationContainer>
-    );
+        <Tab.Screen
+          name="Mais"
+          component={MoreScreen}
+          options={{ tabBarLabel: "Perfil" }}
+        />
+      </Tab.Navigator>
+    </NavigationContainer>
+  );
 }
