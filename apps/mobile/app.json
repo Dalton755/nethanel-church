@@ -26,7 +26,13 @@
     },
     "plugins": [
       "@react-native-community/datetimepicker",
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "elo-geral",
+          "color": "#111111"
+        }
+      ]
     ]
   }
 }
