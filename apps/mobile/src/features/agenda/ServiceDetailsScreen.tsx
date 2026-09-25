@@ -20,9 +20,11 @@ const P = Phosphor as any;
 type Props = {
   service: ServiceEditorData;
   canManage: boolean;
+  canSchedule: boolean;
   onBack: () => void;
   onEdit: () => void;
   onEditDetails: () => void;
+  onOpenSchedule: () => void;
   onDelete: () => void;
 };
 
@@ -47,9 +49,11 @@ function formatTime(value: string) {
 export function ServiceDetailsScreen({
   service,
   canManage,
+  canSchedule,
   onBack,
   onEdit,
   onEditDetails,
+  onOpenSchedule,
   onDelete,
 }: Props) {
   return (
@@ -145,6 +149,19 @@ export function ServiceDetailsScreen({
           empty="Referência ainda não informada"
         />
       </EloCard>
+
+      {canSchedule ? (
+        <View style={styles.scheduleAction}>
+          <EloActionButton
+            label="Escala deste culto"
+            icon="CalendarCheckIcon"
+            onPress={onOpenSchedule}
+          />
+          <Text style={styles.scheduleHint}>
+            A escala vale somente para esta data, mesmo quando o culto é recorrente.
+          </Text>
+        </View>
+      ) : null}
 
       {canManage ? (
         <View style={styles.actions}>
@@ -333,8 +350,18 @@ const styles = StyleSheet.create({
     color: "#9AA4AE",
     fontStyle: "italic",
   },
-  actions: {
+  scheduleAction: {
     marginTop: 24,
+  },
+  scheduleHint: {
+    marginTop: 7,
+    paddingHorizontal: 4,
+    fontSize: 10,
+    lineHeight: 15,
+    color: eloColors.muted,
+  },
+  actions: {
+    marginTop: 12,
     gap: 9,
   },
 });

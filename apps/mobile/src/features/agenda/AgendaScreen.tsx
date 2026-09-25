@@ -26,6 +26,7 @@ import {
 } from "./NewServiceScreen";
 import { ServiceDetailsScreen } from "./ServiceDetailsScreen";
 import { ServiceOccurrenceEditorScreen } from "./ServiceOccurrenceEditorScreen";
+import { ServiceScheduleScreen } from "./ServiceScheduleScreen";
 import {
   ServiceSeriesScreen,
   type SeriesRoutine,
@@ -174,6 +175,8 @@ export function AgendaScreen() {
     activeOrganization,
     activeUnit,
     permissions,
+    can,
+    canAtOrganization,
   } = useOrganization();
 
   const [events, setEvents] = useState<AgendaEvent[]>([]);
@@ -187,6 +190,8 @@ export function AgendaScreen() {
     useState<ServiceEditorData | null>(null);
   const [editingOccurrence, setEditingOccurrence] =
     useState<ServiceEditorData | null>(null);
+  const [scheduleService, setScheduleService] =
+    useState<ServiceEditorData | null>(null);
   const [seriesRoutine, setSeriesRoutine] =
     useState<SeriesRoutine | null>(null);
   const [errorMessage, setErrorMessage] =
@@ -195,6 +200,10 @@ export function AgendaScreen() {
   const canManage =
     permissions.includes("agenda.manage") &&
     permissions.includes("services.manage");
+
+  const canSchedule =
+    can("schedules.manage") ||
+    canAtOrganization("schedules.manage");
 
   const activeRoutineCount = useMemo(
     () => routines.filter((routine) => routine.active).length,
@@ -500,11 +509,24 @@ export function AgendaScreen() {
     );
   }
 
+  if (scheduleService) {
+    return (
+      <ServiceScheduleScreen
+        service={scheduleService}
+        onBack={() => {
+          setViewingService(scheduleService);
+          setScheduleService(null);
+        }}
+      />
+    );
+  }
+
   if (viewingService) {
     return (
       <ServiceDetailsScreen
         service={viewingService}
         canManage={canManage}
+        canSchedule={canSchedule}
         onBack={() => setViewingService(null)}
         onEdit={() => {
           setEditingService(viewingService);
@@ -512,6 +534,10 @@ export function AgendaScreen() {
         }}
         onEditDetails={() => {
           setEditingOccurrence(viewingService);
+          setViewingService(null);
+        }}
+        onOpenSchedule={() => {
+          setScheduleService(viewingService);
           setViewingService(null);
         }}
         onDelete={() => {
