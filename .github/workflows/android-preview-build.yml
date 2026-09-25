@@ -2,6 +2,13 @@ name: Build Android Preview
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/mobile/app.json"
+      - "apps/mobile/src/branding/**"
+      - "apps/mobile/scripts/prepare_elo_assets.py"
 
 permissions:
   contents: read
