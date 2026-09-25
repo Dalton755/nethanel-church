@@ -1,0 +1,41 @@
+name: Build Android Preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate mobile
+        run: npm run typecheck --workspace=mobile
+
+      - name: Validate Expo config
+        working-directory: apps/mobile
+        run: npx expo config --type public
+
+      - name: Start Android preview build
+        working-directory: apps/mobile
+        run: eas build --platform android --profile preview --non-interactive --no-wait
