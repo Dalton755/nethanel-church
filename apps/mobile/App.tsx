@@ -56,7 +56,10 @@ const AUTH_SCHEMES = [
 
 function matchesAuthUrl(
   url: string,
-  path: "invite" | "confirm"
+  path:
+    | "invite"
+    | "confirm"
+    | "callback"
 ) {
   return AUTH_SCHEMES.some(
     (scheme) =>
@@ -203,9 +206,16 @@ export default function App() {
             "confirm"
           );
 
+        const isOAuthCallback =
+          matchesAuthUrl(
+            url,
+            "callback"
+          );
+
         if (
           !isInvite &&
-          !isConfirmation
+          !isConfirmation &&
+          !isOAuthCallback
         ) {
           return;
         }
@@ -418,6 +428,10 @@ export default function App() {
         matchesAuthUrl(
           initialUrl ?? "",
           "confirm"
+        ) ||
+        matchesAuthUrl(
+          initialUrl ?? "",
+          "callback"
         )
       ) {
         await handleAuthUrl(
