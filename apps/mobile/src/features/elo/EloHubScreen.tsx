@@ -70,6 +70,10 @@ export function EloHubScreen({ route }: EloHubProps) {
         canAtOrganization("departments.view") ||
         canAtOrganization("departments.manage"),
 
+      schedulesManage:
+        can("schedules.manage") ||
+        canAtOrganization("schedules.manage"),
+
       communication:
         canAtOrganization("communication.send"),
 
@@ -142,7 +146,7 @@ export function EloHubScreen({ route }: EloHubProps) {
         icon="ClipboardTextIcon"
         title="Minhas escalas"
         description="Confirme, peça substituição, faça check-in e use seu QR."
-        badge="Real"
+        badge="Pessoal"
         onPress={() => setActiveModule("schedules")}
       />
 
@@ -165,6 +169,16 @@ export function EloHubScreen({ route }: EloHubProps) {
       ) : null}
 
       <Text style={eloSharedStyles.sectionTitle}>Igreja e equipes</Text>
+
+      {permissions.schedulesManage ? (
+        <EloModuleCard
+          icon="CalendarCheckIcon"
+          title="Gestão de escalas"
+          description="Adicione pessoas aos departamentos, crie funções e deixe o Elo montar o rodízio."
+          badge="Admin"
+          onPress={() => setActiveModule("departments")}
+        />
+      ) : null}
 
       {permissions.departments ? (
         <EloModuleCard
