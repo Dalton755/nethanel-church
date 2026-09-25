@@ -8,6 +8,9 @@ on:
     paths:
       - "apps/mobile/app.json"
       - "apps/mobile/src/branding/**"
+      - "apps/mobile/src/features/auth/**"
+      - "apps/mobile/src/features/organization/**"
+      - "apps/mobile/App.tsx"
       - "apps/mobile/scripts/generate_elo_native_assets.py"
       - ".github/workflows/android-preview-build.yml"
 

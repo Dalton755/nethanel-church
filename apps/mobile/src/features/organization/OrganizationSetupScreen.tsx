@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { EloLogo } from "../../branding/EloBrand";
 import { supabase } from "../../lib/supabase";
 
 type OrganizationSetupScreenProps = {
@@ -27,6 +28,10 @@ export function OrganizationSetupScreen({
   const [unitName, setUnitName] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [createdJoinCode, setCreatedJoinCode] =
+    useState<string | null>(null);
+  const [createdChurchName, setCreatedChurchName] =
+    useState<string | null>(null);
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
 
@@ -49,8 +54,8 @@ export function OrganizationSetupScreen({
     setLoading(true);
 
     try {
-      const { error } = await supabase.rpc(
-        "create_organization",
+      const { data, error } = await supabase.rpc(
+        "create_organization_with_code",
         {
           p_name: normalizedChurchName,
           p_unit_name:
@@ -63,7 +68,26 @@ export function OrganizationSetupScreen({
         throw error;
       }
 
-      await onCreated();
+      const result =
+        data as
+          | {
+              join_code?: string;
+            }
+          | null;
+
+      if (!result?.join_code) {
+        throw new Error(
+          "A igreja foi criada, mas o código de entrada não foi retornado."
+        );
+      }
+
+      setCreatedChurchName(
+        normalizedChurchName
+      );
+
+      setCreatedJoinCode(
+        result.join_code
+      );
     } catch (error) {
       const message =
         error instanceof Error
@@ -74,6 +98,91 @@ export function OrganizationSetupScreen({
     } finally {
       setLoading(false);
     }
+  }
+
+  if (createdJoinCode) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.successContent}>
+          <EloLogo />
+
+          <Text style={styles.successEyebrow}>
+            IGREJA CRIADA
+          </Text>
+
+          <Text style={styles.successTitle}>
+            {createdChurchName}
+          </Text>
+
+          <Text style={styles.successSubtitle}>
+            Este é o código de entrada da sua igreja no Elo.
+          </Text>
+
+          <View style={styles.codeCard}>
+            <Text style={styles.codeLabel}>
+              Código da igreja
+            </Text>
+
+            <Text
+              selectable
+              style={styles.codeValue}
+            >
+              {createdJoinCode}
+            </Text>
+
+            <Text style={styles.codeHelp}>
+              Compartilhe este código somente com pessoas que devem entrar nesta igreja.
+            </Text>
+          </View>
+
+          {errorMessage && (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>
+                {errorMessage}
+              </Text>
+            </View>
+          )}
+
+          <Pressable
+            disabled={loading}
+            onPress={() => {
+              void (async () => {
+                setErrorMessage(null);
+                setLoading(true);
+
+                try {
+                  await onCreated();
+                } catch (error) {
+                  setErrorMessage(
+                    error instanceof Error
+                      ? error.message
+                      : "Não foi possível abrir a igreja."
+                  );
+                } finally {
+                  setLoading(false);
+                }
+              })();
+            }}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed &&
+                !loading &&
+                styles.buttonPressed,
+              loading &&
+                styles.buttonDisabled,
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator />
+            ) : (
+              <Text style={styles.primaryButtonText}>
+                Entrar no Elo
+              </Text>
+            )}
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -210,6 +319,73 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     paddingHorizontal: 24,
     paddingVertical: 32,
+  },
+
+  successContent: {
+    flex: 1,
+    width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+  },
+
+  successEyebrow: {
+    marginTop: 24,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+    color: "#68717b",
+  },
+
+  successTitle: {
+    marginTop: 8,
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: "800",
+    color: "#17191c",
+  },
+
+  successSubtitle: {
+    marginTop: 10,
+    fontSize: 15,
+    lineHeight: 22,
+    color: "#6b717a",
+  },
+
+  codeCard: {
+    marginTop: 28,
+    marginBottom: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#dce4ea",
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+  },
+
+  codeLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    color: "#737b85",
+  },
+
+  codeValue: {
+    marginTop: 10,
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    color: "#17191c",
+  },
+
+  codeHelp: {
+    marginTop: 12,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#7b838c",
   },
 
   brand: {
