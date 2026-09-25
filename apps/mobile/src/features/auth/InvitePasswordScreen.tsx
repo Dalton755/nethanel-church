@@ -107,7 +107,7 @@ export function InvitePasswordScreen({
 
       Alert.alert(
         "Acesso criado",
-        "Sua senha foi definida. Você já pode acessar o Nethanel Church.",
+        "Sua senha foi definida. Você já pode acessar o Nethanel Elo.",
         [
           {
             text:
@@ -174,7 +174,7 @@ export function InvitePasswordScreen({
             styles.subtitle
           }
         >
-          Seu convite foi confirmado. Agora escolha uma senha para acessar o Nethanel Church.
+          Seu convite foi confirmado. Agora escolha uma senha para acessar o Nethanel Elo.
         </Text>
 
 
