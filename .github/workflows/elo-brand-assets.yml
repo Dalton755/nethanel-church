@@ -1,0 +1,52 @@
+name: Generate Elo Native Assets
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/mobile/src/branding/EloBrand.tsx"
+      - "apps/mobile/scripts/generate_elo_native_assets.py"
+      - "apps/mobile/app.json"
+      - ".github/workflows/elo-brand-assets.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install Pillow
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Generate Elo native assets
+        run: python apps/mobile/scripts/generate_elo_native_assets.py
+
+      - name: Validate generated assets
+        run: |
+          test -s apps/mobile/assets/icon.png
+          test -s apps/mobile/assets/android-icon-foreground.png
+
+      - name: Commit generated assets
+        run: |
+          if git diff --quiet -- apps/mobile/assets/icon.png apps/mobile/assets/android-icon-foreground.png; then
+            echo "Elo native assets are already up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/mobile/assets/icon.png apps/mobile/assets/android-icon-foreground.png
+          git commit -m "chore: atualizar assets nativos do Nethanel Elo"
+          git push origin HEAD:main
