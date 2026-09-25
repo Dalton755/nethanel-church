@@ -6,6 +6,7 @@ import {
 import {
   ActivityIndicator,
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,7 +15,16 @@ import {
 
 import {
   useFocusEffect,
+  useNavigation,
 } from "@react-navigation/native";
+
+import type {
+  BottomTabNavigationProp,
+} from "@react-navigation/bottom-tabs";
+
+import {
+  Ionicons,
+} from "@expo/vector-icons";
 
 import {
   SafeAreaView,
@@ -27,6 +37,14 @@ import {
 import {
   supabase,
 } from "../../lib/supabase";
+
+import type {
+  MainTabParamList,
+} from "../../navigation/MainTabs";
+
+import {
+  useUnreadNotifications,
+} from "../notifications/useUnreadNotifications";
 
 type HomeEvent = {
   id: string;
@@ -88,6 +106,20 @@ export function HomeScreen() {
     activeOrganization,
     activeUnit,
   } = useOrganization();
+
+  const navigation =
+    useNavigation<
+      BottomTabNavigationProp<
+        MainTabParamList
+      >
+    >();
+
+  const {
+    unreadCount,
+  } =
+    useUnreadNotifications(
+      activeOrganization?.id
+    );
 
   const [
     nextService,
@@ -364,15 +396,63 @@ export function HomeScreen() {
         }
       >
         <View style={styles.context}>
-          <Text
-            style={styles.organization}
+          <View
+            style={
+              styles.contextText
+            }
           >
-            {activeOrganization?.name}
-          </Text>
+            <Text
+              style={styles.organization}
+            >
+              {activeOrganization?.name}
+            </Text>
 
-          <Text style={styles.unit}>
-            {activeUnit?.name}
-          </Text>
+            <Text style={styles.unit}>
+              {activeUnit?.name}
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityLabel="Abrir notificações"
+            onPress={() =>
+              navigation.navigate(
+                "Notificacoes"
+              )
+            }
+            style={({
+              pressed,
+            }) => [
+              styles.notificationButton,
+              pressed &&
+                styles.notificationButtonPressed,
+            ]}
+          >
+            <Ionicons
+              name="notifications-outline"
+              size={21}
+              color="#333333"
+            />
+
+            {unreadCount >
+              0 && (
+              <View
+                style={
+                  styles.notificationBadge
+                }
+              >
+                <Text
+                  style={
+                    styles.notificationBadgeText
+                  }
+                >
+                  {unreadCount >
+                  99
+                    ? "99+"
+                    : unreadCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
         </View>
 
         <View style={styles.greeting}>
@@ -613,9 +693,53 @@ const styles = StyleSheet.create({
   },
 
   context: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
     paddingBottom: 24,
     borderBottomWidth: 1,
     borderBottomColor: "#e5e5e2",
+  },
+
+  contextText: {
+    flex: 1,
+  },
+
+  notificationButton: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#dededb",
+    borderRadius: 13,
+    backgroundColor: "#ffffff",
+  },
+
+  notificationButtonPressed: {
+    opacity: 0.7,
+  },
+
+  notificationBadge: {
+    position: "absolute",
+    top: -5,
+    right: -6,
+    minWidth: 19,
+    height: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: "#f7f7f6",
+    borderRadius: 10,
+    backgroundColor: "#222222",
+  },
+
+  notificationBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#ffffff",
   },
 
   organization: {

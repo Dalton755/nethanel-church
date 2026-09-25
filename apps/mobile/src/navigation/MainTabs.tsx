@@ -10,6 +10,7 @@ import { AgendaScreen } from "../features/agenda/AgendaScreen";
 import { HomeScreen } from "../features/home/HomeScreen";
 import { MoreScreen } from "../features/more/MoreScreen";
 import { PeopleScreen } from "../features/people/PeopleScreen";
+import { NotificationsScreen } from "../features/notifications/NotificationsScreen";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -17,6 +18,7 @@ export type MainTabParamList = {
     Inicio: undefined;
     Agenda: undefined;
     Pessoas: undefined;
+    Notificacoes: undefined;
     Mais: undefined;
 };
 
@@ -128,6 +130,17 @@ export function MainTabs() {
                 <Tab.Screen
                     name="Pessoas"
                     component={PeopleScreen}
+                />
+
+                <Tab.Screen
+                    name="Notificacoes"
+                    component={NotificationsScreen}
+                    options={{
+                        tabBarButton: () => null,
+                        tabBarStyle: {
+                            display: "none",
+                        },
+                    }}
                 />
 
                 <Tab.Screen
