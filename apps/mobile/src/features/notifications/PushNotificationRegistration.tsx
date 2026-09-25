@@ -262,6 +262,11 @@ export function PushNotificationRegistration() {
     }
 
 
+    const pushOrganizationId:
+      string =
+      organizationId;
+
+
     let mounted =
       true;
 
@@ -282,7 +287,7 @@ export function PushNotificationRegistration() {
 
 
       await registerPushDevice(
-        organizationId
+        pushOrganizationId
       );
     }
 
