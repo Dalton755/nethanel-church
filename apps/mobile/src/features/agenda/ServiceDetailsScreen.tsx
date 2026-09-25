@@ -1,781 +1,302 @@
 import {
-    Image,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  Image,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
+import * as Phosphor from "phosphor-react-native";
 
 import {
-    Ionicons,
-} from "@expo/vector-icons";
+  EloActionButton,
+  EloCard,
+  EloScreen,
+  eloColors,
+  eloSharedStyles,
+} from "../elo/EloUi";
+import type { ServiceEditorData } from "./NewServiceScreen";
 
-import {
-    SafeAreaView,
-} from "react-native-safe-area-context";
+const P = Phosphor as any;
 
-import type {
-    ServiceEditorData,
-} from "./NewServiceScreen";
-
-
-type ServiceDetailsScreenProps = {
-    service: ServiceEditorData;
-
-    canManage: boolean;
-
-    onBack: () => void;
-
-    onEdit: () => void;
-
-    onDelete: () => void;
+type Props = {
+  service: ServiceEditorData;
+  canManage: boolean;
+  onBack: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 };
 
+function formatDate(value: string) {
+  const formatted = new Intl.DateTimeFormat("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(value));
 
-function formatEventDate(
-    isoValue: string
-) {
-    const formatted =
-        new Intl.DateTimeFormat(
-            "pt-BR",
-            {
-                weekday: "long",
-                day: "2-digit",
-                month: "long",
-                year: "numeric",
-            }
-        ).format(
-            new Date(
-                isoValue
-            )
-        );
-
-    return (
-        formatted
-            .charAt(0)
-            .toUpperCase() +
-        formatted.slice(1)
-    );
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
-
-function formatTime(
-    isoValue: string
-) {
-    return new Intl.DateTimeFormat(
-        "pt-BR",
-        {
-            hour: "2-digit",
-            minute: "2-digit",
-        }
-    ).format(
-        new Date(
-            isoValue
-        )
-    );
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
-
 
 export function ServiceDetailsScreen({
-    service,
-    canManage,
-    onBack,
-    onEdit,
-    onDelete,
-}: ServiceDetailsScreenProps) {
-    return (
-        <SafeAreaView
-            edges={["top"]}
-            style={styles.safeArea}
-        >
-            <View
-                style={
-                    styles.container
-                }
-            >
-                <View
-                    style={
-                        styles.header
-                    }
-                >
-                    <Pressable
-                        onPress={
-                            onBack
-                        }
-                        style={({
-                            pressed,
-                        }) => [
-                            styles.backButton,
+  service,
+  canManage,
+  onBack,
+  onEdit,
+  onDelete,
+}: Props) {
+  return (
+    <EloScreen
+      title={service.title}
+      eyebrow={
+        service.recurring
+          ? "ELO • CULTO RECORRENTE"
+          : "ELO • CULTO"
+      }
+      subtitle={formatDate(service.starts_at)}
+      onBack={onBack}
+    >
+      {service.cover_image_url ? (
+        <Image
+          source={{ uri: service.cover_image_url }}
+          style={styles.cover}
+        />
+      ) : null}
 
-                            pressed &&
-                                styles.pressed,
-                        ]}
-                    >
-                        <Ionicons
-                            name="chevron-back"
-                            size={21}
-                            color="#222222"
-                        />
+      {service.recurring ? (
+        <View style={styles.recurringNotice}>
+          <P.ArrowsClockwiseIcon
+            size={21}
+            color={eloColors.blue}
+            weight="duotone"
+          />
+          <View style={styles.noticeCopy}>
+            <Text style={styles.noticeTitle}>
+              Faz parte de uma rotina semanal
+            </Text>
+            <Text style={styles.noticeText}>
+              Alterações nesta ocorrência são tratadas como exceção,
+              sem interromper os próximos cultos da rotina.
+            </Text>
+          </View>
+        </View>
+      ) : null}
 
-                        <Text
-                            style={
-                                styles.backText
-                            }
-                        >
-                            Agenda
-                        </Text>
-                    </Pressable>
-                </View>
+      <Text style={eloSharedStyles.sectionTitle}>Quando e onde</Text>
 
+      <EloCard>
+        <InfoRow
+          icon="ClockIcon"
+          label="Horário"
+          value={
+            service.ends_at
+              ? formatTime(service.starts_at) +
+                " – " +
+                formatTime(service.ends_at)
+              : formatTime(service.starts_at)
+          }
+        />
 
-                <ScrollView
-                    contentContainerStyle={
-                        styles.content
-                    }
-                    showsVerticalScrollIndicator={
-                        false
-                    }
-                >
-                    {service.cover_image_url && (
-                        <Image
-                            source={{
-                                uri:
-                                    service.cover_image_url,
-                            }}
-                            style={
-                                styles.cover
-                            }
-                        />
-                    )}
+        <View style={styles.separator} />
 
+        <InfoRow
+          icon="MapPinIcon"
+          label="Local"
+          value={service.location_name || "Não informado"}
+        />
+      </EloCard>
 
-                    <View
-                        style={
-                            styles.titleArea
-                        }
-                    >
-                        <Text
-                            style={
-                                styles.title
-                            }
-                        >
-                            {service.title}
-                        </Text>
+      <Text style={eloSharedStyles.sectionTitle}>Mensagem</Text>
 
-                        <Text
-                            style={
-                                styles.date
-                            }
-                        >
-                            {formatEventDate(
-                                service.starts_at
-                            )}
-                        </Text>
-                    </View>
+      <EloCard>
+        <Detail
+          label="Tema"
+          value={service.theme}
+          empty="Tema ainda não informado"
+        />
+        <View style={styles.separator} />
+        <Detail
+          label="Pregador"
+          value={service.preacher_name}
+          empty="Pregador ainda não informado"
+        />
+        <View style={styles.separator} />
+        <Detail
+          label="Referência bíblica"
+          value={service.bible_reference}
+          empty="Referência ainda não informada"
+        />
+      </EloCard>
 
+      {canManage ? (
+        <View style={styles.actions}>
+          {!service.recurring ? (
+            <EloActionButton
+              label="Editar culto"
+              icon="PencilSimpleIcon"
+              onPress={onEdit}
+            />
+          ) : null}
 
-                    <View
-                        style={
-                            styles.summaryCard
-                        }
-                    >
-                        <InfoRow
-                            icon="time-outline"
-                            label="Horário"
-                            value={
-                                service.ends_at
-                                    ? `${formatTime(
-                                          service.starts_at
-                                      )} – ${formatTime(
-                                          service.ends_at
-                                      )}`
-                                    : formatTime(
-                                          service.starts_at
-                                      )
-                            }
-                        />
-
-                        <View
-                            style={
-                                styles.separator
-                            }
-                        />
-
-                        <InfoRow
-                            icon="location-outline"
-                            label="Local"
-                            value={
-                                service.location_name ||
-                                "Não informado"
-                            }
-                        />
-                    </View>
-
-
-                    <View
-                        style={
-                            styles.section
-                        }
-                    >
-                        <Text
-                            style={
-                                styles.sectionTitle
-                            }
-                        >
-                            Mensagem
-                        </Text>
-
-
-                        <DetailItem
-                            label="Tema"
-                            value={
-                                service.theme
-                            }
-                            placeholder="Tema ainda não informado"
-                        />
-
-                        <DetailItem
-                            label="Pregador"
-                            value={
-                                service.preacher_name
-                            }
-                            placeholder="Pregador ainda não informado"
-                        />
-
-                        <DetailItem
-                            label="Referência bíblica"
-                            value={
-                                service.bible_reference
-                            }
-                            placeholder="Referência ainda não informada"
-                        />
-                    </View>
-
-
-                    {canManage && (
-                        <View
-                            style={
-                                styles.actions
-                            }
-                        >
-                            <Pressable
-                                onPress={
-                                    onEdit
-                                }
-                                style={({
-                                    pressed,
-                                }) => [
-                                    styles.editButton,
-
-                                    pressed &&
-                                        styles.pressed,
-                                ]}
-                            >
-                                <Ionicons
-                                    name="create-outline"
-                                    size={18}
-                                    color="#ffffff"
-                                />
-
-                                <Text
-                                    style={
-                                        styles.editButtonText
-                                    }
-                                >
-                                    Editar culto
-                                </Text>
-                            </Pressable>
-
-
-                            <Pressable
-                                onPress={
-                                    onDelete
-                                }
-                                style={({
-                                    pressed,
-                                }) => [
-                                    styles.deleteButton,
-
-                                    pressed &&
-                                        styles.pressed,
-                                ]}
-                            >
-                                <Ionicons
-                                    name="trash-outline"
-                                    size={18}
-                                    color="#a02424"
-                                />
-
-                                <Text
-                                    style={
-                                        styles.deleteButtonText
-                                    }
-                                >
-                                    Excluir
-                                </Text>
-                            </Pressable>
-                        </View>
-                    )}
-                </ScrollView>
-            </View>
-        </SafeAreaView>
-    );
+          <EloActionButton
+            label={
+              service.recurring
+                ? "Cancelar esta ocorrência"
+                : "Excluir culto"
+            }
+            icon="TrashIcon"
+            variant="danger"
+            onPress={onDelete}
+          />
+        </View>
+      ) : null}
+    </EloScreen>
+  );
 }
-
-
-type InfoRowProps = {
-    icon:
-        | "time-outline"
-        | "location-outline";
-
-    label: string;
-
-    value: string;
-};
-
 
 function InfoRow({
-    icon,
-    label,
-    value,
-}: InfoRowProps) {
-    return (
-        <View
-            style={
-                styles.infoRow
-            }
-        >
-            <View
-                style={
-                    styles.infoIcon
-                }
-            >
-                <Ionicons
-                    name={icon}
-                    size={19}
-                    color="#555555"
-                />
-            </View>
+  icon,
+  label,
+  value,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+}) {
+  const Icon = P[icon] ?? P.InfoIcon;
 
-            <View
-                style={
-                    styles.infoContent
-                }
-            >
-                <Text
-                    style={
-                        styles.infoLabel
-                    }
-                >
-                    {label}
-                </Text>
+  return (
+    <View style={styles.infoRow}>
+      <View style={styles.infoIcon}>
+        <Icon
+          size={20}
+          color={eloColors.blue}
+          weight="duotone"
+        />
+      </View>
 
-                <Text
-                    style={
-                        styles.infoValue
-                    }
-                >
-                    {value}
-                </Text>
-            </View>
-        </View>
-    );
+      <View style={styles.infoCopy}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
+      </View>
+    </View>
+  );
 }
 
-
-type DetailItemProps = {
-    label: string;
-
-    value:
-        | string
-        | null;
-
-    placeholder: string;
-};
-
-
-function DetailItem({
-    label,
-    value,
-    placeholder,
-}: DetailItemProps) {
-    return (
-        <View
-            style={
-                styles.detailItem
-            }
-        >
-            <Text
-                style={
-                    styles.detailLabel
-                }
-            >
-                {label}
-            </Text>
-
-            <Text
-                style={[
-                    styles.detailValue,
-
-                    !value &&
-                        styles.detailPlaceholder,
-                ]}
-            >
-                {value || placeholder}
-            </Text>
-        </View>
-    );
+function Detail({
+  label,
+  value,
+  empty,
+}: {
+  label: string;
+  value: string | null;
+  empty: string;
+}) {
+  return (
+    <View style={styles.detail}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text
+        style={[
+          styles.detailValue,
+          !value && styles.detailEmpty,
+        ]}
+      >
+        {value || empty}
+      </Text>
+    </View>
+  );
 }
 
-
-const styles =
-    StyleSheet.create({
-        safeArea: {
-            flex: 1,
-            backgroundColor:
-                "#f7f7f6",
-        },
-
-        container: {
-            flex: 1,
-        },
-
-        header: {
-            paddingHorizontal:
-                16,
-
-            paddingTop:
-                8,
-
-            paddingBottom:
-                8,
-        },
-
-        backButton: {
-            alignSelf:
-                "flex-start",
-
-            minHeight:
-                40,
-
-            flexDirection:
-                "row",
-
-            alignItems:
-                "center",
-
-            gap:
-                2,
-
-            paddingHorizontal:
-                4,
-        },
-
-        backText: {
-            fontSize:
-                14,
-
-            fontWeight:
-                "600",
-
-            color:
-                "#333333",
-        },
-
-        content: {
-            paddingHorizontal:
-                20,
-
-            paddingBottom:
-                40,
-        },
-
-        cover: {
-            width:
-                "100%",
-
-            aspectRatio:
-                16 / 9,
-
-            marginTop:
-                6,
-
-            borderRadius:
-                16,
-
-            resizeMode:
-                "contain",
-
-            backgroundColor:
-                "#ededeb",
-        },
-
-        titleArea: {
-            paddingTop:
-                24,
-
-            paddingBottom:
-                22,
-        },
-
-        title: {
-            fontSize:
-                28,
-
-            lineHeight:
-                34,
-
-            fontWeight:
-                "700",
-
-            color:
-                "#151515",
-        },
-
-        date: {
-            marginTop:
-                7,
-
-            fontSize:
-                14,
-
-            color:
-                "#707070",
-        },
-
-        summaryCard: {
-            paddingHorizontal:
-                16,
-
-            borderWidth:
-                1,
-
-            borderColor:
-                "#e1e1de",
-
-            borderRadius:
-                14,
-
-            backgroundColor:
-                "#ffffff",
-        },
-
-        infoRow: {
-            minHeight:
-                66,
-
-            flexDirection:
-                "row",
-
-            alignItems:
-                "center",
-
-            gap:
-                13,
-        },
-
-        infoIcon: {
-            width:
-                34,
-
-            height:
-                34,
-
-            alignItems:
-                "center",
-
-            justifyContent:
-                "center",
-
-            borderRadius:
-                10,
-
-            backgroundColor:
-                "#f3f3f1",
-        },
-
-        infoContent: {
-            flex: 1,
-        },
-
-        infoLabel: {
-            fontSize:
-                12,
-
-            fontWeight:
-                "600",
-
-            color:
-                "#777777",
-        },
-
-        infoValue: {
-            marginTop:
-                3,
-
-            fontSize:
-                15,
-
-            fontWeight:
-                "600",
-
-            color:
-                "#222222",
-        },
-
-        separator: {
-            height:
-                1,
-
-            marginLeft:
-                47,
-
-            backgroundColor:
-                "#eeeeeb",
-        },
-
-        section: {
-            marginTop:
-                28,
-        },
-
-        sectionTitle: {
-            marginBottom:
-                4,
-
-            fontSize:
-                18,
-
-            fontWeight:
-                "700",
-
-            color:
-                "#1b1b1b",
-        },
-
-        detailItem: {
-            paddingVertical:
-                16,
-
-            borderBottomWidth:
-                1,
-
-            borderBottomColor:
-                "#e4e4e1",
-        },
-
-        detailLabel: {
-            fontSize:
-                12,
-
-            fontWeight:
-                "600",
-
-            color:
-                "#767676",
-        },
-
-        detailValue: {
-            marginTop:
-                5,
-
-            fontSize:
-                16,
-
-            lineHeight:
-                22,
-
-            color:
-                "#202020",
-        },
-
-        detailPlaceholder: {
-            color:
-                "#999999",
-
-            fontStyle:
-                "italic",
-        },
-
-        actions: {
-            marginTop:
-                30,
-
-            gap:
-                10,
-        },
-
-        editButton: {
-            minHeight:
-                52,
-
-            flexDirection:
-                "row",
-
-            alignItems:
-                "center",
-
-            justifyContent:
-                "center",
-
-            gap:
-                8,
-
-            borderRadius:
-                12,
-
-            backgroundColor:
-                "#171717",
-        },
-
-        editButtonText: {
-            fontSize:
-                15,
-
-            fontWeight:
-                "700",
-
-            color:
-                "#ffffff",
-        },
-
-        deleteButton: {
-            minHeight:
-                48,
-
-            flexDirection:
-                "row",
-
-            alignItems:
-                "center",
-
-            justifyContent:
-                "center",
-
-            gap:
-                7,
-
-            borderRadius:
-                12,
-
-            backgroundColor:
-                "#fff1f1",
-        },
-
-        deleteButtonText: {
-            fontSize:
-                14,
-
-            fontWeight:
-                "700",
-
-            color:
-                "#a02424",
-        },
-
-        pressed: {
-            opacity:
-                0.72,
-        },
-    });
+const styles = StyleSheet.create({
+  cover: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    marginTop: 22,
+    borderRadius: 20,
+    resizeMode: "cover",
+    backgroundColor: eloColors.surfaceSoft,
+  },
+  recurringNotice: {
+    marginTop: 18,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "#EAF5FB",
+  },
+  noticeCopy: {
+    flex: 1,
+  },
+  noticeTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: eloColors.blue,
+  },
+  noticeText: {
+    marginTop: 3,
+    fontSize: 11,
+    lineHeight: 17,
+    color: "#557084",
+  },
+  separator: {
+    height: 1,
+    marginLeft: 50,
+    backgroundColor: eloColors.line,
+  },
+  infoRow: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  infoIcon: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: eloColors.surfaceSoft,
+  },
+  infoCopy: {
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: eloColors.muted,
+  },
+  infoValue: {
+    marginTop: 3,
+    fontSize: 14,
+    fontWeight: "800",
+    color: eloColors.ink,
+  },
+  detail: {
+    paddingVertical: 6,
+  },
+  detailLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: eloColors.muted,
+  },
+  detailValue: {
+    marginTop: 4,
+    fontSize: 15,
+    lineHeight: 21,
+    color: eloColors.ink,
+  },
+  detailEmpty: {
+    color: "#9AA4AE",
+    fontStyle: "italic",
+  },
+  actions: {
+    marginTop: 24,
+    gap: 9,
+  },
+});

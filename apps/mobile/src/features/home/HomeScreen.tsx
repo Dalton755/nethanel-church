@@ -91,14 +91,9 @@ export function HomeScreen() {
       );
 
       const [scheduleResponse, eventResponse, todayResponse] = await Promise.all([
-        supabase
-          .from("my_schedule")
-          .select("assignment_id,event_title,department_name,role_label,status,starts_at")
-          .eq("organization_id", activeOrganization.id)
-          .gte("starts_at", now.toISOString())
-          .order("starts_at", { ascending: true })
-          .limit(1)
-          .maybeSingle(),
+        supabase.rpc("list_my_schedule", {
+          p_organization_id: activeOrganization.id,
+        }),
 
         supabase
           .from("events")
@@ -122,7 +117,20 @@ export function HomeScreen() {
       ]);
 
       if (!scheduleResponse.error) {
-        setSchedule((scheduleResponse.data ?? null) as ScheduleSummary | null);
+        const nextSchedule = (
+          (scheduleResponse.data ?? []) as ScheduleSummary[]
+        )
+          .filter(
+            (item) =>
+              new Date(item.starts_at).getTime() >= now.getTime()
+          )
+          .sort(
+            (a, b) =>
+              new Date(a.starts_at).getTime() -
+              new Date(b.starts_at).getTime()
+          )[0] ?? null;
+
+        setSchedule(nextSchedule);
       }
 
       if (!eventResponse.error) {
