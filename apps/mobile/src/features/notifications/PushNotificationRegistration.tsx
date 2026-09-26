@@ -245,6 +245,55 @@ export async function requestAndRegisterPush(
 }
 
 
+export async function unregisterCurrentPushDevice(): Promise<void> {
+  if (
+    Platform.OS !== "android" &&
+    Platform.OS !== "ios"
+  ) {
+    return;
+  }
+
+  try {
+    const permission =
+      await Notifications
+        .getPermissionsAsync();
+
+    if (
+      permission.status !==
+      "granted"
+    ) {
+      return;
+    }
+
+    const projectId =
+      getExpoProjectId();
+
+    if (!projectId) {
+      return;
+    }
+
+    const token =
+      await Notifications
+        .getExpoPushTokenAsync({
+          projectId,
+        });
+
+    await supabase.rpc(
+      "unregister_push_device",
+      {
+        p_push_token:
+          token.data,
+      }
+    );
+  } catch (error) {
+    console.warn(
+      "Não foi possível desvincular o push deste acesso.",
+      error
+    );
+  }
+}
+
+
 export function PushNotificationRegistration() {
   const {
     activeOrganization,
