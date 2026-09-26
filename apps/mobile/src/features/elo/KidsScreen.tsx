@@ -11,6 +11,7 @@ import {
 import * as Phosphor from "phosphor-react-native";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
+import { maskDateBr, parseDateBrToIso } from "../../lib/inputMasks";
 import { supabase } from "../../lib/supabase";
 import {
   EloActionButton,
@@ -154,13 +155,6 @@ type QrPayload = {
   recommended_room_name?: string;
   room_name?: string;
 };
-
-function parseBrDate(value: string) {
-  const match = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!match) return null;
-  const [, dd, mm, yyyy] = match;
-  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-}
 
 function formatEvent(iso: string) {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -365,7 +359,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
   async function registerChild() {
     if (!activeOrganization || !activeUnit) return;
 
-    const birthDate = parseBrDate(childBirthDate);
+    const birthDate = parseDateBrToIso(childBirthDate);
     if (!birthDate) {
       Alert.alert("Data inválida", "Use o formato dd/mm/aaaa.");
       return;
@@ -748,11 +742,14 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
                 <Text style={styles.label}>Nascimento</Text>
                 <TextInput
                   value={childBirthDate}
-                  onChangeText={setChildBirthDate}
+                  onChangeText={(value) =>
+                    setChildBirthDate(maskDateBr(value))
+                  }
                   style={styles.input}
                   placeholder="dd/mm/aaaa"
                   placeholderTextColor="#A1A9B0"
                   keyboardType="number-pad"
+                  maxLength={10}
                 />
 
                 <Text style={styles.label}>Seu vínculo</Text>
