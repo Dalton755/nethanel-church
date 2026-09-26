@@ -304,7 +304,7 @@ export function CommunionSettingsScreen({
           weight="duotone"
         />
         <Text style={styles.infoText}>
-          Para ter duas Ceias no mesmo mês, crie duas regras. Ex.: 1º domingo e 3º domingo.
+          Para ter duas Ceias no mesmo mês, crie duas regras. Ex.: 1º domingo e 3º domingo. Esta configuração define somente as datas; ninguém é escalado aqui.
         </Text>
       </View>
 
@@ -565,7 +565,7 @@ export function CommunionSettingsScreen({
               Funções da Ceia
             </Text>
             <Text style={eloSharedStyles.cardText}>
-              O Elo cria automaticamente as funções “Servir o pão”, “Servir o vinho” e “Preparar a ceia”. Elas aparecem junto com as demais funções na escala daquele culto.
+              O Elo cria automaticamente as funções “Servir o pão”, “Servir o vinho” e “Preparar a ceia”. Elas ficam disponíveis para você usar quando abrir a escala de uma data específica de Ceia.
             </Text>
           </View>
         </View>
