@@ -11,7 +11,11 @@ import {
 import * as Phosphor from "phosphor-react-native";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
-import { maskDateBr, parseDateBrToIso } from "../../lib/inputMasks";
+import {
+  maskDateBr,
+  onlyDigits,
+  parseDateBrToIso,
+} from "../../lib/inputMasks";
 import { supabase } from "../../lib/supabase";
 import {
   EloActionButton,
@@ -1229,7 +1233,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
                     <Text style={styles.label}>Quantidade de pessoas</Text>
                     <TextInput
                       value={requiredCount}
-                      onChangeText={setRequiredCount}
+                      onChangeText={(value) => setRequiredCount(onlyDigits(value))}
                       style={styles.input}
                       keyboardType="number-pad"
                     />
@@ -1293,7 +1297,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
                         <Text style={styles.label}>Idade mínima</Text>
                         <TextInput
                           value={roomMinAge}
-                          onChangeText={setRoomMinAge}
+                          onChangeText={(value) => setRoomMinAge(onlyDigits(value))}
                           style={styles.input}
                           keyboardType="number-pad"
                         />
@@ -1302,7 +1306,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
                         <Text style={styles.label}>Idade máxima</Text>
                         <TextInput
                           value={roomMaxAge}
-                          onChangeText={setRoomMaxAge}
+                          onChangeText={(value) => setRoomMaxAge(onlyDigits(value))}
                           style={styles.input}
                           keyboardType="number-pad"
                         />
@@ -1314,7 +1318,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
                         <Text style={styles.label}>Capacidade</Text>
                         <TextInput
                           value={roomCapacity}
-                          onChangeText={setRoomCapacity}
+                          onChangeText={(value) => setRoomCapacity(onlyDigits(value))}
                           style={styles.input}
                           keyboardType="number-pad"
                         />
@@ -1323,7 +1327,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
                         <Text style={styles.label}>Equipe mínima</Text>
                         <TextInput
                           value={roomMinStaff}
-                          onChangeText={setRoomMinStaff}
+                          onChangeText={(value) => setRoomMinStaff(onlyDigits(value))}
                           style={styles.input}
                           keyboardType="number-pad"
                         />
