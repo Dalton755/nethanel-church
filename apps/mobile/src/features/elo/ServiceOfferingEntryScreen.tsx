@@ -10,6 +10,11 @@ import {
 import * as Phosphor from "phosphor-react-native";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
+import {
+  formatMoneyInputBr,
+  maskMoneyBr,
+  parseMoneyBr,
+} from "../../lib/inputMasks";
 import { supabase } from "../../lib/supabase";
 import {
   EloActionButton,
@@ -45,18 +50,6 @@ function money(value: number | string | null | undefined) {
     style: "currency",
     currency: "BRL",
   }).format(Number(value ?? 0));
-}
-
-function parseMoney(value: string) {
-  const normalized = value
-    .trim()
-    .replace(/\s/g, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
-
-  if (!normalized) return 0;
-
-  return Number(normalized);
 }
 
 function formatDateTime(value: string) {
@@ -95,7 +88,7 @@ export function ServiceOfferingEntryScreen({
   const total = useMemo(
     () =>
       [cash, pix, card, other].reduce((sum, value) => {
-        const parsed = parseMoney(value);
+        const parsed = parseMoneyBr(value);
         return sum + (Number.isFinite(parsed) ? parsed : 0);
       }, 0),
     [cash, pix, card, other]
@@ -125,10 +118,10 @@ export function ServiceOfferingEntryScreen({
       setEntry(next);
 
       if (next) {
-        setCash(String(Number(next.cash_amount ?? 0)));
-        setPix(String(Number(next.pix_amount ?? 0)));
-        setCard(String(Number(next.card_amount ?? 0)));
-        setOther(String(Number(next.other_amount ?? 0)));
+        setCash(formatMoneyInputBr(next.cash_amount));
+        setPix(formatMoneyInputBr(next.pix_amount));
+        setCard(formatMoneyInputBr(next.card_amount));
+        setOther(formatMoneyInputBr(next.other_amount));
         setNotes(next.notes ?? "");
       }
     } catch (error) {
@@ -150,7 +143,7 @@ export function ServiceOfferingEntryScreen({
   async function save(submit: boolean) {
     if (!activeOrganization || locked) return;
 
-    const values = [cash, pix, card, other].map(parseMoney);
+    const values = [cash, pix, card, other].map(parseMoneyBr);
 
     if (values.some((value) => !Number.isFinite(value) || value < 0)) {
       Alert.alert(
@@ -273,7 +266,7 @@ export function ServiceOfferingEntryScreen({
             <Text style={styles.label}>Dinheiro</Text>
             <TextInput
               value={cash}
-              onChangeText={setCash}
+              onChangeText={(value) => setCash(maskMoneyBr(value))}
               editable={!locked}
               keyboardType="decimal-pad"
               placeholder="0,00"
@@ -284,7 +277,7 @@ export function ServiceOfferingEntryScreen({
             <Text style={styles.label}>PIX</Text>
             <TextInput
               value={pix}
-              onChangeText={setPix}
+              onChangeText={(value) => setPix(maskMoneyBr(value))}
               editable={!locked}
               keyboardType="decimal-pad"
               placeholder="0,00"
@@ -295,7 +288,7 @@ export function ServiceOfferingEntryScreen({
             <Text style={styles.label}>Maquininha / cartão</Text>
             <TextInput
               value={card}
-              onChangeText={setCard}
+              onChangeText={(value) => setCard(maskMoneyBr(value))}
               editable={!locked}
               keyboardType="decimal-pad"
               placeholder="0,00"
@@ -306,7 +299,7 @@ export function ServiceOfferingEntryScreen({
             <Text style={styles.label}>Outros</Text>
             <TextInput
               value={other}
-              onChangeText={setOther}
+              onChangeText={(value) => setOther(maskMoneyBr(value))}
               editable={!locked}
               keyboardType="decimal-pad"
               placeholder="0,00"

@@ -607,6 +607,8 @@ export function AuthScreen() {
               styles.scrollContent
             }
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
           >
             <View
               style={
@@ -793,6 +795,8 @@ export function AuthScreen() {
               styles.scrollContent
             }
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
           >
             <View
               style={

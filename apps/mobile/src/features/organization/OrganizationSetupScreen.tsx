@@ -200,6 +200,8 @@ export function OrganizationSetupScreen({
             styles.scrollContent
           }
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         >
           <View style={styles.content}>
             <Text style={styles.brand}>
