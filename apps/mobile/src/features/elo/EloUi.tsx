@@ -7,6 +7,8 @@ import {
   StyleSheet,
   Text,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import * as Phosphor from "phosphor-react-native";
@@ -80,12 +82,14 @@ export function EloScreen({
 export function EloCard({
   children,
   pressed,
+  style,
 }: {
   children: ReactNode;
   pressed?: boolean;
+  style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <View style={[styles.card, pressed && styles.cardPressed]}>
+    <View style={[styles.card, style, pressed && styles.cardPressed]}>
       {children}
     </View>
   );

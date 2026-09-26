@@ -25,6 +25,7 @@ import {
   type ServiceEditorData,
 } from "./NewServiceScreen";
 import { ServiceDetailsScreen } from "./ServiceDetailsScreen";
+import { CommunionSettingsScreen } from "./CommunionSettingsScreen";
 import { ServiceOccurrenceEditorScreen } from "./ServiceOccurrenceEditorScreen";
 import { ServiceScheduleScreen } from "./ServiceScheduleScreen";
 import {
@@ -48,6 +49,7 @@ type AgendaEvent = {
   recurring: boolean;
   routine_id: string | null;
   original_date: string | null;
+  communion: boolean;
 };
 
 type Routine = {
@@ -184,6 +186,8 @@ export function AgendaScreen() {
   const [series, setSeries] = useState<ServiceSeries[]>([]);
   const [loading, setLoading] = useState(true);
   const [creatingService, setCreatingService] = useState(false);
+  const [configuringCommunion, setConfiguringCommunion] =
+    useState(false);
   const [editingService, setEditingService] =
     useState<ServiceEditorData | null>(null);
   const [viewingService, setViewingService] =
@@ -310,22 +314,37 @@ export function AgendaScreen() {
 
       const rawEvents = (eventsResponse.data ?? []) as Omit<
         AgendaEvent,
-        "cover_image_url" | "recurring" | "routine_id" | "original_date"
+        "cover_image_url" | "recurring" | "routine_id" | "original_date" | "communion"
       >[];
 
       let occurrences: Occurrence[] = [];
+      const communionEventIds = new Set<string>();
 
       if (rawEvents.length > 0) {
-        const { data, error } = await supabase
-          .from("service_occurrences")
-          .select("event_id,routine_id,original_date")
-          .in(
-            "event_id",
-            rawEvents.map((event) => event.id)
-          );
+        const eventIds = rawEvents.map((event) => event.id);
 
-        if (!error) {
-          occurrences = (data ?? []) as Occurrence[];
+        const [occurrencesResponse, communionResponse] =
+          await Promise.all([
+            supabase
+              .from("service_occurrences")
+              .select("event_id,routine_id,original_date")
+              .in("event_id", eventIds),
+
+            supabase
+              .from("communion_occurrences")
+              .select("event_id")
+              .in("event_id", eventIds),
+          ]);
+
+        if (!occurrencesResponse.error) {
+          occurrences =
+            (occurrencesResponse.data ?? []) as Occurrence[];
+        }
+
+        if (!communionResponse.error) {
+          for (const item of communionResponse.data ?? []) {
+            communionEventIds.add(item.event_id);
+          }
         }
       }
 
@@ -353,6 +372,7 @@ export function AgendaScreen() {
             recurring: Boolean(occurrence),
             routine_id: occurrence?.routine_id ?? null,
             original_date: occurrence?.original_date ?? null,
+            communion: communionEventIds.has(event.id),
           } satisfies AgendaEvent;
         })
       );
@@ -464,6 +484,17 @@ export function AgendaScreen() {
         error instanceof Error ? error.message : "Tente novamente."
       );
     }
+  }
+
+  if (configuringCommunion) {
+    return (
+      <CommunionSettingsScreen
+        onBack={() => setConfiguringCommunion(false)}
+        onSaved={async () => {
+          await loadAgenda();
+        }}
+      />
+    );
   }
 
   if (creatingService || editingService) {
@@ -585,13 +616,24 @@ export function AgendaScreen() {
       }
     >
       {canManage ? (
-        <View style={styles.primaryAction}>
-          <EloActionButton
-            label="Novo culto"
-            icon="PlusIcon"
-            onPress={() => setCreatingService(true)}
-          />
-        </View>
+        <>
+          <View style={styles.primaryAction}>
+            <EloActionButton
+              label="Novo culto"
+              icon="PlusIcon"
+              onPress={() => setCreatingService(true)}
+            />
+          </View>
+
+          <View style={styles.communionAction}>
+            <EloActionButton
+              label="Configurar Ceia"
+              variant="secondary"
+              icon="CalendarCheckIcon"
+              onPress={() => setConfiguringCommunion(true)}
+            />
+          </View>
+        </>
       ) : null}
 
       {activeRoutineCount > 0 ? (
@@ -758,6 +800,19 @@ export function AgendaScreen() {
                     {event.title}
                   </Text>
 
+                  {event.communion ? (
+                    <View style={styles.communionBadge}>
+                      <P.CalendarCheckIcon
+                        size={11}
+                        color="#9A5B00"
+                        weight="bold"
+                      />
+                      <Text style={styles.communionBadgeText}>
+                        Ceia
+                      </Text>
+                    </View>
+                  ) : null}
+
                   {event.recurring ? (
                     <View style={styles.recurringBadge}>
                       <P.ArrowsClockwiseIcon
@@ -812,6 +867,9 @@ const styles = StyleSheet.create({
   },
   primaryAction: {
     marginTop: 20,
+  },
+  communionAction: {
+    marginTop: 8,
   },
   routineList: {
     gap: 9,
@@ -960,6 +1018,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
     color: eloColors.ink,
+  },
+  communionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 9,
+    backgroundColor: "#FFF3D9",
+  },
+  communionBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#9A5B00",
   },
   recurringBadge: {
     flexDirection: "row",

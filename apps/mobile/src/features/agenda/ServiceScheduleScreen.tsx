@@ -115,6 +115,7 @@ export function ServiceScheduleScreen({
   const [assignments, setAssignments] = useState<EventAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingFunctions, setLoadingFunctions] = useState(false);
+  const [isCommunion, setIsCommunion] = useState(false);
 
   const [showForm, setShowForm] = useState(false);
   const [selectedDepartmentId, setSelectedDepartmentId] =
@@ -184,6 +185,7 @@ export function ServiceScheduleScreen({
         departmentResponse,
         rulesResponse,
         assignmentsResponse,
+        communionResponse,
       ] = await Promise.all([
         supabase.rpc("list_departments_detailed", {
           p_organization_id: activeOrganization.id,
@@ -199,6 +201,10 @@ export function ServiceScheduleScreen({
           .eq("active", true)
           .order("created_at", { ascending: true }),
         supabase.rpc("list_event_schedule", {
+          p_organization_id: activeOrganization.id,
+          p_event_id: service.id,
+        }),
+        supabase.rpc("is_communion_event", {
           p_organization_id: activeOrganization.id,
           p_event_id: service.id,
         }),
@@ -220,6 +226,7 @@ export function ServiceScheduleScreen({
       setAssignments(
         (assignmentsResponse.data ?? []) as EventAssignment[]
       );
+      setIsCommunion(Boolean(communionResponse.data));
     } catch (error) {
       Alert.alert(
         "Escala do culto",
@@ -449,11 +456,31 @@ export function ServiceScheduleScreen({
 
   return (
     <EloScreen
-      title="Escala do culto"
-      eyebrow="ELO • SERVIR"
+      title={isCommunion ? "Escala especial de Ceia" : "Escala do culto"}
+      eyebrow={isCommunion ? "ELO • CEIA" : "ELO • SERVIR"}
       subtitle={service.title}
       onBack={onBack}
     >
+      {isCommunion ? (
+        <View style={styles.communionBanner}>
+          <View style={styles.communionIcon}>
+            <P.CalendarCheckIcon
+              size={22}
+              color="#9A5B00"
+              weight="duotone"
+            />
+          </View>
+          <View style={styles.grow}>
+            <Text style={styles.communionTitle}>
+              Culto de Ceia
+            </Text>
+            <Text style={styles.communionText}>
+              Além das funções normais, esta data inclui Servir o pão, Servir o vinho e Preparar a ceia.
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.eventContext}>
         <P.CalendarDotsIcon
           size={20}
@@ -809,6 +836,34 @@ export function ServiceScheduleScreen({
 }
 
 const styles = StyleSheet.create({
+  communionBanner: {
+    marginTop: 18,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 13,
+    borderRadius: 16,
+    backgroundColor: "#FFF3D9",
+  },
+  communionIcon: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    backgroundColor: "#FFE7B0",
+  },
+  communionTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#6F4300",
+  },
+  communionText: {
+    marginTop: 4,
+    fontSize: 10,
+    lineHeight: 16,
+    color: "#815A1B",
+  },
   eventContext: {
     marginTop: 18,
     flexDirection: "row",

@@ -10,6 +10,7 @@ import { ChurchManagementScreen } from "../management/ChurchManagementScreen";
 import { CommunicationScreen } from "./CommunicationScreen";
 import { DepartmentsScreen } from "./DepartmentsScreen";
 import { EventsScreen } from "./EventsScreen";
+import { FinanceScreen } from "./FinanceScreen";
 import { KidsScreen } from "./KidsScreen";
 import { QrScannerScreen } from "./QrScannerScreen";
 import { SchedulesScreen } from "./SchedulesScreen";
@@ -28,6 +29,7 @@ export type EloModuleKey =
   | "departments"
   | "communication"
   | "scanner"
+  | "finance"
   | "management";
 
 type EloHubProps = {
@@ -85,6 +87,10 @@ export function EloHubScreen({ route }: EloHubProps) {
         canAtOrganization("schedules.manage") ||
         canAtOrganization("kids.manage"),
 
+      finance:
+        canAtOrganization("finance.view") ||
+        canAtOrganization("finance.manage"),
+
       management:
         canAtOrganization("security.manage") ||
         canAtOrganization("organization.manage") ||
@@ -116,6 +122,10 @@ export function EloHubScreen({ route }: EloHubProps) {
 
   if (activeModule === "scanner") {
     return <QrScannerScreen onBack={() => setActiveModule(null)} />;
+  }
+
+  if (activeModule === "finance") {
+    return <FinanceScreen onBack={() => setActiveModule(null)} />;
   }
 
   if (activeModule === "management") {
@@ -210,16 +220,29 @@ export function EloHubScreen({ route }: EloHubProps) {
         />
       ) : null}
 
-      {permissions.management ? (
+      {permissions.finance || permissions.management ? (
         <>
-          <Text style={eloSharedStyles.sectionTitle}>Administração</Text>
+          <Text style={eloSharedStyles.sectionTitle}>Gestão</Text>
 
-          <EloModuleCard
-            icon="ShieldCheckIcon"
-            title="Administração Elo"
-            description="Pessoas, acessos, perfis, unidades e segurança."
-            onPress={() => setActiveModule("management")}
-          />
+          {permissions.finance ? (
+            <EloModuleCard
+              icon="WalletIcon"
+              title="Financeiro"
+              description="Entradas, saídas, contas, orçamento e fechamento de cultos."
+              badge="Restrito"
+              onPress={() => setActiveModule("finance")}
+            />
+          ) : null}
+
+          {permissions.management ? (
+
+            <EloModuleCard
+              icon="ShieldCheckIcon"
+              title="Administração Elo"
+              description="Pessoas, acessos, perfis, unidades e segurança."
+              onPress={() => setActiveModule("management")}
+            />
+          ) : null}
         </>
       ) : null}
 
@@ -227,6 +250,7 @@ export function EloHubScreen({ route }: EloHubProps) {
       !permissions.kids &&
       !permissions.communication &&
       !permissions.scanner &&
+      !permissions.finance &&
       !permissions.management ? (
         <View style={styles.stateWrap}>
           <EloState
