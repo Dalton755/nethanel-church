@@ -176,6 +176,23 @@ function ageRange(room: RoomStatus) {
   return `${min}–${max} anos`;
 }
 
+function messageFromError(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
+
+  return fallback;
+}
+
 export function KidsScreen({ onBack }: { onBack: () => void }) {
   const {
     activeOrganization,
@@ -278,6 +295,16 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
       setAccess(nextAccess);
       setNextEvent(event);
 
+      if (!nextAccess.premium) {
+        setOperation({});
+        setRooms([]);
+        setSchedule([]);
+        setTeamChildren([]);
+        setStaff([]);
+        setCandidates([]);
+        return;
+      }
+
       if (!event) {
         setOperation({});
         setRooms([]);
@@ -347,9 +374,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
       }
     } catch (error) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível carregar o Elo Kids."
+        messageFromError(error, "Não foi possível carregar o Elo Kids.")
       );
     } finally {
       setLoading(false);
@@ -395,7 +420,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Cadastro não concluído",
-        error instanceof Error ? error.message : "Tente novamente."
+        messageFromError(error, "Tente novamente.")
       );
     } finally {
       setWorkingId(null);
@@ -426,7 +451,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Check-in indisponível",
-        error instanceof Error ? error.message : "Tente novamente."
+        messageFromError(error, "Tente novamente.")
       );
     } finally {
       setWorkingId(null);
@@ -449,7 +474,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Entrada ainda indisponível",
-        error instanceof Error ? error.message : "Tente novamente."
+        messageFromError(error, "Tente novamente.")
       );
     } finally {
       setWorkingId(null);
@@ -469,7 +494,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Retirada ainda indisponível",
-        error instanceof Error ? error.message : "Tente novamente."
+        messageFromError(error, "Tente novamente.")
       );
     } finally {
       setWorkingId(null);
@@ -492,7 +517,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Equipe Kids",
-        error instanceof Error ? error.message : "Tente novamente."
+        messageFromError(error, "Tente novamente.")
       );
     } finally {
       setWorkingId(null);
@@ -513,7 +538,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Equipe Kids",
-        error instanceof Error ? error.message : "Tente novamente."
+        messageFromError(error, "Tente novamente.")
       );
     } finally {
       setWorkingId(null);
@@ -542,7 +567,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Escala Kids",
-        error instanceof Error ? error.message : "Tente novamente."
+        messageFromError(error, "Tente novamente.")
       );
     } finally {
       setWorkingId(null);
@@ -575,7 +600,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Sala Kids",
-        error instanceof Error ? error.message : "Tente novamente."
+        messageFromError(error, "Tente novamente.")
       );
     } finally {
       setWorkingId(null);
@@ -595,7 +620,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Presença na sala",
-        error instanceof Error ? error.message : "Tente novamente."
+        messageFromError(error, "Tente novamente.")
       );
     } finally {
       setWorkingId(null);
@@ -621,7 +646,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Não foi possível liberar",
-        error instanceof Error ? error.message : "Tente novamente."
+        messageFromError(error, "Tente novamente.")
       );
     } finally {
       setWorkingId(null);
@@ -647,7 +672,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Não foi possível liberar",
-        error instanceof Error ? error.message : "Tente novamente."
+        messageFromError(error, "Tente novamente.")
       );
     } finally {
       setWorkingId(null);
@@ -671,7 +696,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Chamado não enviado",
-        error instanceof Error ? error.message : "Tente novamente."
+        messageFromError(error, "Tente novamente.")
       );
     } finally {
       setWorkingId(null);
@@ -695,6 +720,12 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
             title="Elo Kids indisponível"
             description={errorMessage}
             icon="WarningCircleIcon"
+          />
+        ) : access.premium === false ? (
+          <EloState
+            title="Elo Kids disponível no Elo Igreja"
+            description="Este módulo é liberado para igrejas com o plano Elo Igreja ativo."
+            icon="LockKeyIcon"
           />
         ) : (
           <>
