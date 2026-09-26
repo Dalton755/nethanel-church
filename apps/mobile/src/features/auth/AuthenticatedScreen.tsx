@@ -19,6 +19,7 @@ import { OrganizationSelectorScreen } from "../organization/OrganizationSelector
 import { OrganizationEntryScreen } from "../organization/OrganizationEntryScreen";
 import { MainTabs } from "../../navigation/MainTabs";
 import { PushNotificationRegistration } from "../notifications/PushNotificationRegistration";
+import { KidsGuardianEmergencyOverlay } from "../elo/KidsGuardianEmergencyOverlay";
 
 const PENDING_JOIN_CODE_KEY =
   "@elo/pending-join-code";
@@ -245,6 +246,7 @@ export function AuthenticatedScreen() {
   return (
     <>
       <PushNotificationRegistration />
+      <KidsGuardianEmergencyOverlay />
       <MainTabs />
     </>
   );
