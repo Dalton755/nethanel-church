@@ -5,7 +5,10 @@ import {
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -143,11 +146,17 @@ export function InvitePasswordScreen({
         styles.safeArea
       }
     >
-      <View
-        style={
-          styles.content
-        }
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+          showsVerticalScrollIndicator={false}
+        >
         <View
           style={
             styles.icon
@@ -301,7 +310,8 @@ export function InvitePasswordScreen({
             </Text>
           )}
         </Pressable>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -314,10 +324,15 @@ const styles =
       backgroundColor: "#f7f7f6",
     },
 
-    content: {
+    flex: {
       flex: 1,
+    },
+
+    content: {
+      flexGrow: 1,
       paddingHorizontal: 24,
       paddingTop: 70,
+      paddingBottom: 40,
     },
 
     icon: {
