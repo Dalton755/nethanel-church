@@ -511,7 +511,7 @@ export function CareScreen({ onBack }: CareScreenProps) {
             <EloCard key={item.request_id}>
               <View style={styles.personRow}>
                 <View style={styles.avatar}>
-                  <P.HandsPrayingIcon
+                  <P.HeartIcon
                     size={19}
                     color={eloColors.blue}
                     weight="duotone"
