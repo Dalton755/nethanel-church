@@ -25,6 +25,7 @@ type EventSummary = {
   title: string;
   starts_at: string;
   location_name: string | null;
+  cover_image_path: string | null;
   cover_image_url: string | null;
 };
 
@@ -138,7 +139,7 @@ export function MemberHomeScreen() {
         await Promise.all([
           supabase
             .from("events")
-            .select("id,title,starts_at,location_name,cover_image_url")
+            .select("id,title,starts_at,location_name,cover_image_path")
             .eq("organization_id", activeOrganization.id)
             .eq("unit_id", activeUnit.id)
             .eq("status", "published")
@@ -161,8 +162,34 @@ export function MemberHomeScreen() {
             .limit(3),
         ]);
 
-      if (!eventResponse.error) {
-        setNextEvent((eventResponse.data ?? null) as EventSummary | null);
+      if (!eventResponse.error && eventResponse.data) {
+        const event = eventResponse.data as Omit<
+          EventSummary,
+          "cover_image_url"
+        >;
+
+        let coverImageUrl: string | null = null;
+
+        if (event.cover_image_path) {
+          const { data: signed } = await supabase.storage
+            .from("event-covers")
+            .createSignedUrl(event.cover_image_path, 60 * 60);
+
+          coverImageUrl = signed?.signedUrl ?? null;
+        }
+
+        setNextEvent({
+          ...event,
+          cover_image_url: coverImageUrl,
+        });
+      } else if (!eventResponse.error) {
+        setNextEvent(null);
+      } else {
+        console.warn(
+          "Não foi possível carregar o próximo culto.",
+          eventResponse.error
+        );
+        setNextEvent(null);
       }
 
       if (!scheduleResponse.error) {
