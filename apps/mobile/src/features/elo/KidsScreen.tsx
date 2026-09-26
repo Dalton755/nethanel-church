@@ -286,7 +286,7 @@ export function KidsScreen({ onBack }: { onBack: () => void }) {
         setSchedule([]);
         setTeamChildren([]);
       } else {
-        const requests: Promise<any>[] = [
+        const requests: PromiseLike<any>[] = [
           supabase.rpc("get_kids_event_operation", {
             p_organization_id: activeOrganization.id,
             p_unit_id: activeUnit.id,
