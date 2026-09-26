@@ -11,7 +11,13 @@ import {
 import * as Phosphor from "phosphor-react-native";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
-import { maskDateBr, parseDateBrToIso } from "../../lib/inputMasks";
+import {
+  formatMoneyInputBr,
+  maskDateBr,
+  maskMoneyBr,
+  parseDateBrToIso,
+  parseMoneyBr,
+} from "../../lib/inputMasks";
 import { supabase } from "../../lib/supabase";
 import {
   EloActionButton,
@@ -370,9 +376,7 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
       return;
     }
 
-    const amount = Number(
-      transactionAmount.replace(/\./g, "").replace(",", ".")
-    );
+    const amount = parseMoneyBr(transactionAmount);
     const occurredOn = parseDateBrToIso(transactionDate);
     const dueOn = parseDateBrToIso(transactionDueDate);
 
@@ -479,9 +483,7 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
   async function saveBudget() {
     if (!activeOrganization || !budgetCategoryId) return;
 
-    const amount = Number(
-      budgetAmount.replace(/\./g, "").replace(",", ".")
-    );
+    const amount = parseMoneyBr(budgetAmount);
 
     if (!Number.isFinite(amount) || amount < 0) {
       Alert.alert("Valor inválido", "Informe o orçamento mensal.");
@@ -520,9 +522,7 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
   async function saveAccount() {
     if (!activeOrganization) return;
 
-    const opening = Number(
-      accountOpeningBalance.replace(/\./g, "").replace(",", ".") || "0"
-    );
+    const opening = parseMoneyBr(accountOpeningBalance);
 
     if (accountName.trim().length < 2) {
       Alert.alert("Nome necessário", "Informe o nome da conta.");
@@ -606,10 +606,10 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
       const existing = ((data ?? [])[0] ?? null) as Closure | null;
 
       setClosure(existing);
-      setClosureCash(String(Number(existing?.cash_amount ?? 0)));
-      setClosurePix(String(Number(existing?.pix_amount ?? 0)));
-      setClosureCard(String(Number(existing?.card_amount ?? 0)));
-      setClosureOther(String(Number(existing?.other_amount ?? 0)));
+      setClosureCash(formatMoneyInputBr(existing?.cash_amount));
+      setClosurePix(formatMoneyInputBr(existing?.pix_amount));
+      setClosureCard(formatMoneyInputBr(existing?.card_amount));
+      setClosureOther(formatMoneyInputBr(existing?.other_amount));
       setClosureNotes(existing?.notes ?? "");
     } catch (error) {
       Alert.alert(
@@ -622,14 +622,11 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
   async function saveClosure(submit: boolean) {
     if (!activeOrganization || !activeUnit || !selectedService) return;
 
-    const parseValue = (value: string) =>
-      Number(value.replace(/\./g, "").replace(",", ".") || "0");
-
     const values = [
-      parseValue(closureCash),
-      parseValue(closurePix),
-      parseValue(closureCard),
-      parseValue(closureOther),
+      parseMoneyBr(closureCash),
+      parseMoneyBr(closurePix),
+      parseMoneyBr(closureCard),
+      parseMoneyBr(closureOther),
     ];
 
     if (values.some((value) => !Number.isFinite(value) || value < 0)) {
@@ -711,10 +708,10 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
 
   if (selectedService) {
     const total =
-      Number(closureCash.replace(",", ".") || 0) +
-      Number(closurePix.replace(",", ".") || 0) +
-      Number(closureCard.replace(",", ".") || 0) +
-      Number(closureOther.replace(",", ".") || 0);
+      parseMoneyBr(closureCash) +
+      parseMoneyBr(closurePix) +
+      parseMoneyBr(closureCard) +
+      parseMoneyBr(closureOther);
 
     return (
       <EloScreen
@@ -750,7 +747,7 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
           <Text style={styles.label}>Dinheiro</Text>
           <TextInput
             value={closureCash}
-            onChangeText={setClosureCash}
+            onChangeText={(value) => setClosureCash(maskMoneyBr(value))}
             keyboardType="decimal-pad"
             style={styles.input}
           />
@@ -758,7 +755,7 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
           <Text style={styles.label}>PIX identificado</Text>
           <TextInput
             value={closurePix}
-            onChangeText={setClosurePix}
+            onChangeText={(value) => setClosurePix(maskMoneyBr(value))}
             keyboardType="decimal-pad"
             style={styles.input}
           />
@@ -766,7 +763,7 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
           <Text style={styles.label}>Cartão / maquininha</Text>
           <TextInput
             value={closureCard}
-            onChangeText={setClosureCard}
+            onChangeText={(value) => setClosureCard(maskMoneyBr(value))}
             keyboardType="decimal-pad"
             style={styles.input}
           />
@@ -774,7 +771,7 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
           <Text style={styles.label}>Outros</Text>
           <TextInput
             value={closureOther}
-            onChangeText={setClosureOther}
+            onChangeText={(value) => setClosureOther(maskMoneyBr(value))}
             keyboardType="decimal-pad"
             style={styles.input}
           />
@@ -982,7 +979,7 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
               <Text style={styles.label}>Valor</Text>
               <TextInput
                 value={transactionAmount}
-                onChangeText={setTransactionAmount}
+                onChangeText={(value) => setTransactionAmount(maskMoneyBr(value))}
                 keyboardType="decimal-pad"
                 placeholder="0,00"
                 placeholderTextColor="#A1A9B0"
@@ -1279,7 +1276,7 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
               <Text style={styles.label}>Valor planejado</Text>
               <TextInput
                 value={budgetAmount}
-                onChangeText={setBudgetAmount}
+                onChangeText={(value) => setBudgetAmount(maskMoneyBr(value))}
                 keyboardType="decimal-pad"
                 placeholder="0,00"
                 placeholderTextColor="#A1A9B0"
@@ -1464,7 +1461,7 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
                     <Text style={styles.label}>Saldo inicial</Text>
                     <TextInput
                       value={accountOpeningBalance}
-                      onChangeText={setAccountOpeningBalance}
+                      onChangeText={(value) => setAccountOpeningBalance(maskMoneyBr(value))}
                       keyboardType="decimal-pad"
                       placeholder="0,00"
                       placeholderTextColor="#A1A9B0"
