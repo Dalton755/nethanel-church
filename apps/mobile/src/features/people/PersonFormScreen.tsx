@@ -31,6 +31,10 @@ import {
 } from "../../contexts/OrganizationContext";
 
 import {
+    maskPhoneBr,
+} from "../../lib/inputMasks";
+
+import {
     supabase,
 } from "../../lib/supabase";
 
@@ -59,74 +63,6 @@ const MEMBERSHIP_OPTIONS:
         "staff",
         "other",
     ];
-
-
-function digitsOnly(
-    value: string
-) {
-    return value.replace(
-        /\D/g,
-        ""
-    );
-}
-
-
-function formatPhone(
-    value: string
-) {
-    const digits =
-        digitsOnly(value)
-            .slice(
-                0,
-                11
-            );
-
-    if (
-        digits.length <=
-        2
-    ) {
-        return digits.length
-            ? `(${digits}`
-            : "";
-    }
-
-    if (
-        digits.length <=
-        6
-    ) {
-        return `(${digits.slice(
-            0,
-            2
-        )}) ${digits.slice(
-            2
-        )}`;
-    }
-
-    if (
-        digits.length <=
-        10
-    ) {
-        return `(${digits.slice(
-            0,
-            2
-        )}) ${digits.slice(
-            2,
-            6
-        )}-${digits.slice(
-            6
-        )}`;
-    }
-
-    return `(${digits.slice(
-        0,
-        2
-    )}) ${digits.slice(
-        2,
-        7
-    )}-${digits.slice(
-        7
-    )}`;
-}
 
 
 function parseDatabaseDate(
@@ -256,8 +192,10 @@ export function PersonFormScreen({
         setPhone,
     ] =
         useState(
-            person?.phone ??
-                ""
+            maskPhoneBr(
+                person?.phone ??
+                    ""
+            )
         );
 
 
@@ -683,7 +621,7 @@ export function PersonFormScreen({
                                 value
                             ) =>
                                 setPhone(
-                                    formatPhone(
+                                    maskPhoneBr(
                                         value
                                     )
                                 )
