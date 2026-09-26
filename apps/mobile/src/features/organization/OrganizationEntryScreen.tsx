@@ -433,6 +433,8 @@ export function OrganizationEntryScreen({
               styles.content
             }
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
           >
             <Pressable
               onPress={() => {
