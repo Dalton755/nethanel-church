@@ -66,3 +66,62 @@ export function maskPhoneBr(value: string) {
 
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
+
+export function maskMoneyBr(value: string) {
+  const raw = value.replace(/[^\d.,]/g, "");
+
+  if (!raw) {
+    return "";
+  }
+
+  const commaIndex = raw.lastIndexOf(",");
+  const dotIndex = raw.lastIndexOf(".");
+  let separatorIndex = -1;
+
+  if (commaIndex >= 0) {
+    separatorIndex = commaIndex;
+  } else if (dotIndex >= 0) {
+    const decimalsAfterDot = raw.length - dotIndex - 1;
+    separatorIndex = decimalsAfterDot <= 2 ? dotIndex : -1;
+  }
+
+  const integerDigits = onlyDigits(
+    separatorIndex >= 0 ? raw.slice(0, separatorIndex) : raw
+  ).replace(/^0+(?=\d)/, "");
+
+  const integerPart = integerDigits || "0";
+
+  if (separatorIndex < 0) {
+    return integerPart;
+  }
+
+  const decimalPart = onlyDigits(raw.slice(separatorIndex + 1)).slice(0, 2);
+
+  return `${integerPart},${decimalPart}`;
+}
+
+export function parseMoneyBr(value: string) {
+  const normalized = value
+    .trim()
+    .replace(/\s/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+
+  if (!normalized) {
+    return 0;
+  }
+
+  return Number(normalized);
+}
+
+export function formatMoneyInputBr(
+  value: number | string | null | undefined
+) {
+  const number = Number(value ?? 0);
+
+  if (!Number.isFinite(number)) {
+    return "0,00";
+  }
+
+  return number.toFixed(2).replace(".", ",");
+}
