@@ -133,20 +133,12 @@ export function MemberHomeScreen() {
     setLoading(true);
 
     try {
-      const now = new Date().toISOString();
-
       const [eventResponse, scheduleResponse, noticeResponse] =
         await Promise.all([
-          supabase
-            .from("events")
-            .select("id,title,starts_at,location_name,cover_image_path")
-            .eq("organization_id", activeOrganization.id)
-            .eq("unit_id", activeUnit.id)
-            .eq("status", "published")
-            .gte("starts_at", now)
-            .order("starts_at", { ascending: true })
-            .limit(1)
-            .maybeSingle(),
+          supabase.rpc("get_next_member_service", {
+            p_organization_id: activeOrganization.id,
+            p_unit_id: activeUnit.id,
+          }),
 
           supabase.rpc("list_my_schedule", {
             p_organization_id: activeOrganization.id,
@@ -162,28 +154,34 @@ export function MemberHomeScreen() {
             .limit(3),
         ]);
 
-      if (!eventResponse.error && eventResponse.data) {
-        const event = eventResponse.data as Omit<
-          EventSummary,
-          "cover_image_url"
-        >;
+      if (!eventResponse.error) {
+        const raw = Array.isArray(eventResponse.data)
+          ? eventResponse.data[0]
+          : eventResponse.data;
 
-        let coverImageUrl: string | null = null;
+        if (raw) {
+          const event = raw as Omit<
+            EventSummary,
+            "cover_image_url"
+          >;
 
-        if (event.cover_image_path) {
-          const { data: signed } = await supabase.storage
-            .from("event-covers")
-            .createSignedUrl(event.cover_image_path, 60 * 60);
+          let coverImageUrl: string | null = null;
 
-          coverImageUrl = signed?.signedUrl ?? null;
+          if (event.cover_image_path) {
+            const { data: signed } = await supabase.storage
+              .from("event-covers")
+              .createSignedUrl(event.cover_image_path, 60 * 60);
+
+            coverImageUrl = signed?.signedUrl ?? null;
+          }
+
+          setNextEvent({
+            ...event,
+            cover_image_url: coverImageUrl,
+          });
+        } else {
+          setNextEvent(null);
         }
-
-        setNextEvent({
-          ...event,
-          cover_image_url: coverImageUrl,
-        });
-      } else if (!eventResponse.error) {
-        setNextEvent(null);
       } else {
         console.warn(
           "Não foi possível carregar o próximo culto.",
