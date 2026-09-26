@@ -11,6 +11,7 @@ import * as Phosphor from "phosphor-react-native";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
 import { supabase } from "../../lib/supabase";
+import { ServiceOfferingEntryScreen } from "./ServiceOfferingEntryScreen";
 import {
   EloActionButton,
   EloCard,
@@ -71,6 +72,18 @@ type TeamGroup = {
   people: TeamScheduleItem[];
 };
 
+type OfferingAccess = {
+  event_id: string;
+  event_title: string;
+  starts_at: string;
+  ends_at: string | null;
+  unit_id: string;
+  assignment_id: string;
+  role_label: string;
+  closure_status: string | null;
+  total_amount: number | string | null;
+};
+
 type QrPayload = {
   token?: string;
   expires_at?: string;
@@ -115,6 +128,10 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [qr, setQr] = useState<QrPayload | null>(null);
+  const [offeringEventIds, setOfferingEventIds] =
+    useState<Set<string>>(new Set());
+  const [selectedOfferingEventId, setSelectedOfferingEventId] =
+    useState<string | null>(null);
 
   const pendingCount = useMemo(
     () => items.filter((item) => item.status === "pending").length,
@@ -167,6 +184,7 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
         myScheduleResponse,
         ledDepartmentsResponse,
         teamScheduleResponse,
+        offeringAccessResponse,
       ] = await Promise.all([
         supabase.rpc("list_my_schedule", {
           p_organization_id: activeOrganization.id,
@@ -177,6 +195,9 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
         supabase.rpc("list_my_led_department_schedule", {
           p_organization_id: activeOrganization.id,
         }),
+        supabase.rpc("list_my_service_offering_access", {
+          p_organization_id: activeOrganization.id,
+        }),
       ]);
 
       if (myScheduleResponse.error) throw myScheduleResponse.error;
@@ -184,6 +205,16 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
         throw ledDepartmentsResponse.error;
       }
       if (teamScheduleResponse.error) throw teamScheduleResponse.error;
+      if (offeringAccessResponse.error) {
+        throw offeringAccessResponse.error;
+      }
+
+      const nextOfferingAccess =
+        (offeringAccessResponse.data ?? []) as OfferingAccess[];
+
+      const nextOfferingEventIds = new Set(
+        nextOfferingAccess.map((item) => item.event_id)
+      );
 
       const nextItems = (
         (myScheduleResponse.data ?? []) as ScheduleItem[]
@@ -191,8 +222,11 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
         .filter(
           (item) =>
             item.status !== "cancelled" &&
-            new Date(item.starts_at).getTime() >=
-              Date.now() - 1000 * 60 * 60 * 12
+            (
+              new Date(item.starts_at).getTime() >=
+                Date.now() - 1000 * 60 * 60 * 12 ||
+              nextOfferingEventIds.has(item.event_id)
+            )
         )
         .sort(
           (a, b) =>
@@ -208,6 +242,7 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
       setTeamItems(
         (teamScheduleResponse.data ?? []) as TeamScheduleItem[]
       );
+      setOfferingEventIds(nextOfferingEventIds);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -315,6 +350,16 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
     } finally {
       setWorkingId(null);
     }
+  }
+
+  if (selectedOfferingEventId) {
+    return (
+      <ServiceOfferingEntryScreen
+        eventId={selectedOfferingEventId}
+        onBack={() => setSelectedOfferingEventId(null)}
+        onSaved={load}
+      />
+    );
   }
 
   return (
@@ -484,6 +529,18 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
                           </>
                         ) : null}
                       </View>
+
+                      {offeringEventIds.has(item.event_id) ? (
+                        <View style={styles.offeringAction}>
+                          <EloActionButton
+                            label="Registrar valores da oferta"
+                            icon="WalletIcon"
+                            onPress={() =>
+                              setSelectedOfferingEventId(item.event_id)
+                            }
+                          />
+                        </View>
+                      ) : null}
 
                       {item.status === "confirmed" &&
                       !item.substitution_request_id &&
@@ -691,6 +748,9 @@ const styles = StyleSheet.create({
   half: {
     flexGrow: 1,
     flexBasis: 140,
+  },
+  offeringAction: {
+    marginTop: 10,
   },
   textAction: {
     marginTop: 14,
