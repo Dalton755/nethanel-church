@@ -6,6 +6,7 @@ import {
 } from "react-native";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
+import { CareScreen } from "../care/CareScreen";
 import { ChurchManagementScreen } from "../management/ChurchManagementScreen";
 import { CommunicationScreen } from "./CommunicationScreen";
 import { DepartmentsScreen } from "./DepartmentsScreen";
@@ -30,6 +31,7 @@ export type EloModuleKey =
   | "communication"
   | "scanner"
   | "finance"
+  | "care"
   | "management";
 
 type EloHubProps = {
@@ -93,6 +95,10 @@ export function EloHubScreen({ route }: EloHubProps) {
         canAtOrganization("finance.view") ||
         canAtOrganization("finance.manage"),
 
+      care:
+        canAtOrganization("care.manage") ||
+        can("care.manage"),
+
       management:
         canAtOrganization("security.manage") ||
         canAtOrganization("organization.manage") ||
@@ -128,6 +134,10 @@ export function EloHubScreen({ route }: EloHubProps) {
 
   if (activeModule === "finance") {
     return <FinanceScreen onBack={() => setActiveModule(null)} />;
+  }
+
+  if (activeModule === "care") {
+    return <CareScreen onBack={() => setActiveModule(null)} />;
   }
 
   if (activeModule === "management") {
@@ -202,6 +212,16 @@ export function EloHubScreen({ route }: EloHubProps) {
         />
       ) : null}
 
+      {permissions.care ? (
+        <EloModuleCard
+          icon="HeartStraightIcon"
+          title="Cuidado pastoral"
+          description="Fila de atendimentos, propostas de horário e pedidos de oração."
+          badge="Pastoral"
+          onPress={() => setActiveModule("care")}
+        />
+      ) : null}
+
       {permissions.communication ? (
         <EloModuleCard
           icon="MegaphoneIcon"
@@ -251,6 +271,7 @@ export function EloHubScreen({ route }: EloHubProps) {
       {!permissions.departments &&
       !permissions.kids &&
       !permissions.communication &&
+      !permissions.care &&
       !permissions.scanner &&
       !permissions.finance &&
       !permissions.management ? (
