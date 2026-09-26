@@ -11,6 +11,7 @@ import {
 import * as Phosphor from "phosphor-react-native";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
+import { maskDateBr, parseDateBrToIso } from "../../lib/inputMasks";
 import { supabase } from "../../lib/supabase";
 import {
   EloActionButton,
@@ -137,22 +138,6 @@ function todayBr() {
     month: "2-digit",
     year: "numeric",
   }).format(new Date());
-}
-
-function parseBrDate(value: string) {
-  const normalized = value.trim();
-
-  if (!normalized) return null;
-
-  const match = normalized.match(
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
-  );
-
-  if (!match) return null;
-
-  const [, dd, mm, yyyy] = match;
-
-  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
 }
 
 function closureStatusLabel(value: string | null) {
@@ -388,8 +373,8 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
     const amount = Number(
       transactionAmount.replace(/\./g, "").replace(",", ".")
     );
-    const occurredOn = parseBrDate(transactionDate);
-    const dueOn = parseBrDate(transactionDueDate);
+    const occurredOn = parseDateBrToIso(transactionDate);
+    const dueOn = parseDateBrToIso(transactionDueDate);
 
     if (!Number.isFinite(amount) || amount <= 0) {
       Alert.alert("Valor inválido", "Informe um valor maior que zero.");
@@ -1007,9 +992,13 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
               <Text style={styles.label}>Data</Text>
               <TextInput
                 value={transactionDate}
-                onChangeText={setTransactionDate}
+                onChangeText={(value) =>
+                  setTransactionDate(maskDateBr(value))
+                }
                 placeholder="dd/mm/aaaa"
                 placeholderTextColor="#A1A9B0"
+                keyboardType="number-pad"
+                maxLength={10}
                 style={styles.input}
               />
 
@@ -1046,9 +1035,13 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
                   <Text style={styles.label}>Vencimento</Text>
                   <TextInput
                     value={transactionDueDate}
-                    onChangeText={setTransactionDueDate}
+                    onChangeText={(value) =>
+                      setTransactionDueDate(maskDateBr(value))
+                    }
                     placeholder="dd/mm/aaaa"
                     placeholderTextColor="#A1A9B0"
+                    keyboardType="number-pad"
+                    maxLength={10}
                     style={styles.input}
                   />
                 </>
