@@ -206,7 +206,7 @@ export function NewServiceScreen({
     }
   }
 
-  async function uploadCover(eventId: string) {
+  async function uploadCover(targetId: string) {
     if (
       !selectedImage ||
       !activeOrganization ||
@@ -231,7 +231,7 @@ export function NewServiceScreen({
           : "jpg";
 
     const imagePath =
-      `${activeOrganization.id}/${activeUnit.id}/${eventId}/cover.${extension}`;
+      `${activeOrganization.id}/${activeUnit.id}/${targetId}/cover.${extension}`;
 
     const { error } = await supabase.storage
       .from("event-covers")
@@ -350,7 +350,7 @@ export function NewServiceScreen({
       );
     }
 
-    const { error } = await supabase.rpc(
+    const { data, error } = await supabase.rpc(
       "create_service_routine",
       {
         p_organization_id: activeOrganization.id,
@@ -367,6 +367,33 @@ export function NewServiceScreen({
     );
 
     if (error) throw error;
+
+    const routineResult = Array.isArray(data) ? data[0] : data;
+    const routineId =
+      (routineResult as { id?: string } | null)?.id ?? null;
+
+    if (!routineId) {
+      throw new Error(
+        "A rotina foi criada, mas o identificador não foi retornado."
+      );
+    }
+
+    if (selectedImage) {
+      const path = await uploadCover(routineId);
+
+      if (path) {
+        const { error: coverError } = await supabase.rpc(
+          "set_service_routine_cover",
+          {
+            p_organization_id: activeOrganization.id,
+            p_routine_id: routineId,
+            p_cover_image_path: path,
+          }
+        );
+
+        if (coverError) throw coverError;
+      }
+    }
   }
 
   async function handleSave() {
@@ -507,9 +534,13 @@ export function NewServiceScreen({
             </View>
           ) : null}
 
-          {mode === "single" || isEditing ? (
+          {!isEditing || mode === "single" || isEditing ? (
             <>
-              <Text style={styles.sectionLabel}>Imagem de capa</Text>
+              <Text style={styles.sectionLabel}>
+                {mode === "weekly" && !isEditing
+                  ? "Imagem padrão da rotina"
+                  : "Imagem de capa"}
+              </Text>
 
               <Pressable
                 onPress={() => void pickImage()}
@@ -531,7 +562,9 @@ export function NewServiceScreen({
                       Adicionar imagem
                     </Text>
                     <Text style={styles.imageText}>
-                      Opcional • JPG, PNG ou WEBP
+                      {mode === "weekly" && !isEditing
+                        ? "Será usada nos próximos cultos • JPG, PNG ou WEBP"
+                        : "Opcional • JPG, PNG ou WEBP"}
                     </Text>
                   </View>
                 )}
