@@ -28,6 +28,7 @@ const iconForRoute: Record<string, [string, string]> = {
   Agenda: ["CalendarDotsIcon", "CalendarIcon"],
   Elo: ["CirclesThreePlusIcon", "CirclesThreeIcon"],
   Pessoas: ["UsersThreeIcon", "UsersIcon"],
+  Notificacoes: ["BellIcon", "BellIcon"],
   Mais: ["UserCircleIcon", "UserIcon"],
 };
 
@@ -88,10 +89,7 @@ export function MainTabs() {
         <Tab.Screen
           name="Notificacoes"
           component={NotificationsScreen}
-          options={{
-            tabBarButton: () => null,
-            tabBarStyle: { display: "none" },
-          }}
+          options={{ tabBarLabel: "Avisos" }}
         />
 
         <Tab.Screen
