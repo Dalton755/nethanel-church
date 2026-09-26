@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -48,10 +50,17 @@ export function EloScreen({
 }) {
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={styles.screenContent}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
+        <ScrollView
+          contentContainerStyle={styles.screenContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+        >
         <View style={styles.topRow}>
           {onBack ? (
             <Pressable onPress={onBack} style={styles.iconButton}>
@@ -73,8 +82,9 @@ export function EloScreen({
 
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
 
-        {children}
-      </ScrollView>
+          {children}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -303,6 +313,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: eloColors.background,
+  },
+  flex: {
+    flex: 1,
   },
   screenContent: {
     flexGrow: 1,
