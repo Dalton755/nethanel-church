@@ -50,11 +50,23 @@ type OrganizationEntryScreenProps = {
 
   onChanged:
     () => Promise<void>;
+
+  onSignOut:
+    () => Promise<void>;
+
+  canReturnToChurch?:
+    boolean;
+
+  onReturnToChurch?:
+    () => Promise<void>;
 };
 
 export function OrganizationEntryScreen({
   displayName,
   onChanged,
+  onSignOut,
+  canReturnToChurch = false,
+  onReturnToChurch,
 }: OrganizationEntryScreenProps) {
   const [
     mode,
@@ -697,6 +709,19 @@ export function OrganizationEntryScreen({
           false
         }
       >
+        {canReturnToChurch && onReturnToChurch ? (
+          <Pressable
+            onPress={() => {
+              void onReturnToChurch();
+            }}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonText}>
+              ← Voltar para minha igreja
+            </Text>
+          </Pressable>
+        ) : null}
+
         <EloLogo
           compact
         />
@@ -847,6 +872,20 @@ export function OrganizationEntryScreen({
         >
           Seu perfil começa simples e ganha recursos conforme sua função na igreja.
         </Text>
+
+        <Pressable
+          onPress={() => {
+            void onSignOut();
+          }}
+          style={({ pressed }) => [
+            styles.accountButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.accountButtonText}>
+            Sair e trocar de conta
+          </Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -1126,6 +1165,23 @@ const styles =
         "700",
       color:
         "#525a64",
+    },
+
+    accountButton: {
+      minHeight: 48,
+      marginTop: 18,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: "#dfe3e8",
+      borderRadius: 14,
+      backgroundColor: "#ffffff",
+    },
+
+    accountButtonText: {
+      fontSize: 14,
+      fontWeight: "800",
+      color: "#525a64",
     },
 
     createBackWrap: {
