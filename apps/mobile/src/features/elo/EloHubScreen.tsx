@@ -7,6 +7,7 @@ import {
 
 import { useOrganization } from "../../contexts/OrganizationContext";
 import { CareScreen } from "../care/CareScreen";
+import { ContributionSettingsScreen } from "../finance/ContributionSettingsScreen";
 import { ChurchManagementScreen } from "../management/ChurchManagementScreen";
 import { CommunicationScreen } from "./CommunicationScreen";
 import { DepartmentsScreen } from "./DepartmentsScreen";
@@ -32,6 +33,7 @@ export type EloModuleKey =
   | "scanner"
   | "finance"
   | "care"
+  | "contribution-settings"
   | "management";
 
 type EloHubProps = {
@@ -138,6 +140,10 @@ export function EloHubScreen({ route }: EloHubProps) {
 
   if (activeModule === "care") {
     return <CareScreen onBack={() => setActiveModule(null)} />;
+  }
+
+  if (activeModule === "contribution-settings") {
+    return <ContributionSettingsScreen onBack={() => setActiveModule(null)} />;
   }
 
   if (activeModule === "management") {
@@ -253,6 +259,16 @@ export function EloHubScreen({ route }: EloHubProps) {
               description="Entradas, saídas, contas, orçamento e fechamento de cultos."
               badge="Restrito"
               onPress={() => setActiveModule("finance")}
+            />
+          ) : null}
+
+          {permissions.finance || permissions.management ? (
+            <EloModuleCard
+              icon="QrCodeIcon"
+              title="Pix para membros"
+              description="Configure a chave e o código Pix informados no aplicativo."
+              badge="Configuração"
+              onPress={() => setActiveModule("contribution-settings")}
             />
           ) : null}
 
