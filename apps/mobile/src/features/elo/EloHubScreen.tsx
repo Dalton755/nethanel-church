@@ -88,6 +88,8 @@ export function EloHubScreen({ route }: EloHubProps) {
         canAtOrganization("kids.manage"),
 
       finance:
+        can("finance.view") ||
+        can("finance.manage") ||
         canAtOrganization("finance.view") ||
         canAtOrganization("finance.manage"),
 
