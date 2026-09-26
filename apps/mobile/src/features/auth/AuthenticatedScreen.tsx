@@ -118,6 +118,33 @@ export function AuthenticatedScreen() {
       await refreshContext();
     }
 
+  async function
+    handleReturnToChurch() {
+      await Promise.all([
+        AsyncStorage.removeItem(
+          PENDING_JOIN_CODE_KEY
+        ),
+
+        AsyncStorage.removeItem(
+          PENDING_ENTRY_INTENT_KEY
+        ),
+      ]);
+
+      setHasPendingEntryIntent(
+        false
+      );
+
+      if (
+        !activeOrganization &&
+        organizations.length === 1
+      ) {
+        await selectOrganization(
+          organizations[0].id
+        );
+      }
+    }
+
+
   if (
     loading ||
     checkingEntryIntent
@@ -221,6 +248,15 @@ export function AuthenticatedScreen() {
         }
         onChanged={
           handleEntryChanged
+        }
+        onSignOut={
+          handleSignOut
+        }
+        canReturnToChurch={
+          organizations.length > 0
+        }
+        onReturnToChurch={
+          handleReturnToChurch
         }
       />
     );
