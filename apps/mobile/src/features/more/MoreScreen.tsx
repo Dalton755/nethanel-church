@@ -16,6 +16,7 @@ import { EloLogo } from "../../branding/EloBrand";
 import { useOrganization } from "../../contexts/OrganizationContext";
 import { supabase } from "../../lib/supabase";
 import type { MainTabParamList } from "../../navigation/MainTabs";
+import { unregisterCurrentPushDevice } from "../notifications/PushNotificationRegistration";
 import { eloColors } from "../elo/EloUi";
 
 const P = Phosphor as any;
@@ -54,7 +55,9 @@ export function MoreScreen() {
     canAtOrganization("audit.view");
 
   const load = useCallback(async () => {
-    if (!activeOrganization) {
+    if (!activeOrganization || !canManage) {
+      setExtra(null);
+      setSubscription(null);
       setLoading(false);
       return;
     }
@@ -84,7 +87,7 @@ export function MoreScreen() {
     }
 
     setLoading(false);
-  }, [activeOrganization]);
+  }, [activeOrganization, canManage]);
 
   useFocusEffect(
     useCallback(() => {
@@ -93,6 +96,7 @@ export function MoreScreen() {
   );
 
   async function handleSignOut() {
+    await unregisterCurrentPushDevice();
     await supabase.auth.signOut();
   }
 
@@ -119,45 +123,49 @@ export function MoreScreen() {
           </View>
         ) : (
           <>
-            <Text style={styles.sectionTitle}>Igreja</Text>
+            {canManage ? (
+              <>
+                <Text style={styles.sectionTitle}>Administração da igreja</Text>
 
-            <View style={styles.infoCard}>
-              <View style={styles.infoRow}>
-                <View style={styles.infoIcon}>
-                  <P.KeyIcon size={21} color={eloColors.blue} weight="duotone" />
+                <View style={styles.infoCard}>
+                  <View style={styles.infoRow}>
+                    <View style={styles.infoIcon}>
+                      <P.KeyIcon size={21} color={eloColors.blue} weight="duotone" />
+                    </View>
+
+                    <View style={styles.infoCopy}>
+                      <Text style={styles.infoLabel}>Código da igreja</Text>
+                      <Text selectable style={styles.codeValue}>
+                        {extra?.join_code ?? "Não disponível"}
+                      </Text>
+                      <Text style={styles.infoHint}>
+                        Compartilhe apenas com quem deve entrar nesta igreja.
+                      </Text>
+                    </View>
+                  </View>
                 </View>
 
-                <View style={styles.infoCopy}>
-                  <Text style={styles.infoLabel}>Código da igreja</Text>
-                  <Text selectable style={styles.codeValue}>
-                    {extra?.join_code ?? "Não disponível"}
-                  </Text>
-                  <Text style={styles.infoHint}>
-                    Compartilhe com quem precisa entrar nesta igreja.
-                  </Text>
-                </View>
-              </View>
-            </View>
+                <View style={styles.infoCard}>
+                  <View style={styles.infoRow}>
+                    <View style={styles.infoIcon}>
+                      <P.CrownIcon size={21} color={eloColors.yellow} weight="duotone" />
+                    </View>
 
-            <View style={styles.infoCard}>
-              <View style={styles.infoRow}>
-                <View style={styles.infoIcon}>
-                  <P.CrownIcon size={21} color={eloColors.yellow} weight="duotone" />
+                    <View style={styles.infoCopy}>
+                      <Text style={styles.infoLabel}>Plano Elo</Text>
+                      <Text style={styles.planValue}>
+                        {subscription?.plan_code ?? "Elo"}
+                      </Text>
+                      <Text style={styles.infoHint}>
+                        {subscription
+                          ? `Status: ${subscription.status}`
+                          : "Sua igreja está usando o Elo."}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-
-                <View style={styles.infoCopy}>
-                  <Text style={styles.infoLabel}>Plano Elo</Text>
-                  <Text style={styles.planValue}>
-                    {subscription?.plan_code ?? "Elo"}
-                  </Text>
-                  <Text style={styles.infoHint}>
-                    {subscription
-                      ? `Status: ${subscription.status}`
-                      : "Sua igreja está usando o Elo."}
-                  </Text>
-                </View>
-              </View>
-            </View>
+              </>
+            ) : null}
 
             <Text style={styles.sectionTitle}>Acessos</Text>
 
