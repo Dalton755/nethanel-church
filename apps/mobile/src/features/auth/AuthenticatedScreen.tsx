@@ -18,7 +18,10 @@ import { supabase } from "../../lib/supabase";
 import { OrganizationSelectorScreen } from "../organization/OrganizationSelectorScreen";
 import { OrganizationEntryScreen } from "../organization/OrganizationEntryScreen";
 import { MainTabs } from "../../navigation/MainTabs";
-import { PushNotificationRegistration } from "../notifications/PushNotificationRegistration";
+import {
+  PushNotificationRegistration,
+  unregisterCurrentPushDevice,
+} from "../notifications/PushNotificationRegistration";
 import { KidsGuardianEmergencyOverlay } from "../elo/KidsGuardianEmergencyOverlay";
 
 const PENDING_JOIN_CODE_KEY =
@@ -102,6 +105,7 @@ export function AuthenticatedScreen() {
 
   async function
     handleSignOut() {
+      await unregisterCurrentPushDevice();
       await supabase.auth.signOut();
     }
 
