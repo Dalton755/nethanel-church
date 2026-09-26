@@ -469,6 +469,10 @@ export function PersonFormScreen({
                             ? "interactive"
                             : "on-drag"
                     }
+                    automaticallyAdjustKeyboardInsets={
+                        Platform.OS ===
+                        "ios"
+                    }
                     showsVerticalScrollIndicator={
                         false
                     }
