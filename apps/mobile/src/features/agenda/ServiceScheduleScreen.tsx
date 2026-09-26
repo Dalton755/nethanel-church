@@ -31,9 +31,19 @@ type Department = {
   member_count: number;
 };
 
+type DepartmentFunction = {
+  function_id: string;
+  function_name: string;
+  default_required_count: number;
+  sort_order: number;
+  active: boolean;
+  qualified_member_count: number;
+};
+
 type EventRule = {
   id: string;
   department_id: string;
+  department_function_id: string | null;
   role_label: string;
   required_count: number;
   rotation_mode: "balanced" | "fixed";
@@ -100,18 +110,24 @@ export function ServiceScheduleScreen({
     canAtOrganization("schedules.manage");
 
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [functions, setFunctions] = useState<DepartmentFunction[]>([]);
   const [rules, setRules] = useState<EventRule[]>([]);
   const [assignments, setAssignments] = useState<EventAssignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingFunctions, setLoadingFunctions] = useState(false);
+
   const [showForm, setShowForm] = useState(false);
   const [selectedDepartmentId, setSelectedDepartmentId] =
     useState<string | null>(null);
-  const [roleLabel, setRoleLabel] = useState("");
+  const [selectedFunctionId, setSelectedFunctionId] =
+    useState<string | null>(null);
   const [requiredCount, setRequiredCount] = useState("1");
   const [rotationMode, setRotationMode] =
     useState<"balanced" | "fixed">("balanced");
   const [minRestDays, setMinRestDays] = useState("0");
+
   const [saving, setSaving] = useState(false);
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [removingRuleId, setRemovingRuleId] =
     useState<string | null>(null);
 
@@ -120,6 +136,7 @@ export function ServiceScheduleScreen({
 
     for (const item of assignments) {
       if (!item.rule_id) continue;
+
       const current = map.get(item.rule_id) ?? [];
       current.push(item);
       map.set(item.rule_id, current);
@@ -131,6 +148,27 @@ export function ServiceScheduleScreen({
   const departmentById = useMemo(
     () => new Map(departments.map((item) => [item.id, item])),
     [departments]
+  );
+
+  const selectedDepartment = useMemo(
+    () =>
+      departments.find(
+        (item) => item.id === selectedDepartmentId
+      ) ?? null,
+    [departments, selectedDepartmentId]
+  );
+
+  const selectedFunction = useMemo(
+    () =>
+      functions.find(
+        (item) => item.function_id === selectedFunctionId
+      ) ?? null,
+    [functions, selectedFunctionId]
+  );
+
+  const activeFunctions = useMemo(
+    () => functions.filter((item) => item.active),
+    [functions]
   );
 
   const load = useCallback(async () => {
@@ -154,7 +192,7 @@ export function ServiceScheduleScreen({
         supabase
           .from("schedule_rules")
           .select(
-            "id,department_id,role_label,required_count,rotation_mode,min_rest_days"
+            "id,department_id,department_function_id,role_label,required_count,rotation_mode,min_rest_days"
           )
           .eq("organization_id", activeOrganization.id)
           .eq("event_id", service.id)
@@ -194,23 +232,81 @@ export function ServiceScheduleScreen({
     }
   }, [activeOrganization, activeUnit, service.id]);
 
+  const loadFunctions = useCallback(async () => {
+    if (!activeOrganization || !selectedDepartmentId) {
+      setFunctions([]);
+      setSelectedFunctionId(null);
+      return;
+    }
+
+    setLoadingFunctions(true);
+
+    try {
+      const { data, error } = await supabase.rpc(
+        "list_department_functions",
+        {
+          p_organization_id: activeOrganization.id,
+          p_department_id: selectedDepartmentId,
+        }
+      );
+
+      if (error) throw error;
+
+      const next = ((data ?? []) as any[]).map((item) => ({
+        ...item,
+        default_required_count: Number(
+          item.default_required_count ?? 1
+        ),
+        sort_order: Number(item.sort_order ?? 0),
+        qualified_member_count: Number(
+          item.qualified_member_count ?? 0
+        ),
+      })) as DepartmentFunction[];
+
+      setFunctions(next);
+
+      const first = next.find((item) => item.active) ?? null;
+      setSelectedFunctionId(first?.function_id ?? null);
+      setRequiredCount(
+        String(first?.default_required_count ?? 1)
+      );
+    } catch (error) {
+      setFunctions([]);
+      setSelectedFunctionId(null);
+
+      Alert.alert(
+        "Funções do departamento",
+        error instanceof Error
+          ? error.message
+          : "Não foi possível carregar."
+      );
+    } finally {
+      setLoadingFunctions(false);
+    }
+  }, [activeOrganization, selectedDepartmentId]);
+
   useEffect(() => {
     void load();
   }, [load]);
 
-  async function saveRule() {
-    if (!activeOrganization || !selectedDepartmentId) {
-      Alert.alert(
-        "Departamento necessário",
-        "Escolha qual departamento vai servir neste culto."
-      );
-      return;
-    }
+  useEffect(() => {
+    void loadFunctions();
+  }, [loadFunctions]);
 
-    if (roleLabel.trim().length < 2) {
+  function chooseFunction(item: DepartmentFunction) {
+    setSelectedFunctionId(item.function_id);
+    setRequiredCount(String(item.default_required_count));
+  }
+
+  async function saveFunctionRule() {
+    if (
+      !activeOrganization ||
+      !selectedDepartmentId ||
+      !selectedFunctionId
+    ) {
       Alert.alert(
         "Função necessária",
-        "Informe a função da escala, por exemplo: Portaria."
+        "Escolha o departamento e a função desta escala."
       );
       return;
     }
@@ -224,19 +320,16 @@ export function ServiceScheduleScreen({
       Number.parseInt(minRestDays.replace(/\D/g, ""), 10) || 0
     );
 
-    const departmentId = selectedDepartmentId;
-    const normalizedRole = roleLabel.trim();
-
     setSaving(true);
 
     try {
       const { error } = await supabase.rpc(
-        "save_event_schedule_rule",
+        "save_event_schedule_function_rule",
         {
           p_organization_id: activeOrganization.id,
-          p_department_id: departmentId,
+          p_department_id: selectedDepartmentId,
           p_event_id: service.id,
-          p_role_label: normalizedRole,
+          p_department_function_id: selectedFunctionId,
           p_required_count: count,
           p_rotation_mode: rotationMode,
           p_min_rest_days: rest,
@@ -245,35 +338,12 @@ export function ServiceScheduleScreen({
 
       if (error) throw error;
 
-      setSelectedDepartmentId(null);
-      setRoleLabel("");
-      setRequiredCount("1");
-      setRotationMode("balanced");
-      setMinRestDays("0");
-      setShowForm(false);
-
       await load();
 
-      const { data } = await supabase.rpc("list_event_schedule", {
-        p_organization_id: activeOrganization.id,
-        p_event_id: service.id,
-      });
-
-      const current = (data ?? []) as EventAssignment[];
-
-      if (
-        current.filter(
-          (item) =>
-            item.department_id === departmentId &&
-            item.role_label.toLowerCase() ===
-              normalizedRole.toLowerCase()
-        ).length === 0
-      ) {
-        Alert.alert(
-          "Escala criada sem voluntário",
-          "A regra ficou salva para esta data, mas o Elo não encontrou uma pessoa disponível no departamento."
-        );
-      }
+      Alert.alert(
+        "Função adicionada",
+        `${selectedFunction?.function_name ?? "A função"} foi adicionada somente à escala desta data.`
+      );
     } catch (error) {
       Alert.alert(
         "Escala não criada",
@@ -284,10 +354,62 @@ export function ServiceScheduleScreen({
     }
   }
 
+  async function applyTemplate() {
+    if (!activeOrganization || !selectedDepartmentId) {
+      Alert.alert(
+        "Departamento necessário",
+        "Escolha o departamento primeiro."
+      );
+      return;
+    }
+
+    if (activeFunctions.length === 0) {
+      Alert.alert(
+        "Sem funções",
+        "Cadastre as funções deste departamento antes de gerar a escala completa."
+      );
+      return;
+    }
+
+    setApplyingTemplate(true);
+
+    try {
+      const { error } = await supabase.rpc(
+        "apply_department_schedule_template",
+        {
+          p_organization_id: activeOrganization.id,
+          p_department_id: selectedDepartmentId,
+          p_event_id: service.id,
+        }
+      );
+
+      if (error) throw error;
+
+      await load();
+
+      const totalPeople = activeFunctions.reduce(
+        (sum, item) => sum + item.default_required_count,
+        0
+      );
+
+      Alert.alert(
+        "Escala do departamento criada",
+        `${activeFunctions.length} função(ões) aplicadas nesta data, com até ${totalPeople} pessoa(s) previstas.`
+      );
+    } catch (error) {
+      Alert.alert(
+        "Escala não criada",
+        error instanceof Error ? error.message : "Tente novamente."
+      );
+    } finally {
+      setApplyingTemplate(false);
+    }
+  }
+
   function confirmRemove(rule: EventRule) {
     Alert.alert(
-      "Remover esta escala?",
-      "Somente esta data será afetada. Os outros cultos da rotina não mudam.",
+      "Remover esta função da escala?",
+      "Somente esta data será afetada. As funções cadastradas no departamento continuam disponíveis para outros cultos.",
       [
         { text: "Voltar", style: "cancel" },
         {
@@ -338,12 +460,14 @@ export function ServiceScheduleScreen({
           color={eloColors.blue}
           weight="duotone"
         />
+
         <View style={styles.eventCopy}>
           <Text style={styles.eventDate}>
             {formatDateTime(service.starts_at)}
           </Text>
           <Text style={styles.eventHint}>
-            Esta escala vale somente para esta data.
+            Cada departamento pode ter várias funções. Esta escala
+            vale somente para esta data.
           </Text>
         </View>
       </View>
@@ -351,7 +475,7 @@ export function ServiceScheduleScreen({
       {canManage ? (
         <View style={styles.primaryAction}>
           <EloActionButton
-            label={showForm ? "Fechar" : "Criar escala desta data"}
+            label={showForm ? "Fechar" : "Montar escala desta data"}
             variant={showForm ? "secondary" : "primary"}
             icon={showForm ? "XIcon" : "PlusIcon"}
             onPress={() => setShowForm((value) => !value)}
@@ -362,10 +486,8 @@ export function ServiceScheduleScreen({
       {showForm ? (
         <EloCard>
           <Text style={eloSharedStyles.cardTitle}>
-            Quem serve neste culto?
+            Escolha o departamento
           </Text>
-
-          <Text style={styles.label}>Departamento</Text>
 
           <View style={styles.choiceList}>
             {departments.map((department) => (
@@ -373,10 +495,7 @@ export function ServiceScheduleScreen({
                 key={department.id}
                 onPress={() => {
                   setSelectedDepartmentId(department.id);
-
-                  if (!roleLabel.trim()) {
-                    setRoleLabel(department.name);
-                  }
+                  setSelectedFunctionId(null);
                 }}
                 style={[
                   styles.choice,
@@ -405,85 +524,174 @@ export function ServiceScheduleScreen({
             ))}
           </View>
 
-          <Text style={styles.label}>Função nesta data</Text>
-          <TextInput
-            value={roleLabel}
-            onChangeText={setRoleLabel}
-            placeholder="Ex.: Portaria"
-            placeholderTextColor="#A1A9B0"
-            style={styles.input}
-          />
-
-          <View style={styles.twoColumns}>
-            <View style={styles.grow}>
-              <Text style={styles.label}>Quantidade</Text>
-              <TextInput
-                value={requiredCount}
-                onChangeText={(value) =>
-                  setRequiredCount(value.replace(/\D/g, ""))
-                }
-                keyboardType="number-pad"
-                style={styles.input}
-              />
-            </View>
-
-            <View style={styles.grow}>
-              <Text style={styles.label}>Descanso mínimo</Text>
-              <TextInput
-                value={minRestDays}
-                onChangeText={(value) =>
-                  setMinRestDays(value.replace(/\D/g, ""))
-                }
-                keyboardType="number-pad"
-                style={styles.input}
-              />
-            </View>
-          </View>
-
-          <Text style={styles.label}>Como escolher a equipe?</Text>
-          <View style={styles.twoColumns}>
-            <Pressable
-              onPress={() => setRotationMode("balanced")}
-              style={[
-                styles.modeChoice,
-                rotationMode === "balanced" &&
-                  styles.choiceSelected,
-              ]}
-            >
-              <Text style={styles.modeTitle}>Equilibrado</Text>
-              <Text style={styles.modeText}>
-                Prioriza quem serviu menos recentemente.
+          {selectedDepartment ? (
+            <>
+              <Text style={styles.label}>
+                Funções de {selectedDepartment.name}
               </Text>
-            </Pressable>
 
-            <Pressable
-              onPress={() => setRotationMode("fixed")}
-              style={[
-                styles.modeChoice,
-                rotationMode === "fixed" &&
-                  styles.choiceSelected,
-              ]}
-            >
-              <Text style={styles.modeTitle}>Ordem da equipe</Text>
-              <Text style={styles.modeText}>
-                Segue a ordem cadastrada no departamento.
+              {loadingFunctions ? (
+                <ActivityIndicator />
+              ) : activeFunctions.length === 0 ? (
+                <View style={styles.noFunctions}>
+                  <P.InfoIcon
+                    size={18}
+                    color={eloColors.muted}
+                  />
+                  <Text style={styles.noFunctionsText}>
+                    Este departamento ainda não tem funções
+                    cadastradas. Cadastre em Meu Elo → Equipes para
+                    escala.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.functionList}>
+                    {activeFunctions.map((item) => {
+                      const selected =
+                        selectedFunctionId === item.function_id;
+
+                      return (
+                        <Pressable
+                          key={item.function_id}
+                          onPress={() => chooseFunction(item)}
+                          style={[
+                            styles.functionChoice,
+                            selected &&
+                              styles.functionChoiceSelected,
+                          ]}
+                        >
+                          <View style={styles.grow}>
+                            <Text style={styles.functionName}>
+                              {item.function_name}
+                            </Text>
+                            <Text style={styles.functionMeta}>
+                              Padrão: {item.default_required_count} •{" "}
+                              {item.qualified_member_count} pessoa
+                              {item.qualified_member_count === 1
+                                ? ""
+                                : "s"}{" "}
+                              habilitada
+                              {item.qualified_member_count === 1
+                                ? ""
+                                : "s"}
+                            </Text>
+                          </View>
+
+                          {selected ? (
+                            <P.CheckCircleIcon
+                              size={19}
+                              color={eloColors.blue}
+                              weight="fill"
+                            />
+                          ) : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  <View style={styles.templateAction}>
+                    <EloActionButton
+                      label="Gerar escala completa do departamento"
+                      icon="SparkleIcon"
+                      loading={applyingTemplate}
+                      onPress={() => void applyTemplate()}
+                    />
+                    <Text style={styles.templateHint}>
+                      Usa todas as funções acima e suas quantidades
+                      padrão somente neste culto.
+                    </Text>
+                  </View>
+                </>
+              )}
+            </>
+          ) : null}
+
+          {selectedFunction ? (
+            <>
+              <Text style={styles.label}>
+                Ajustar {selectedFunction.function_name}
               </Text>
-            </Pressable>
-          </View>
 
-          <View style={styles.formAction}>
-            <EloActionButton
-              label="Gerar escala desta data"
-              icon="SparkleIcon"
-              loading={saving}
-              disabled={departments.length === 0}
-              onPress={() => void saveRule()}
-            />
-          </View>
+              <View style={styles.twoColumns}>
+                <View style={styles.grow}>
+                  <Text style={styles.fieldLabel}>
+                    Pessoas nesta função
+                  </Text>
+                  <TextInput
+                    value={requiredCount}
+                    onChangeText={(value) =>
+                      setRequiredCount(value.replace(/\D/g, ""))
+                    }
+                    keyboardType="number-pad"
+                    style={styles.input}
+                  />
+                </View>
+
+                <View style={styles.grow}>
+                  <Text style={styles.fieldLabel}>
+                    Descanso mínimo
+                  </Text>
+                  <TextInput
+                    value={minRestDays}
+                    onChangeText={(value) =>
+                      setMinRestDays(value.replace(/\D/g, ""))
+                    }
+                    keyboardType="number-pad"
+                    style={styles.input}
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.label}>Rodízio</Text>
+              <View style={styles.twoColumns}>
+                <Pressable
+                  onPress={() => setRotationMode("balanced")}
+                  style={[
+                    styles.modeChoice,
+                    rotationMode === "balanced" &&
+                      styles.choiceSelected,
+                  ]}
+                >
+                  <Text style={styles.modeTitle}>Equilibrado</Text>
+                  <Text style={styles.modeText}>
+                    Prioriza quem serviu menos.
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setRotationMode("fixed")}
+                  style={[
+                    styles.modeChoice,
+                    rotationMode === "fixed" &&
+                      styles.choiceSelected,
+                  ]}
+                >
+                  <Text style={styles.modeTitle}>
+                    Ordem da equipe
+                  </Text>
+                  <Text style={styles.modeText}>
+                    Segue a ordem cadastrada.
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.formAction}>
+                <EloActionButton
+                  label={`Adicionar ${selectedFunction.function_name}`}
+                  icon="PlusIcon"
+                  loading={saving}
+                  onPress={() => void saveFunctionRule()}
+                />
+              </View>
+            </>
+          ) : null}
         </EloCard>
       ) : null}
 
-      <Text style={eloSharedStyles.sectionTitle}>Equipe desta data</Text>
+      <Text style={eloSharedStyles.sectionTitle}>
+        Equipe desta data
+      </Text>
 
       {loading ? (
         <View style={styles.loading}>
@@ -492,14 +700,15 @@ export function ServiceScheduleScreen({
       ) : rules.length === 0 ? (
         <EloState
           title="Este culto ainda não tem escala"
-          description="A escala é criada por data. Criar aqui não altera os próximos cultos recorrentes."
+          description="Abra “Montar escala desta data”, escolha um departamento e aplique suas funções."
           icon="CalendarCheckIcon"
         />
       ) : (
         <View style={styles.ruleList}>
           {rules.map((rule) => {
             const people = assignmentsByRule.get(rule.id) ?? [];
-            const department = departmentById.get(rule.department_id);
+            const department =
+              departmentById.get(rule.department_id);
 
             return (
               <EloCard key={rule.id}>
@@ -514,10 +723,11 @@ export function ServiceScheduleScreen({
 
                   <View style={styles.grow}>
                     <Text style={eloSharedStyles.cardTitle}>
-                      {department?.name ?? "Departamento"}
+                      {rule.role_label}
                     </Text>
                     <Text style={styles.ruleMeta}>
-                      {rule.role_label} • {rule.required_count} pessoa
+                      {department?.name ?? "Departamento"} •{" "}
+                      {rule.required_count} pessoa
                       {rule.required_count === 1 ? "" : "s"}
                     </Text>
                   </View>
@@ -532,7 +742,8 @@ export function ServiceScheduleScreen({
                         weight="duotone"
                       />
                       <Text style={styles.vacancyText}>
-                        Nenhuma pessoa disponível para esta função.
+                        Nenhuma pessoa habilitada e disponível para
+                        esta função.
                       </Text>
                     </View>
                   ) : (
@@ -565,6 +776,16 @@ export function ServiceScheduleScreen({
                   )}
                 </View>
 
+                {people.length < rule.required_count ? (
+                  <Text style={styles.missingCount}>
+                    Faltam {rule.required_count - people.length} pessoa
+                    {rule.required_count - people.length === 1
+                      ? ""
+                      : "s"}{" "}
+                    nesta função.
+                  </Text>
+                ) : null}
+
                 {canManage ? (
                   <Pressable
                     disabled={removingRuleId === rule.id}
@@ -574,7 +795,7 @@ export function ServiceScheduleScreen({
                     <Text style={styles.removeRuleText}>
                       {removingRuleId === rule.id
                         ? "Removendo..."
-                        : "Remover escala desta data"}
+                        : "Remover esta função da escala"}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -608,6 +829,7 @@ const styles = StyleSheet.create({
   eventHint: {
     marginTop: 3,
     fontSize: 11,
+    lineHeight: 16,
     color: eloColors.muted,
   },
   primaryAction: {
@@ -615,12 +837,19 @@ const styles = StyleSheet.create({
   },
   label: {
     marginTop: 15,
-    marginBottom: 6,
+    marginBottom: 7,
     fontSize: 11,
     fontWeight: "800",
     color: eloColors.muted,
   },
+  fieldLabel: {
+    marginBottom: 6,
+    fontSize: 10,
+    fontWeight: "800",
+    color: eloColors.muted,
+  },
   choiceList: {
+    marginTop: 12,
     gap: 7,
   },
   choice: {
@@ -648,6 +877,60 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: eloColors.muted,
   },
+  functionList: {
+    gap: 7,
+  },
+  functionChoice: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: eloColors.line,
+    borderRadius: 13,
+    backgroundColor: "#FFFFFF",
+  },
+  functionChoiceSelected: {
+    borderColor: "#8CC5E8",
+    backgroundColor: "#F2F9FD",
+  },
+  functionName: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: eloColors.ink,
+  },
+  functionMeta: {
+    marginTop: 3,
+    fontSize: 10,
+    lineHeight: 15,
+    color: eloColors.muted,
+  },
+  noFunctions: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    padding: 12,
+    borderRadius: 13,
+    backgroundColor: "#F6F7F8",
+  },
+  noFunctionsText: {
+    flex: 1,
+    fontSize: 10,
+    lineHeight: 16,
+    color: eloColors.muted,
+  },
+  templateAction: {
+    marginTop: 12,
+  },
+  templateHint: {
+    marginTop: 6,
+    paddingHorizontal: 3,
+    fontSize: 10,
+    lineHeight: 15,
+    color: eloColors.muted,
+  },
   input: {
     minHeight: 48,
     paddingHorizontal: 13,
@@ -667,7 +950,7 @@ const styles = StyleSheet.create({
   },
   modeChoice: {
     flex: 1,
-    minHeight: 84,
+    minHeight: 78,
     padding: 11,
     borderWidth: 1,
     borderColor: eloColors.line,
@@ -759,6 +1042,12 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     color: eloColors.muted,
+  },
+  missingCount: {
+    marginTop: 9,
+    fontSize: 10,
+    fontWeight: "800",
+    color: eloColors.yellow,
   },
   removeRule: {
     minHeight: 42,
