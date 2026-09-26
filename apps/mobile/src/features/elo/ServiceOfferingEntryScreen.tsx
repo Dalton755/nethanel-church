@@ -143,7 +143,7 @@ export function ServiceOfferingEntryScreen({
   async function save(submit: boolean) {
     if (!activeOrganization || locked) return;
 
-    const values = [cash, pix, card, other].map(parseMoney);
+    const values = [cash, pix, card, other].map(parseMoneyBr);
 
     if (values.some((value) => !Number.isFinite(value) || value < 0)) {
       Alert.alert(
