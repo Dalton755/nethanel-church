@@ -60,6 +60,7 @@ type Routine = {
   duration_minutes: number;
   start_date: string;
   location_name: string | null;
+  cover_image_path: string | null;
   active: boolean;
 };
 
@@ -291,7 +292,7 @@ export function AgendaScreen() {
         supabase
           .from("service_routines")
           .select(
-            "id,name,weekday,start_time,duration_minutes,start_date,location_name,active"
+            "id,name,weekday,start_time,duration_minutes,start_date,location_name,cover_image_path,active"
           )
           .eq("organization_id", activeOrganization.id)
           .eq("unit_id", activeUnit.id)
@@ -352,19 +353,34 @@ export function AgendaScreen() {
         occurrences.map((item) => [item.event_id, item])
       );
 
+      const loadedRoutines =
+        (routinesResponse.data ?? []) as Routine[];
+
+      const routineById = new Map(
+        loadedRoutines.map((routine) => [routine.id, routine])
+      );
+
       const withImages = await Promise.all(
         rawEvents.map(async (event) => {
+          const occurrence = occurrenceByEvent.get(event.id);
+          const routine = occurrence
+            ? routineById.get(occurrence.routine_id)
+            : null;
+
+          const effectiveCoverPath =
+            event.cover_image_path ??
+            routine?.cover_image_path ??
+            null;
+
           let signedUrl: string | null = null;
 
-          if (event.cover_image_path) {
+          if (effectiveCoverPath) {
             const { data } = await supabase.storage
               .from("event-covers")
-              .createSignedUrl(event.cover_image_path, 60 * 60);
+              .createSignedUrl(effectiveCoverPath, 60 * 60);
 
             signedUrl = data?.signedUrl ?? null;
           }
-
-          const occurrence = occurrenceByEvent.get(event.id);
 
           return {
             ...event,
@@ -378,7 +394,7 @@ export function AgendaScreen() {
       );
 
       setEvents(withImages);
-      setRoutines((routinesResponse.data ?? []) as Routine[]);
+      setRoutines(loadedRoutines);
       setSeries(
         seriesResponse.error
           ? []
