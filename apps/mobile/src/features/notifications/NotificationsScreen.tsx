@@ -23,6 +23,9 @@ import {
   useFocusEffect,
   useNavigation,
 } from "@react-navigation/native";
+import type {
+  BottomTabNavigationProp,
+} from "@react-navigation/bottom-tabs";
 
 import {
   SafeAreaView,
@@ -40,6 +43,9 @@ import {
   requestAndRegisterPush,
   type PushRegistrationStatus,
 } from "./PushNotificationRegistration";
+import type {
+  MainTabParamList,
+} from "../../navigation/MainTabs";
 
 
 type NotificationCategory =
@@ -165,7 +171,9 @@ function pushStatusMessage(
 
 export function NotificationsScreen() {
   const navigation =
-    useNavigation();
+    useNavigation<
+      BottomTabNavigationProp<MainTabParamList>
+    >();
 
   const {
     activeOrganization,
@@ -450,6 +458,28 @@ export function NotificationsScreen() {
       void loadNotifications(
         "refresh"
       );
+    }
+  }
+
+
+  async function openNotification(
+    notification: NotificationItem
+  ) {
+    await handleRead(notification);
+
+    const targetModule =
+      typeof notification.data?.target_module === "string"
+        ? notification.data.target_module
+        : null;
+
+    if (
+      notification.category === "schedule" ||
+      targetModule === "schedules"
+    ) {
+      navigation.navigate("Elo", {
+        module: "schedules",
+        nonce: Date.now(),
+      });
     }
   }
 
@@ -832,7 +862,7 @@ export function NotificationsScreen() {
                       notification.id
                     }
                     onPress={() => {
-                      void handleRead(
+                      void openNotification(
                         notification
                       );
                     }}
