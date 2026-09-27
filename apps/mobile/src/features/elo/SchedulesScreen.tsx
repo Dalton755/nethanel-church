@@ -576,16 +576,20 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
               </>
             ) : null}
 
-            <Text style={eloSharedStyles.sectionTitle}>
-              Minhas escalas
-            </Text>
+            {items.length > 0 ? (
+              <Text style={eloSharedStyles.sectionTitle}>
+                Minhas escalas
+              </Text>
+            ) : null}
 
             {items.length === 0 ? (
-              <EloState
-                title="Nenhuma escala por enquanto"
-                description="Quando você for escalado para uma data específica, ela aparecerá aqui."
-                icon="ClipboardTextIcon"
-              />
+              preacherInvitations.length === 0 ? (
+                <EloState
+                  title="Nenhuma escala por enquanto"
+                  description="Quando você for escalado ou convidado para pregar, o compromisso aparecerá aqui."
+                  icon="ClipboardTextIcon"
+                />
+              ) : null
             ) : (
               <View style={styles.list}>
                 {items.map((item) => {
