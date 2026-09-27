@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -66,6 +67,9 @@ export function HomeScreen() {
 
   const firstName =
     profile?.display_name?.trim().split(/\s+/)[0] || "";
+
+  const brandColor =
+    activeOrganization?.primary_color ?? eloColors.blue;
 
   const load = useCallback(async () => {
     if (!activeOrganization || !activeUnit) {
@@ -172,7 +176,15 @@ export function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.topBar}>
-          <EloLogo compact />
+          <View style={styles.brandRow}>
+            <EloLogo compact />
+            {activeOrganization?.logo_url ? (
+              <Image
+                source={{ uri: activeOrganization.logo_url }}
+                style={styles.churchLogo}
+              />
+            ) : null}
+          </View>
 
           <Pressable
             accessibilityLabel="Abrir notificações"
@@ -192,7 +204,7 @@ export function HomeScreen() {
         </View>
 
         <View style={styles.context}>
-          <View style={styles.contextDot} />
+          <View style={[styles.contextDot, { backgroundColor: brandColor }]} />
           <Text style={styles.contextText}>
             {activeOrganization?.name}
             {activeUnit?.name && activeUnit.name !== activeOrganization?.name
@@ -385,6 +397,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  churchLogo: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    resizeMode: "cover",
   },
   notificationButton: {
     width: 44,
