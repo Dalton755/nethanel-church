@@ -56,6 +56,9 @@ export function EloHubScreen({ route }: EloHubProps) {
   const [activeModule, setActiveModule] =
     useState<EloModuleKey | null>(null);
 
+  const brandColor =
+    activeOrganization?.primary_color ?? eloColors.green;
+
   useEffect(() => {
     if (route?.params?.module) {
       setActiveModule(route.params.module);
@@ -157,7 +160,7 @@ export function EloHubScreen({ route }: EloHubProps) {
       subtitle="As ferramentas que fazem sentido para sua função aparecem aqui."
     >
       <View style={styles.contextCard}>
-        <View style={styles.contextDot} />
+        <View style={[styles.contextDot, { backgroundColor: brandColor }]} />
         <View style={styles.contextCopy}>
           <Text style={styles.contextName}>
             {activeOrganization?.name ?? "Sua igreja"}

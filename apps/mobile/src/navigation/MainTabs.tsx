@@ -61,6 +61,9 @@ export function MainTabs() {
   const insets = useSafeAreaInsets();
   const { activeOrganization } = useOrganization();
 
+  const brandColor =
+    activeOrganization?.primary_color ?? "#2387C9";
+
   const roleKeys =
     activeOrganization?.roles.map((role) =>
       role.role_key.toLowerCase()
@@ -91,7 +94,7 @@ export function MainTabs() {
         screenOptions={({ route }) => ({
           headerShown: false,
           tabBarHideOnKeyboard: true,
-          tabBarActiveTintColor: "#2387C9",
+          tabBarActiveTintColor: brandColor,
           tabBarInactiveTintColor: "#7E8994",
           tabBarIcon: ({ focused, color }) => {
             const pair =

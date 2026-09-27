@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { AccessRolesScreen } from "./AccessRolesScreen";
 import { PeopleAccessScreen } from "./PeopleAccessScreen";
+import { ChurchPersonalizationScreen } from "./ChurchPersonalizationScreen";
 import {
   EloModuleCard,
   EloScreen,
@@ -14,7 +15,7 @@ type Props = {
 
 export function ChurchManagementScreen({ onBack }: Props) {
   const [section, setSection] =
-    useState<"home" | "roles" | "people">("home");
+    useState<"home" | "roles" | "people" | "branding">("home");
 
   if (section === "roles") {
     return <AccessRolesScreen onBack={() => setSection("home")} />;
@@ -22,6 +23,14 @@ export function ChurchManagementScreen({ onBack }: Props) {
 
   if (section === "people") {
     return <PeopleAccessScreen onBack={() => setSection("home")} />;
+  }
+
+  if (section === "branding") {
+    return (
+      <ChurchPersonalizationScreen
+        onBack={() => setSection("home")}
+      />
+    );
   }
 
   return (
@@ -37,6 +46,14 @@ export function ChurchManagementScreen({ onBack }: Props) {
         description="Conceda, revise e remova acessos das pessoas cadastradas."
         badge="Real"
         onPress={() => setSection("people")}
+      />
+
+      <EloModuleCard
+        icon="PaletteIcon"
+        title="Personalização da igreja"
+        description="Nome, logo e cor predominante da sua igreja no Elo."
+        badge="ADM"
+        onPress={() => setSection("branding")}
       />
 
       <EloModuleCard

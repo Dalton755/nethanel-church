@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -15,6 +16,8 @@ import {
 import QRCode from "react-native-qrcode-svg";
 import * as Phosphor from "phosphor-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { useOrganization } from "../../contexts/OrganizationContext";
 
 const P = Phosphor as any;
 
@@ -33,6 +36,20 @@ export const eloColors = {
   dangerSoft: "#FFF0F0",
 };
 
+function brandSoft(color: string, alpha = 0.1) {
+  const hex = color.replace("#", "");
+
+  if (!/^[0-9A-Fa-f]{6}$/.test(hex)) {
+    return eloColors.surfaceSoft;
+  }
+
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 export function EloScreen({
   title,
   eyebrow,
@@ -48,6 +65,11 @@ export function EloScreen({
   right?: ReactNode;
   children: ReactNode;
 }) {
+  const { activeOrganization } = useOrganization();
+  const brandColor =
+    activeOrganization?.primary_color ?? eloColors.blue;
+  const logoUrl = activeOrganization?.logo_url ?? null;
+
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -67,8 +89,27 @@ export function EloScreen({
               <P.ArrowLeftIcon size={20} color={eloColors.ink} weight="bold" />
             </Pressable>
           ) : (
-            <View style={styles.brandMark}>
-              <Text style={styles.brandMarkText}>E</Text>
+            <View
+              style={[
+                styles.brandMark,
+                { backgroundColor: brandSoft(brandColor, 0.1) },
+              ]}
+            >
+              {logoUrl ? (
+                <Image
+                  source={{ uri: logoUrl }}
+                  style={styles.brandMarkImage}
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.brandMarkText,
+                    { color: brandColor },
+                  ]}
+                >
+                  E
+                </Text>
+              )}
             </View>
           )}
 
@@ -119,6 +160,9 @@ export function EloModuleCard({
   onPress: () => void;
 }) {
   const Icon = P[icon] ?? P.SquaresFourIcon;
+  const { activeOrganization } = useOrganization();
+  const brandColor =
+    activeOrganization?.primary_color ?? eloColors.blue;
 
   return (
     <Pressable
@@ -128,14 +172,31 @@ export function EloModuleCard({
         pressed && styles.cardPressed,
       ]}
     >
-      <View style={styles.moduleIcon}>
-        <Icon size={23} color={eloColors.blue} weight="duotone" />
+      <View
+        style={[
+          styles.moduleIcon,
+          { backgroundColor: brandSoft(brandColor, 0.1) },
+        ]}
+      >
+        <Icon size={23} color={brandColor} weight="duotone" />
       </View>
 
       <View style={styles.moduleCopy}>
         <View style={styles.moduleTitleRow}>
           <Text style={styles.moduleTitle}>{title}</Text>
-          {badge ? <Text style={styles.badge}>{badge}</Text> : null}
+          {badge ? (
+            <Text
+              style={[
+                styles.badge,
+                {
+                  color: brandColor,
+                  backgroundColor: brandSoft(brandColor, 0.1),
+                },
+              ]}
+            >
+              {badge}
+            </Text>
+          ) : null}
         </View>
 
         <Text style={styles.moduleDescription}>{description}</Text>
@@ -162,6 +223,9 @@ export function EloActionButton({
   icon?: string;
 }) {
   const Icon = icon ? P[icon] : null;
+  const { activeOrganization } = useOrganization();
+  const brandColor =
+    activeOrganization?.primary_color ?? eloColors.blue;
 
   return (
     <Pressable
@@ -169,6 +233,7 @@ export function EloActionButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.actionButton,
+        variant === "primary" && { backgroundColor: brandColor },
         variant === "secondary" && styles.actionButtonSecondary,
         variant === "danger" && styles.actionButtonDanger,
         (disabled || loading) && styles.disabled,
@@ -237,13 +302,17 @@ export function EloQrModal({
   expiresAt?: string | null;
   onClose: () => void;
 }) {
+  const { activeOrganization } = useOrganization();
+  const brandColor =
+    activeOrganization?.primary_color ?? eloColors.blue;
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
         <View style={styles.qrSheet}>
           <View style={styles.qrHeader}>
             <View style={styles.qrIcon}>
-              <P.QrCodeIcon size={22} color={eloColors.blue} weight="duotone" />
+              <P.QrCodeIcon size={22} color={brandColor} weight="duotone" />
             </View>
             <Pressable onPress={onClose} style={styles.iconButton}>
               <P.XIcon size={19} color={eloColors.ink} weight="bold" />
@@ -343,6 +412,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "900",
     color: eloColors.blue,
+  },
+  brandMarkImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
   },
   eyebrow: {
     marginBottom: 2,
