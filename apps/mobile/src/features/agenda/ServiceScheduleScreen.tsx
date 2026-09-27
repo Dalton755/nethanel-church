@@ -321,8 +321,6 @@ export function ServiceScheduleScreen({
 
       if (nextInvitation?.theme != null) {
         setPreacherTheme(nextInvitation.theme);
-      } else if (!showPreacherForm) {
-        setPreacherTheme(service.theme ?? "");
       }
     } catch (error) {
       Alert.alert(
@@ -340,7 +338,6 @@ export function ServiceScheduleScreen({
     service.id,
     service.theme,
     canManage,
-    showPreacherForm,
   ]);
 
   const loadFunctions = useCallback(async () => {
