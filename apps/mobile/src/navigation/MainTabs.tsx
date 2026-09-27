@@ -1,4 +1,9 @@
-import { NavigationContainer } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  createNavigationContainerRef,
+} from "@react-navigation/native";
+import { useEffect } from "react";
+import * as Notifications from "expo-notifications";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import * as Phosphor from "phosphor-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -38,6 +43,8 @@ export type MainTabParamList = {
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
+const navigationRef =
+  createNavigationContainerRef<MainTabParamList>();
 
 const iconForRoute: Record<string, [string, string]> = {
   Inicio: ["HouseIcon", "HouseIcon"],
@@ -88,8 +95,34 @@ export function MainTabs() {
   const UserEloScreen =
     memberExperience ? MemberHubScreen : EloHubScreen;
 
+  useEffect(() => {
+    const subscription =
+      Notifications.addNotificationResponseReceivedListener(
+        (response) => {
+          const data =
+            response.notification.request.content.data as
+              | Record<string, unknown>
+              | undefined;
+
+          if (
+            data?.target_module === "schedules" &&
+            navigationRef.isReady()
+          ) {
+            navigationRef.navigate("Elo", {
+              module: "schedules",
+              nonce: Date.now(),
+            });
+          }
+        }
+      );
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Tab.Navigator
         screenOptions={({ route }) => ({
           headerShown: false,
