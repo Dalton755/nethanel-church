@@ -257,7 +257,11 @@ export function NewServiceScreen({
   }, [preacherCandidates, preacherSearch]);
 
   async function loadPreacherContext() {
-    if (!service || !activeOrganization || !canInvitePreacher) {
+    if (
+      !activeOrganization ||
+      !activeUnit ||
+      !canInvitePreacher
+    ) {
       setPreacherCandidates([]);
       setPreacherInvitation(null);
       return;
@@ -266,16 +270,27 @@ export function NewServiceScreen({
     setLoadingPreachers(true);
 
     try {
+      const candidatesPromise = service
+        ? supabase.rpc("list_preacher_candidates", {
+            p_organization_id: activeOrganization.id,
+            p_event_id: service.id,
+          })
+        : supabase.rpc("list_preacher_candidates_for_unit", {
+            p_organization_id: activeOrganization.id,
+            p_unit_id: activeUnit.id,
+          });
+
+      const invitationPromise = service
+        ? supabase.rpc("get_event_preacher_invitation", {
+            p_organization_id: activeOrganization.id,
+            p_event_id: service.id,
+          })
+        : Promise.resolve({ data: [], error: null });
+
       const [candidatesResponse, invitationResponse] =
         await Promise.all([
-          supabase.rpc("list_preacher_candidates", {
-            p_organization_id: activeOrganization.id,
-            p_event_id: service.id,
-          }),
-          supabase.rpc("get_event_preacher_invitation", {
-            p_organization_id: activeOrganization.id,
-            p_event_id: service.id,
-          }),
+          candidatesPromise,
+          invitationPromise,
         ]);
 
       if (candidatesResponse.error) throw candidatesResponse.error;
@@ -315,6 +330,7 @@ export function NewServiceScreen({
   }, [
     service?.id,
     activeOrganization?.id,
+    activeUnit?.id,
     canInvitePreacher,
   ]);
 
@@ -628,6 +644,8 @@ export function NewServiceScreen({
         .from("event-covers")
         .remove([service.cover_image_path]);
     }
+
+    return eventId;
   }
 
   async function saveWeekly() {
@@ -705,13 +723,43 @@ export function NewServiceScreen({
     setLoading(true);
 
     try {
+      let inviteWarning: string | null = null;
+
       if (!isEditing && mode === "weekly") {
         await saveWeekly();
       } else {
-        await saveSingle();
+        const eventId = await saveSingle();
+
+        if (
+          !isEditing &&
+          preacherMode === "church" &&
+          selectedPreacherId &&
+          activeOrganization
+        ) {
+          const { error: inviteError } = await supabase.rpc(
+            "invite_preacher",
+            {
+              p_organization_id: activeOrganization.id,
+              p_event_id: eventId,
+              p_preacher_person_id: selectedPreacherId,
+              p_theme: theme.trim() || null,
+            }
+          );
+
+          if (inviteError) {
+            inviteWarning = inviteError.message;
+          }
+        }
       }
 
       await onSaved();
+
+      if (inviteWarning) {
+        Alert.alert(
+          "Culto criado",
+          `O culto foi salvo, mas o convite do pregador não foi enviado: ${inviteWarning}`
+        );
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -1073,19 +1121,6 @@ export function NewServiceScreen({
                     por Push porque essa pessoa não está vinculada ao Elo.
                   </Text>
                 </>
-              ) : !isEditing ? (
-                <View style={styles.preacherInfo}>
-                  <P.InfoIcon
-                    size={18}
-                    color={eloColors.blue}
-                    weight="duotone"
-                  />
-                  <Text style={styles.preacherInfoText}>
-                    Crie o culto primeiro. Depois, ao editar esta data,
-                    você poderá escolher uma pessoa cadastrada e enviar o
-                    convite por Push.
-                  </Text>
-                </View>
               ) : !canInvitePreacher ? (
                 <View style={styles.preacherInfo}>
                   <P.LockKeyIcon
@@ -1292,14 +1327,19 @@ export function NewServiceScreen({
                   {selectedPreacherId ? (
                     <View style={styles.preacherInviteAction}>
                       <Text style={styles.preacherHelp}>
-                        O tema acima será enviado junto com o convite.
+                        {isEditing
+                          ? "O tema acima será enviado junto com o convite."
+                          : "Ao criar o culto, o Elo enviará este convite por Push automaticamente."}
                       </Text>
-                      <EloActionButton
-                        label="Enviar convite por Push"
-                        icon="PaperPlaneTiltIcon"
-                        loading={savingPreacher}
-                        onPress={() => void sendPreacherInvite()}
-                      />
+
+                      {isEditing ? (
+                        <EloActionButton
+                          label="Enviar convite por Push"
+                          icon="PaperPlaneTiltIcon"
+                          loading={savingPreacher}
+                          onPress={() => void sendPreacherInvite()}
+                        />
+                      ) : null}
                     </View>
                   ) : null}
                 </>
