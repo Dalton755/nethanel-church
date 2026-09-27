@@ -223,14 +223,22 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
   const currentCategories = useMemo(
     () =>
       categories.filter(
-        (item) => item.kind === transactionKind
+        (item) => item.active && item.kind === transactionKind
       ),
     [categories, transactionKind]
   );
 
   const expenseCategories = useMemo(
-    () => categories.filter((item) => item.kind === "expense"),
+    () =>
+      categories.filter(
+        (item) => item.active && item.kind === "expense"
+      ),
     [categories]
+  );
+
+  const activeAccounts = useMemo(
+    () => accounts.filter((item) => item.active),
+    [accounts]
   );
 
   const pendingTransactions = useMemo(
@@ -315,23 +323,8 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
         (servicesResponse.data ?? []) as ServiceCandidate[]
       );
 
-      if (!selectedAccountId && nextAccounts.length > 0) {
-        setSelectedAccountId(nextAccounts[0].account_id);
-      }
-
-      if (!selectedCategoryId) {
-        setSelectedCategoryId(
-          nextCategories.find((item) => item.kind === transactionKind)
-            ?.category_id ?? null
-        );
-      }
-
-      if (!budgetCategoryId) {
-        setBudgetCategoryId(
-          nextCategories.find((item) => item.kind === "expense")
-            ?.category_id ?? null
-        );
-      }
+      // Seleções de formulário são estado local. Não devem disparar
+      // um reload completo do financeiro nem serem sobrescritas aqui.
     } catch (error) {
       Alert.alert(
         "Financeiro",
@@ -342,25 +335,54 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
     } finally {
       setLoading(false);
     }
-  }, [
-    activeOrganization,
-    activeUnit,
-    selectedAccountId,
-    selectedCategoryId,
-    budgetCategoryId,
-    transactionKind,
-  ]);
+  }, [activeOrganization, activeUnit]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
-    setSelectedCategoryId(
-      categories.find((item) => item.kind === transactionKind)
-        ?.category_id ?? null
-    );
-  }, [transactionKind, categories]);
+    setSelectedAccountId((current) => {
+      if (
+        current &&
+        activeAccounts.some((item) => item.account_id === current)
+      ) {
+        return current;
+      }
+
+      return activeAccounts[0]?.account_id ?? null;
+    });
+  }, [activeAccounts]);
+
+  useEffect(() => {
+    setSelectedCategoryId((current) => {
+      if (
+        current &&
+        currentCategories.some(
+          (item) => item.category_id === current
+        )
+      ) {
+        return current;
+      }
+
+      return currentCategories[0]?.category_id ?? null;
+    });
+  }, [currentCategories]);
+
+  useEffect(() => {
+    setBudgetCategoryId((current) => {
+      if (
+        current &&
+        expenseCategories.some(
+          (item) => item.category_id === current
+        )
+      ) {
+        return current;
+      }
+
+      return expenseCategories[0]?.category_id ?? null;
+    });
+  }, [expenseCategories]);
 
   async function saveTransaction() {
     if (
@@ -936,7 +958,7 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
 
               <Text style={styles.label}>Conta</Text>
               <View style={styles.choiceList}>
-                {accounts.map((account) => (
+                {activeAccounts.map((account) => (
                   <Pressable
                     key={account.account_id}
                     onPress={() =>
