@@ -42,6 +42,17 @@ type ScheduleItem = {
   can_checkin: boolean;
 };
 
+type PreacherInvitation = {
+  invitation_id: string;
+  event_id: string;
+  event_title: string;
+  starts_at: string;
+  ends_at: string | null;
+  location_name: string | null;
+  theme: string | null;
+  status: "pending" | "accepted";
+};
+
 type LedDepartment = {
   department_id: string;
   department_name: string;
@@ -121,6 +132,8 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
   const { activeOrganization } = useOrganization();
 
   const [items, setItems] = useState<ScheduleItem[]>([]);
+  const [preacherInvitations, setPreacherInvitations] =
+    useState<PreacherInvitation[]>([]);
   const [ledDepartments, setLedDepartments] =
     useState<LedDepartment[]>([]);
   const [teamItems, setTeamItems] = useState<TeamScheduleItem[]>([]);
@@ -134,8 +147,11 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
     useState<string | null>(null);
 
   const pendingCount = useMemo(
-    () => items.filter((item) => item.status === "pending").length,
-    [items]
+    () =>
+      items.filter((item) => item.status === "pending").length +
+      preacherInvitations.filter((item) => item.status === "pending")
+        .length,
+    [items, preacherInvitations]
   );
 
   const teamGroups = useMemo<TeamGroup[]>(() => {
@@ -170,6 +186,7 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
   const load = useCallback(async () => {
     if (!activeOrganization) {
       setItems([]);
+      setPreacherInvitations([]);
       setLedDepartments([]);
       setTeamItems([]);
       setLoading(false);
@@ -182,11 +199,15 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
     try {
       const [
         myScheduleResponse,
+        preacherInvitationsResponse,
         ledDepartmentsResponse,
         teamScheduleResponse,
         offeringAccessResponse,
       ] = await Promise.all([
         supabase.rpc("list_my_schedule", {
+          p_organization_id: activeOrganization.id,
+        }),
+        supabase.rpc("list_my_preacher_invitations", {
           p_organization_id: activeOrganization.id,
         }),
         supabase.rpc("list_my_led_departments", {
@@ -201,6 +222,9 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
       ]);
 
       if (myScheduleResponse.error) throw myScheduleResponse.error;
+      if (preacherInvitationsResponse.error) {
+        throw preacherInvitationsResponse.error;
+      }
       if (ledDepartmentsResponse.error) {
         throw ledDepartmentsResponse.error;
       }
@@ -236,6 +260,14 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
         .slice(0, 50);
 
       setItems(nextItems);
+      setPreacherInvitations(
+        ((preacherInvitationsResponse.data ?? []) as PreacherInvitation[])
+          .sort(
+            (a, b) =>
+              new Date(a.starts_at).getTime() -
+              new Date(b.starts_at).getTime()
+          )
+      );
       setLedDepartments(
         (ledDepartmentsResponse.data ?? []) as LedDepartment[]
       );
@@ -276,6 +308,43 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
     } catch (error) {
       Alert.alert(
         "Não foi possível atualizar",
+        error instanceof Error ? error.message : "Tente novamente."
+      );
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
+  async function respondPreacherInvitation(
+    item: PreacherInvitation,
+    response: "accept" | "decline"
+  ) {
+    setWorkingId(item.invitation_id);
+    setErrorMessage(null);
+
+    try {
+      const { error } = await supabase.rpc(
+        "respond_my_preacher_invitation",
+        {
+          p_invitation_id: item.invitation_id,
+          p_response: response,
+        }
+      );
+
+      if (error) throw error;
+      await load();
+
+      Alert.alert(
+        response === "accept"
+          ? "Convite aceito"
+          : "Convite recusado",
+        response === "accept"
+          ? "Esse culto já entrou na sua agenda como compromisso confirmado."
+          : "A liderança recebeu sua resposta."
+      );
+    } catch (error) {
+      Alert.alert(
+        "Não foi possível responder",
         error instanceof Error ? error.message : "Tente novamente."
       );
     } finally {
@@ -398,6 +467,115 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
           </>
         ) : (
           <>
+            {preacherInvitations.length > 0 ? (
+              <>
+                <Text style={eloSharedStyles.sectionTitle}>
+                  Convites para pregar
+                </Text>
+
+                <View style={styles.list}>
+                  {preacherInvitations.map((item) => {
+                    const busy = workingId === item.invitation_id;
+
+                    return (
+                      <EloCard key={item.invitation_id}>
+                        <View style={styles.cardHeader}>
+                          <View style={styles.iconWrap}>
+                            <P.MicrophoneStageIcon
+                              size={22}
+                              color={eloColors.blue}
+                              weight="duotone"
+                            />
+                          </View>
+
+                          <View style={styles.cardHeaderCopy}>
+                            <Text style={eloSharedStyles.cardTitle}>
+                              {item.event_title}
+                            </Text>
+                            <Text style={styles.department}>
+                              Pregador
+                              {item.theme ? ` • ${item.theme}` : ""}
+                            </Text>
+                          </View>
+
+                          <Text style={styles.status}>
+                            {item.status === "accepted"
+                              ? "Confirmado"
+                              : "Aguardando"}
+                          </Text>
+                        </View>
+
+                        <View style={styles.metaRow}>
+                          <P.ClockIcon
+                            size={16}
+                            color={eloColors.muted}
+                          />
+                          <Text style={styles.meta}>
+                            {formatDateTime(item.starts_at)}
+                          </Text>
+                        </View>
+
+                        {item.location_name ? (
+                          <View style={styles.metaRow}>
+                            <P.MapPinIcon
+                              size={16}
+                              color={eloColors.muted}
+                            />
+                            <Text style={styles.meta}>
+                              {item.location_name}
+                            </Text>
+                          </View>
+                        ) : null}
+
+                        {item.status === "pending" ? (
+                          <View style={styles.actions}>
+                            <View style={styles.half}>
+                              <EloActionButton
+                                label="Aceitar"
+                                icon="CheckIcon"
+                                loading={busy}
+                                onPress={() =>
+                                  void respondPreacherInvitation(
+                                    item,
+                                    "accept"
+                                  )
+                                }
+                              />
+                            </View>
+                            <View style={styles.half}>
+                              <EloActionButton
+                                label="Recusar"
+                                variant="secondary"
+                                icon="XIcon"
+                                disabled={busy}
+                                onPress={() =>
+                                  void respondPreacherInvitation(
+                                    item,
+                                    "decline"
+                                  )
+                                }
+                              />
+                            </View>
+                          </View>
+                        ) : (
+                          <View style={styles.doneRow}>
+                            <P.CheckCircleIcon
+                              size={17}
+                              color={eloColors.green}
+                              weight="fill"
+                            />
+                            <Text style={styles.doneText}>
+                              Pregação confirmada na sua agenda
+                            </Text>
+                          </View>
+                        )}
+                      </EloCard>
+                    );
+                  })}
+                </View>
+              </>
+            ) : null}
+
             <Text style={eloSharedStyles.sectionTitle}>
               Minhas escalas
             </Text>
