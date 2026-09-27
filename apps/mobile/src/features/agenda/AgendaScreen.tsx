@@ -7,7 +7,13 @@ import {
   Text,
   View,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import {
+  useFocusEffect,
+  useNavigation,
+} from "@react-navigation/native";
+import type {
+  BottomTabNavigationProp,
+} from "@react-navigation/bottom-tabs";
 import * as Phosphor from "phosphor-react-native";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
@@ -20,6 +26,9 @@ import {
   eloColors,
   eloSharedStyles,
 } from "../elo/EloUi";
+import type {
+  MainTabParamList,
+} from "../../navigation/MainTabs";
 import {
   NewServiceScreen,
   type ServiceEditorData,
@@ -202,6 +211,9 @@ function seriesStatus(series: ServiceSeries) {
 }
 
 export function AgendaScreen() {
+  const navigation =
+    useNavigation<BottomTabNavigationProp<MainTabParamList>>();
+
   const {
     activeOrganization,
     activeUnit,
@@ -751,8 +763,20 @@ export function AgendaScreen() {
 
           <View style={styles.personalAgendaList}>
             {personalAgenda.map((item) => (
-              <EloCard key={item.id}>
-                <View style={styles.personalAgendaRow}>
+              <Pressable
+                key={item.id}
+                onPress={() =>
+                  navigation.navigate("Elo", {
+                    module: "schedules",
+                    nonce: Date.now(),
+                  })
+                }
+                style={({ pressed }) =>
+                  pressed ? styles.pressed : undefined
+                }
+              >
+                <EloCard>
+                  <View style={styles.personalAgendaRow}>
                   <View style={styles.personalAgendaIcon}>
                     <P.CalendarCheckIcon
                       size={20}
@@ -787,7 +811,8 @@ export function AgendaScreen() {
                     ) : null}
                   </View>
                 </View>
-              </EloCard>
+                </EloCard>
+              </Pressable>
             ))}
           </View>
         </>
