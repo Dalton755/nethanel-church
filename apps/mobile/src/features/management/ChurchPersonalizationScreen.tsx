@@ -153,14 +153,6 @@ export function ChurchPersonalizationScreen({
           ? "webp"
           : "jpg";
 
-    await supabase.storage
-      .from("church-branding")
-      .remove([
-        `${activeOrganization.id}/logo.jpg`,
-        `${activeOrganization.id}/logo.png`,
-        `${activeOrganization.id}/logo.webp`,
-      ]);
-
     const path = `${activeOrganization.id}/logo.${extension}`;
 
     const { error } = await supabase.storage
@@ -171,6 +163,16 @@ export function ChurchPersonalizationScreen({
       });
 
     if (error) throw error;
+
+    const oldPaths = ["jpg", "png", "webp"]
+      .filter((item) => item !== extension)
+      .map((item) => `${activeOrganization.id}/logo.${item}`);
+
+    if (oldPaths.length > 0) {
+      await supabase.storage
+        .from("church-branding")
+        .remove(oldPaths);
+    }
 
     const { data } = supabase.storage
       .from("church-branding")
