@@ -521,6 +521,28 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 36,
   },
+  identityRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+  identityCopy: {
+    flex: 1,
+  },
+  churchLogo: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    resizeMode: "cover",
+  },
+  churchLogoFallback: {
+    width: 46,
+    height: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+  },
   header: {
     minHeight: 76,
     flexDirection: "row",
