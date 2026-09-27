@@ -100,10 +100,27 @@ export function maskMoneyBr(value: string) {
   return `${integerPart},${decimalPart}`;
 }
 
+export function maskCurrencyBr(value: string) {
+  const digits = onlyDigits(value).slice(0, 15);
+
+  if (!digits) {
+    return "";
+  }
+
+  const cents = Number(digits) / 100;
+
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cents);
+}
+
 export function parseMoneyBr(value: string) {
   const normalized = value
     .trim()
-    .replace(/\s/g, "")
+    .replace(/[^\d,.-]/g, "")
     .replace(/\./g, "")
     .replace(",", ".");
 
@@ -124,4 +141,22 @@ export function formatMoneyInputBr(
   }
 
   return number.toFixed(2).replace(".", ",");
+}
+
+
+export function formatCurrencyInputBr(
+  value: number | string | null | undefined
+) {
+  const number = Number(value ?? 0);
+
+  if (!Number.isFinite(number)) {
+    return "R$ 0,00";
+  }
+
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(number);
 }
