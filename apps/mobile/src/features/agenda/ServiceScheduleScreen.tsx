@@ -65,6 +65,23 @@ type EventAssignment = {
   event_title: string;
 };
 
+type PreacherCandidate = {
+  person_id: string;
+  person_name: string;
+  email: string | null;
+  has_login: boolean;
+};
+
+type PreacherInvitation = {
+  invitation_id: string;
+  preacher_person_id: string;
+  preacher_name: string;
+  theme: string | null;
+  status: "pending" | "accepted" | "declined" | "cancelled";
+  created_at: string;
+  responded_at: string | null;
+};
+
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("pt-BR", {
     weekday: "long",
@@ -89,6 +106,27 @@ function statusLabel(value: string) {
     default:
       return "Aguardando";
   }
+}
+
+function preacherStatusLabel(value: PreacherInvitation["status"]) {
+  switch (value) {
+    case "accepted":
+      return "Convite aceito";
+    case "declined":
+      return "Convite recusado";
+    case "cancelled":
+      return "Cancelado";
+    default:
+      return "Aguardando resposta";
+  }
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 }
 
 export function ServiceScheduleScreen({
@@ -116,6 +154,18 @@ export function ServiceScheduleScreen({
   const [loading, setLoading] = useState(true);
   const [loadingFunctions, setLoadingFunctions] = useState(false);
   const [isCommunion, setIsCommunion] = useState(false);
+  const [preacherCandidates, setPreacherCandidates] =
+    useState<PreacherCandidate[]>([]);
+  const [preacherInvitation, setPreacherInvitation] =
+    useState<PreacherInvitation | null>(null);
+  const [showPreacherForm, setShowPreacherForm] = useState(false);
+  const [preacherSearch, setPreacherSearch] = useState("");
+  const [selectedPreacherId, setSelectedPreacherId] =
+    useState<string | null>(null);
+  const [preacherTheme, setPreacherTheme] = useState(
+    service.theme ?? ""
+  );
+  const [savingPreacher, setSavingPreacher] = useState(false);
 
   const [showForm, setShowForm] = useState(false);
   const [selectedDepartmentId, setSelectedDepartmentId] =
@@ -172,6 +222,18 @@ export function ServiceScheduleScreen({
     [functions]
   );
 
+  const filteredPreacherCandidates = useMemo(() => {
+    const query = normalizeSearch(preacherSearch);
+
+    return preacherCandidates.filter((item) => {
+      if (!query) return true;
+
+      return normalizeSearch(
+        [item.person_name, item.email].filter(Boolean).join(" ")
+      ).includes(query);
+    });
+  }, [preacherCandidates, preacherSearch]);
+
   const load = useCallback(async () => {
     if (!activeOrganization || !activeUnit) {
       setLoading(false);
@@ -186,6 +248,8 @@ export function ServiceScheduleScreen({
         rulesResponse,
         assignmentsResponse,
         communionResponse,
+        preacherCandidatesResponse,
+        preacherInvitationResponse,
       ] = await Promise.all([
         supabase.rpc("list_departments_detailed", {
           p_organization_id: activeOrganization.id,
@@ -208,11 +272,29 @@ export function ServiceScheduleScreen({
           p_organization_id: activeOrganization.id,
           p_event_id: service.id,
         }),
+        canManage
+          ? supabase.rpc("list_preacher_candidates", {
+              p_organization_id: activeOrganization.id,
+              p_event_id: service.id,
+            })
+          : Promise.resolve({ data: [], error: null }),
+        canManage
+          ? supabase.rpc("get_event_preacher_invitation", {
+              p_organization_id: activeOrganization.id,
+              p_event_id: service.id,
+            })
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       if (departmentResponse.error) throw departmentResponse.error;
       if (rulesResponse.error) throw rulesResponse.error;
       if (assignmentsResponse.error) throw assignmentsResponse.error;
+      if (preacherCandidatesResponse.error) {
+        throw preacherCandidatesResponse.error;
+      }
+      if (preacherInvitationResponse.error) {
+        throw preacherInvitationResponse.error;
+      }
 
       setDepartments(
         ((departmentResponse.data ?? []) as any[]).map((item) => ({
@@ -227,6 +309,21 @@ export function ServiceScheduleScreen({
         (assignmentsResponse.data ?? []) as EventAssignment[]
       );
       setIsCommunion(Boolean(communionResponse.data));
+      setPreacherCandidates(
+        (preacherCandidatesResponse.data ?? []) as PreacherCandidate[]
+      );
+
+      const nextInvitation =
+        ((preacherInvitationResponse.data ?? [])[0] ??
+          null) as PreacherInvitation | null;
+
+      setPreacherInvitation(nextInvitation);
+
+      if (nextInvitation?.theme != null) {
+        setPreacherTheme(nextInvitation.theme);
+      } else if (!showPreacherForm) {
+        setPreacherTheme(service.theme ?? "");
+      }
     } catch (error) {
       Alert.alert(
         "Escala do culto",
@@ -237,7 +334,14 @@ export function ServiceScheduleScreen({
     } finally {
       setLoading(false);
     }
-  }, [activeOrganization, activeUnit, service.id]);
+  }, [
+    activeOrganization,
+    activeUnit,
+    service.id,
+    service.theme,
+    canManage,
+    showPreacherForm,
+  ]);
 
   const loadFunctions = useCallback(async () => {
     if (!activeOrganization || !selectedDepartmentId) {
@@ -358,6 +462,92 @@ export function ServiceScheduleScreen({
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function invitePreacher() {
+    if (
+      !activeOrganization ||
+      !selectedPreacherId
+    ) {
+      Alert.alert(
+        "Pregador necessário",
+        "Escolha uma pessoa da igreja para enviar o convite."
+      );
+      return;
+    }
+
+    const selected = preacherCandidates.find(
+      (item) => item.person_id === selectedPreacherId
+    );
+
+    if (!selected?.has_login) {
+      Alert.alert(
+        "Acesso ao Elo necessário",
+        "Essa pessoa ainda não possui acesso ao aplicativo. Libere o acesso antes de enviar o convite por Push."
+      );
+      return;
+    }
+
+    setSavingPreacher(true);
+
+    try {
+      const { error } = await supabase.rpc("invite_preacher", {
+        p_organization_id: activeOrganization.id,
+        p_event_id: service.id,
+        p_preacher_person_id: selectedPreacherId,
+        p_theme: preacherTheme.trim() || null,
+      });
+
+      if (error) throw error;
+
+      setShowPreacherForm(false);
+      setPreacherSearch("");
+      setSelectedPreacherId(null);
+      await load();
+
+      Alert.alert(
+        "Convite enviado",
+        `${selected.person_name} receberá o convite no Elo e por Push para aceitar ou recusar.`
+      );
+    } catch (error) {
+      Alert.alert(
+        "Convite não enviado",
+        error instanceof Error ? error.message : "Tente novamente."
+      );
+    } finally {
+      setSavingPreacher(false);
+    }
+  }
+
+  async function cancelPreacherInvitation() {
+    if (!activeOrganization || !preacherInvitation) return;
+
+    setSavingPreacher(true);
+
+    try {
+      const { error } = await supabase.rpc(
+        "cancel_preacher_invitation",
+        {
+          p_organization_id: activeOrganization.id,
+          p_invitation_id: preacherInvitation.invitation_id,
+        }
+      );
+
+      if (error) throw error;
+
+      setPreacherInvitation(null);
+      setSelectedPreacherId(null);
+      setPreacherTheme(service.theme ?? "");
+      setShowPreacherForm(true);
+      await load();
+    } catch (error) {
+      Alert.alert(
+        "Não foi possível cancelar",
+        error instanceof Error ? error.message : "Tente novamente."
+      );
+    } finally {
+      setSavingPreacher(false);
     }
   }
 
@@ -498,6 +688,198 @@ export function ServiceScheduleScreen({
           </Text>
         </View>
       </View>
+
+      {canManage ? (
+        <>
+          <Text style={eloSharedStyles.sectionTitle}>
+            Pregador
+          </Text>
+
+          <EloCard>
+            {preacherInvitation &&
+            ["pending", "accepted"].includes(
+              preacherInvitation.status
+            ) ? (
+              <>
+                <View style={styles.preacherHeader}>
+                  <View style={styles.preacherIcon}>
+                    <P.MicrophoneStageIcon
+                      size={22}
+                      color={eloColors.blue}
+                      weight="duotone"
+                    />
+                  </View>
+
+                  <View style={styles.grow}>
+                    <Text style={eloSharedStyles.cardTitle}>
+                      {preacherInvitation.preacher_name}
+                    </Text>
+                    <Text style={styles.preacherStatus}>
+                      {preacherStatusLabel(
+                        preacherInvitation.status
+                      )}
+                    </Text>
+                  </View>
+                </View>
+
+                {preacherInvitation.theme ? (
+                  <View style={styles.themeBox}>
+                    <Text style={styles.themeLabel}>Tema</Text>
+                    <Text style={styles.themeValue}>
+                      {preacherInvitation.theme}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View style={styles.preacherAction}>
+                  <EloActionButton
+                    label={
+                      preacherInvitation.status === "accepted"
+                        ? "Trocar pregador"
+                        : "Cancelar convite"
+                    }
+                    variant="secondary"
+                    icon="ArrowsClockwiseIcon"
+                    loading={savingPreacher}
+                    onPress={() =>
+                      Alert.alert(
+                        preacherInvitation.status === "accepted"
+                          ? "Trocar pregador?"
+                          : "Cancelar convite?",
+                        preacherInvitation.status === "accepted"
+                          ? "O pregador confirmado será removido deste culto e você poderá convidar outra pessoa."
+                          : "O convite atual será cancelado e você poderá escolher outra pessoa.",
+                        [
+                          { text: "Voltar", style: "cancel" },
+                          {
+                            text:
+                              preacherInvitation.status === "accepted"
+                                ? "Trocar"
+                                : "Cancelar convite",
+                            style: "destructive",
+                            onPress: () =>
+                              void cancelPreacherInvitation(),
+                          },
+                        ]
+                      )
+                    }
+                  />
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.preacherIntro}>
+                  Escolha uma pessoa cadastrada na igreja. Ela receberá
+                  um Push e poderá aceitar ou recusar o convite.
+                </Text>
+
+                <EloActionButton
+                  label={
+                    showPreacherForm
+                      ? "Fechar convite"
+                      : "Convidar pregador"
+                  }
+                  variant={showPreacherForm ? "secondary" : "primary"}
+                  icon={showPreacherForm ? "XIcon" : "PaperPlaneTiltIcon"}
+                  onPress={() =>
+                    setShowPreacherForm((value) => !value)
+                  }
+                />
+
+                {showPreacherForm ? (
+                  <View style={styles.preacherForm}>
+                    <Text style={styles.fieldLabel}>
+                      Buscar pessoa
+                    </Text>
+                    <TextInput
+                      value={preacherSearch}
+                      onChangeText={setPreacherSearch}
+                      placeholder="Nome ou e-mail"
+                      placeholderTextColor="#A1A9B0"
+                      style={styles.input}
+                    />
+
+                    <View style={styles.preacherList}>
+                      {filteredPreacherCandidates.length === 0 ? (
+                        <Text style={styles.noPreacherText}>
+                          Nenhuma pessoa encontrada.
+                        </Text>
+                      ) : (
+                        filteredPreacherCandidates
+                          .slice(0, 40)
+                          .map((person) => {
+                            const selected =
+                              selectedPreacherId === person.person_id;
+
+                            return (
+                              <Pressable
+                                key={person.person_id}
+                                disabled={!person.has_login}
+                                onPress={() =>
+                                  setSelectedPreacherId(
+                                    person.person_id
+                                  )
+                                }
+                                style={[
+                                  styles.preacherChoice,
+                                  selected &&
+                                    styles.choiceSelected,
+                                  !person.has_login &&
+                                    styles.preacherChoiceDisabled,
+                                ]}
+                              >
+                                <View style={styles.grow}>
+                                  <Text style={styles.personName}>
+                                    {person.person_name}
+                                  </Text>
+                                  <Text style={styles.personMeta}>
+                                    {person.has_login
+                                      ? person.email ?? "Acesso ao Elo ativo"
+                                      : "Sem acesso ao Elo — Push indisponível"}
+                                  </Text>
+                                </View>
+
+                                {selected ? (
+                                  <P.CheckCircleIcon
+                                    size={19}
+                                    color={eloColors.blue}
+                                    weight="fill"
+                                  />
+                                ) : null}
+                              </Pressable>
+                            );
+                          })
+                      )}
+                    </View>
+
+                    <Text style={styles.fieldLabel}>
+                      Tema (opcional)
+                    </Text>
+                    <TextInput
+                      value={preacherTheme}
+                      onChangeText={setPreacherTheme}
+                      placeholder="Ex.: Família, fé e propósito"
+                      placeholderTextColor="#A1A9B0"
+                      maxLength={180}
+                      style={styles.input}
+                    />
+
+                    <View style={styles.preacherAction}>
+                      <EloActionButton
+                        label="Enviar convite por Push"
+                        icon="PaperPlaneTiltIcon"
+                        loading={savingPreacher}
+                        disabled={!selectedPreacherId}
+                        onPress={() => void invitePreacher()}
+                      />
+                    </View>
+                  </View>
+                ) : null}
+              </>
+            )}
+          </EloCard>
+        </>
+      ) : null}
 
       {canManage ? (
         <View style={styles.primaryAction}>
@@ -889,6 +1271,80 @@ const styles = StyleSheet.create({
   },
   primaryAction: {
     marginTop: 16,
+  },
+  preacherHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  preacherIcon: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    backgroundColor: eloColors.surfaceSoft,
+  },
+  preacherStatus: {
+    marginTop: 3,
+    fontSize: 10,
+    fontWeight: "900",
+    color: eloColors.blue,
+  },
+  preacherIntro: {
+    marginBottom: 12,
+    fontSize: 11,
+    lineHeight: 17,
+    color: eloColors.muted,
+  },
+  preacherForm: {
+    marginTop: 14,
+  },
+  preacherList: {
+    marginTop: 8,
+    gap: 7,
+    maxHeight: 360,
+  },
+  preacherChoice: {
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: eloColors.line,
+    borderRadius: 13,
+    backgroundColor: "#FFFFFF",
+  },
+  preacherChoiceDisabled: {
+    opacity: 0.48,
+  },
+  noPreacherText: {
+    paddingVertical: 14,
+    fontSize: 11,
+    color: eloColors.muted,
+  },
+  themeBox: {
+    marginTop: 13,
+    padding: 12,
+    borderRadius: 13,
+    backgroundColor: eloColors.surfaceSoft,
+  },
+  themeLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    color: eloColors.muted,
+  },
+  themeValue: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: "800",
+    color: eloColors.ink,
+  },
+  preacherAction: {
+    marginTop: 12,
   },
   label: {
     marginTop: 15,
