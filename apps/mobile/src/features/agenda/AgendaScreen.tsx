@@ -273,7 +273,6 @@ export function AgendaScreen() {
       setRoutines([]);
       setSeries([]);
       setPersonalAgenda([]);
-      setPersonalAgenda([]);
       setLoading(false);
       return;
     }
@@ -500,6 +499,7 @@ export function AgendaScreen() {
       setEvents([]);
       setRoutines([]);
       setSeries([]);
+      setPersonalAgenda([]);
     } finally {
       setLoading(false);
     }
