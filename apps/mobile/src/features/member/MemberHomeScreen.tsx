@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   ImageBackground,
   Pressable,
   ScrollView,
@@ -115,6 +116,9 @@ export function MemberHomeScreen() {
 
   const firstName =
     profile?.display_name?.trim().split(/\s+/)[0] || "";
+
+  const brandColor =
+    activeOrganization?.primary_color ?? eloColors.blue;
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -241,13 +245,31 @@ export function MemberHomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <View>
-            <Text style={styles.churchName}>
-              {activeOrganization?.name ?? "Minha igreja"}
-            </Text>
-            <Text style={styles.greeting}>
-              {greeting}{firstName ? `, ${firstName}` : ""}
-            </Text>
+          <View style={styles.identityRow}>
+            {activeOrganization?.logo_url ? (
+              <Image
+                source={{ uri: activeOrganization.logo_url }}
+                style={styles.churchLogo}
+              />
+            ) : (
+              <View
+                style={[
+                  styles.churchLogoFallback,
+                  { backgroundColor: brandColor },
+                ]}
+              >
+                <P.ChurchIcon size={20} color="#FFFFFF" weight="duotone" />
+              </View>
+            )}
+
+            <View style={styles.identityCopy}>
+              <Text style={styles.churchName}>
+                {activeOrganization?.name ?? "Minha igreja"}
+              </Text>
+              <Text style={styles.greeting}>
+                {greeting}{firstName ? `, ${firstName}` : ""}
+              </Text>
+            </View>
           </View>
 
           <Pressable
