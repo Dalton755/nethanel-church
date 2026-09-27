@@ -48,6 +48,17 @@ type RegistrationItem = {
   status: string;
 };
 
+type PreacherInvitation = {
+  invitation_id: string;
+  event_id: string;
+  event_title: string;
+  starts_at: string;
+  ends_at: string | null;
+  location_name: string | null;
+  theme: string | null;
+  status: "pending" | "accepted";
+};
+
 type AgendaItem = {
   id: string;
   type: "pastoral" | "schedule" | "event";
@@ -92,6 +103,8 @@ export function MemberAgendaScreen() {
   const [pastoral, setPastoral] = useState<PastoralItem[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [registrations, setRegistrations] = useState<RegistrationItem[]>([]);
+  const [preacherInvitations, setPreacherInvitations] =
+    useState<PreacherInvitation[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -102,8 +115,12 @@ export function MemberAgendaScreen() {
 
     setLoading(true);
 
-    const [pastoralResponse, scheduleResponse, registrationResponse] =
-      await Promise.all([
+    const [
+      pastoralResponse,
+      scheduleResponse,
+      registrationResponse,
+      preacherResponse,
+    ] = await Promise.all([
         supabase.rpc("list_my_pastoral_requests", {
           p_organization_id: activeOrganization.id,
         }),
@@ -111,6 +128,9 @@ export function MemberAgendaScreen() {
           p_organization_id: activeOrganization.id,
         }),
         supabase.rpc("list_my_event_registrations", {
+          p_organization_id: activeOrganization.id,
+        }),
+        supabase.rpc("list_my_preacher_invitations", {
           p_organization_id: activeOrganization.id,
         }),
       ]);
@@ -125,6 +145,12 @@ export function MemberAgendaScreen() {
 
     if (!registrationResponse.error) {
       setRegistrations((registrationResponse.data ?? []) as RegistrationItem[]);
+    }
+
+    if (!preacherResponse.error) {
+      setPreacherInvitations(
+        (preacherResponse.data ?? []) as PreacherInvitation[]
+      );
     }
 
     setLoading(false);
@@ -162,12 +188,35 @@ export function MemberAgendaScreen() {
     }
 
     for (const item of schedules) {
-      if (new Date(item.starts_at).getTime() >= now) {
+      if (
+        new Date(item.starts_at).getTime() >= now &&
+        ["pending", "confirmed", "replacement_requested"].includes(
+          item.status
+        )
+      ) {
         result.push({
           id: `schedule:${item.assignment_id}`,
           type: "schedule",
           title: item.event_title,
           subtitle: `${item.department_name} • ${item.role_label}`,
+          startsAt: item.starts_at,
+          location: item.location_name,
+          action: "schedules",
+          status: item.status,
+        });
+      }
+    }
+
+    for (const item of preacherInvitations) {
+      if (new Date(item.starts_at).getTime() >= now) {
+        result.push({
+          id: `preacher:${item.invitation_id}`,
+          type: "schedule",
+          title: item.event_title,
+          subtitle:
+            item.status === "accepted"
+              ? `Pregador confirmado${item.theme ? ` • ${item.theme}` : ""}`
+              : `Convite para pregar aguardando resposta${item.theme ? ` • ${item.theme}` : ""}`,
           startsAt: item.starts_at,
           location: item.location_name,
           action: "schedules",
@@ -199,7 +248,7 @@ export function MemberAgendaScreen() {
         new Date(a.startsAt).getTime() -
         new Date(b.startsAt).getTime()
     );
-  }, [pastoral, schedules, registrations]);
+  }, [pastoral, schedules, registrations, preacherInvitations]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, AgendaItem[]>();
@@ -232,7 +281,7 @@ export function MemberAgendaScreen() {
         <Text style={styles.eyebrow}>MINHA AGENDA</Text>
         <Text style={styles.title}>Seus próximos compromissos</Text>
         <Text style={styles.subtitle}>
-          Atendimentos, eventos e escalas aparecem aqui quando fazem parte da sua rotina.
+          Atendimentos, eventos, escalas e convites para pregar aparecem aqui organizados por data.
         </Text>
 
         {loading ? (
