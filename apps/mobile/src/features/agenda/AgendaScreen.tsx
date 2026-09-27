@@ -82,6 +82,34 @@ type ServiceSeries = {
   status: "scheduled" | "active" | "completed" | "cancelled";
 };
 
+type PersonalScheduleItem = {
+  assignment_id: string;
+  event_title: string;
+  department_name: string;
+  role_label: string;
+  status: string;
+  starts_at: string;
+  location_name: string | null;
+};
+
+type PersonalPreacherItem = {
+  invitation_id: string;
+  event_title: string;
+  starts_at: string;
+  location_name: string | null;
+  theme: string | null;
+  status: "pending" | "accepted";
+};
+
+type PersonalAgendaItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  starts_at: string;
+  location_name: string | null;
+  pending: boolean;
+};
+
 const WEEKDAYS = [
   "domingo",
   "segunda",
@@ -185,6 +213,8 @@ export function AgendaScreen() {
   const [events, setEvents] = useState<AgendaEvent[]>([]);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [series, setSeries] = useState<ServiceSeries[]>([]);
+  const [personalAgenda, setPersonalAgenda] =
+    useState<PersonalAgendaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [creatingService, setCreatingService] = useState(false);
   const [configuringCommunion, setConfiguringCommunion] =
@@ -242,6 +272,8 @@ export function AgendaScreen() {
       setEvents([]);
       setRoutines([]);
       setSeries([]);
+      setPersonalAgenda([]);
+      setPersonalAgenda([]);
       setLoading(false);
       return;
     }
@@ -272,6 +304,8 @@ export function AgendaScreen() {
         eventsResponse,
         routinesResponse,
         seriesResponse,
+        myScheduleResponse,
+        myPreacherResponse,
       ] = await Promise.all([
         supabase
           .from("events")
@@ -308,6 +342,14 @@ export function AgendaScreen() {
           .eq("organization_id", activeOrganization.id)
           .in("status", ["active", "scheduled"])
           .order("start_date", { ascending: true }),
+
+        supabase.rpc("list_my_schedule", {
+          p_organization_id: activeOrganization.id,
+        }),
+
+        supabase.rpc("list_my_preacher_invitations", {
+          p_organization_id: activeOrganization.id,
+        }),
       ]);
 
       if (eventsResponse.error) throw eventsResponse.error;
@@ -400,6 +442,55 @@ export function AgendaScreen() {
           ? []
           : ((seriesResponse.data ?? []) as ServiceSeries[])
       );
+
+      const now = Date.now();
+      const ownSchedule = myScheduleResponse.error
+        ? []
+        : ((myScheduleResponse.data ?? []) as PersonalScheduleItem[]);
+      const ownPreacher = myPreacherResponse.error
+        ? []
+        : ((myPreacherResponse.data ?? []) as PersonalPreacherItem[]);
+
+      const nextPersonalAgenda: PersonalAgendaItem[] = [
+        ...ownSchedule
+          .filter(
+            (item) =>
+              new Date(item.starts_at).getTime() >= now &&
+              ["pending", "confirmed", "replacement_requested"].includes(
+                item.status
+              )
+          )
+          .map((item) => ({
+            id: `schedule:${item.assignment_id}`,
+            title: item.event_title,
+            subtitle: `${item.department_name} • ${item.role_label}`,
+            starts_at: item.starts_at,
+            location_name: item.location_name,
+            pending: item.status === "pending",
+          })),
+        ...ownPreacher
+          .filter(
+            (item) => new Date(item.starts_at).getTime() >= now
+          )
+          .map((item) => ({
+            id: `preacher:${item.invitation_id}`,
+            title: item.event_title,
+            subtitle: item.theme
+              ? `Pregador • ${item.theme}`
+              : "Pregador",
+            starts_at: item.starts_at,
+            location_name: item.location_name,
+            pending: item.status === "pending",
+          })),
+      ]
+        .sort(
+          (a, b) =>
+            new Date(a.starts_at).getTime() -
+            new Date(b.starts_at).getTime()
+        )
+        .slice(0, 12);
+
+      setPersonalAgenda(nextPersonalAgenda);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -652,6 +743,56 @@ export function AgendaScreen() {
         </>
       ) : null}
 
+      {personalAgenda.length > 0 ? (
+        <>
+          <Text style={eloSharedStyles.sectionTitle}>
+            Minha agenda
+          </Text>
+
+          <View style={styles.personalAgendaList}>
+            {personalAgenda.map((item) => (
+              <EloCard key={item.id}>
+                <View style={styles.personalAgendaRow}>
+                  <View style={styles.personalAgendaIcon}>
+                    <P.CalendarCheckIcon
+                      size={20}
+                      color={eloColors.blue}
+                      weight="duotone"
+                    />
+                  </View>
+
+                  <View style={styles.personalAgendaCopy}>
+                    <View style={styles.personalAgendaTitleRow}>
+                      <Text style={styles.personalAgendaTitle}>
+                        {item.title}
+                      </Text>
+                      {item.pending ? (
+                        <Text style={styles.personalAgendaPending}>
+                          Responder
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    <Text style={styles.personalAgendaMeta}>
+                      {formatEventDate(item.starts_at)} •{" "}
+                      {formatTime(item.starts_at)}
+                    </Text>
+                    <Text style={styles.personalAgendaRole}>
+                      {item.subtitle}
+                    </Text>
+                    {item.location_name ? (
+                      <Text style={styles.personalAgendaLocation}>
+                        {item.location_name}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              </EloCard>
+            ))}
+          </View>
+        </>
+      ) : null}
+
       {activeRoutineCount > 0 ? (
         <>
           <Text style={eloSharedStyles.sectionTitle}>
@@ -880,6 +1021,57 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 14,
     backgroundColor: eloColors.ink,
+  },
+  personalAgendaList: {
+    gap: 8,
+  },
+  personalAgendaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  personalAgendaIcon: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    backgroundColor: eloColors.surfaceSoft,
+  },
+  personalAgendaCopy: {
+    flex: 1,
+  },
+  personalAgendaTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  personalAgendaTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "900",
+    color: eloColors.ink,
+  },
+  personalAgendaPending: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: eloColors.blue,
+  },
+  personalAgendaMeta: {
+    marginTop: 4,
+    fontSize: 10,
+    color: eloColors.muted,
+  },
+  personalAgendaRole: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: eloColors.ink,
+  },
+  personalAgendaLocation: {
+    marginTop: 3,
+    fontSize: 10,
+    color: eloColors.muted,
   },
   primaryAction: {
     marginTop: 20,
