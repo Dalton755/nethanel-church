@@ -109,6 +109,10 @@ export function MemberAgendaScreen() {
 
   const load = useCallback(async () => {
     if (!activeOrganization) {
+      setPastoral([]);
+      setSchedules([]);
+      setRegistrations([]);
+      setPreacherInvitations([]);
       setLoading(false);
       return;
     }
