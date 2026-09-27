@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -12,7 +13,9 @@ import * as Phosphor from "phosphor-react-native";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
 import {
+  formatCurrencyInputBr,
   formatMoneyInputBr,
+  maskCurrencyBr,
   maskDateBr,
   maskMoneyBr,
   parseDateBrToIso,
@@ -157,6 +160,346 @@ function closureStatusLabel(value: string | null) {
     default:
       return "Não iniciado";
   }
+}
+
+
+type CalculatorOperation = "+" | "-" | "×" | "÷";
+
+function calculatorNumber(value: string) {
+  return Number(value.replace(",", ".")) || 0;
+}
+
+function formatCalculatorNumber(value: number) {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+
+  return new Intl.NumberFormat("pt-BR", {
+    maximumFractionDigits: 4,
+    useGrouping: false,
+  }).format(value);
+}
+
+function calculateValue(
+  left: number,
+  right: number,
+  operation: CalculatorOperation
+) {
+  switch (operation) {
+    case "+":
+      return left + right;
+    case "-":
+      return left - right;
+    case "×":
+      return left * right;
+    case "÷":
+      return right === 0 ? left : left / right;
+  }
+}
+
+function MoneyCalculatorInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [visible, setVisible] = useState(false);
+  const [display, setDisplay] = useState("0");
+  const [accumulator, setAccumulator] = useState<number | null>(null);
+  const [operation, setOperation] =
+    useState<CalculatorOperation | null>(null);
+  const [freshInput, setFreshInput] = useState(true);
+
+  const CalculatorIcon =
+    P.CalculatorIcon ?? P.HashIcon ?? P.PlusMinusIcon;
+
+  function openCalculator() {
+    const current = parseMoneyBr(value);
+
+    setDisplay(
+      formatCalculatorNumber(
+        Number.isFinite(current) ? current : 0
+      )
+    );
+    setAccumulator(null);
+    setOperation(null);
+    setFreshInput(true);
+    setVisible(true);
+  }
+
+  function appendDigit(digit: string) {
+    setDisplay((current) => {
+      if (freshInput || current === "0") {
+        return digit;
+      }
+
+      if (current.replace(/\D/g, "").length >= 12) {
+        return current;
+      }
+
+      return current + digit;
+    });
+
+    setFreshInput(false);
+  }
+
+  function appendDecimal() {
+    setDisplay((current) => {
+      if (freshInput) {
+        return "0,";
+      }
+
+      return current.includes(",") ? current : current + ",";
+    });
+
+    setFreshInput(false);
+  }
+
+  function chooseOperation(nextOperation: CalculatorOperation) {
+    const current = calculatorNumber(display);
+    let nextAccumulator = current;
+
+    if (accumulator !== null && operation) {
+      nextAccumulator = calculateValue(
+        accumulator,
+        current,
+        operation
+      );
+    }
+
+    setAccumulator(nextAccumulator);
+    setDisplay(formatCalculatorNumber(nextAccumulator));
+    setOperation(nextOperation);
+    setFreshInput(true);
+  }
+
+  function equals() {
+    if (accumulator === null || !operation) {
+      return;
+    }
+
+    const result = calculateValue(
+      accumulator,
+      calculatorNumber(display),
+      operation
+    );
+
+    setDisplay(formatCalculatorNumber(result));
+    setAccumulator(null);
+    setOperation(null);
+    setFreshInput(true);
+  }
+
+  function clearCalculator() {
+    setDisplay("0");
+    setAccumulator(null);
+    setOperation(null);
+    setFreshInput(true);
+  }
+
+  function backspace() {
+    if (freshInput) {
+      return;
+    }
+
+    setDisplay((current) => {
+      if (current.length <= 1) {
+        return "0";
+      }
+
+      return current.slice(0, -1);
+    });
+  }
+
+  function applyCalculator() {
+    let result = calculatorNumber(display);
+
+    if (accumulator !== null && operation) {
+      result = calculateValue(
+        accumulator,
+        result,
+        operation
+      );
+    }
+
+    onChange(formatCurrencyInputBr(result));
+    setVisible(false);
+  }
+
+  const keys: Array<
+    | { label: string; type: "digit"; value: string }
+    | { label: string; type: "decimal" }
+    | { label: string; type: "operation"; value: CalculatorOperation }
+    | { label: string; type: "clear" }
+    | { label: string; type: "backspace" }
+    | { label: string; type: "equals" }
+  > = [
+    { label: "C", type: "clear" },
+    { label: "⌫", type: "backspace" },
+    { label: "÷", type: "operation", value: "÷" },
+    { label: "×", type: "operation", value: "×" },
+    { label: "7", type: "digit", value: "7" },
+    { label: "8", type: "digit", value: "8" },
+    { label: "9", type: "digit", value: "9" },
+    { label: "−", type: "operation", value: "-" },
+    { label: "4", type: "digit", value: "4" },
+    { label: "5", type: "digit", value: "5" },
+    { label: "6", type: "digit", value: "6" },
+    { label: "+", type: "operation", value: "+" },
+    { label: "1", type: "digit", value: "1" },
+    { label: "2", type: "digit", value: "2" },
+    { label: "3", type: "digit", value: "3" },
+    { label: "=", type: "equals" },
+    { label: "0", type: "digit", value: "0" },
+    { label: ",", type: "decimal" },
+  ];
+
+  function pressKey(key: (typeof keys)[number]) {
+    switch (key.type) {
+      case "digit":
+        appendDigit(key.value);
+        break;
+      case "decimal":
+        appendDecimal();
+        break;
+      case "operation":
+        chooseOperation(key.value);
+        break;
+      case "clear":
+        clearCalculator();
+        break;
+      case "backspace":
+        backspace();
+        break;
+      case "equals":
+        equals();
+        break;
+    }
+  }
+
+  return (
+    <>
+      <View style={styles.moneyInputWrap}>
+        <TextInput
+          value={value}
+          onChangeText={(text) =>
+            onChange(maskCurrencyBr(text))
+          }
+          keyboardType="number-pad"
+          placeholder="R$ 0,00"
+          placeholderTextColor="#A1A9B0"
+          style={styles.moneyInput}
+        />
+
+        <Pressable
+          accessibilityLabel="Abrir calculadora"
+          onPress={openCalculator}
+          style={({ pressed }) => [
+            styles.calculatorTrigger,
+            pressed && styles.calculatorPressed,
+          ]}
+        >
+          <CalculatorIcon
+            size={21}
+            color={eloColors.blue}
+            weight="duotone"
+          />
+        </Pressable>
+      </View>
+
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVisible(false)}
+      >
+        <View style={styles.calculatorBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setVisible(false)}
+          />
+
+          <View style={styles.calculatorCard}>
+            <View style={styles.calculatorTop}>
+              <View>
+                <Text style={styles.calculatorEyebrow}>
+                  CALCULADORA
+                </Text>
+                <Text style={styles.calculatorHint}>
+                  O resultado volta direto para o campo Valor.
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={() => setVisible(false)}
+                style={styles.calculatorClose}
+              >
+                <P.XIcon
+                  size={19}
+                  color={eloColors.ink}
+                  weight="bold"
+                />
+              </Pressable>
+            </View>
+
+            <View style={styles.calculatorDisplay}>
+              <Text style={styles.calculatorCurrency}>R$</Text>
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                style={styles.calculatorDisplayText}
+              >
+                {display}
+              </Text>
+            </View>
+
+            <View style={styles.calculatorGrid}>
+              {keys.map((key, index) => {
+                const operationKey =
+                  key.type === "operation" ||
+                  key.type === "equals";
+
+                const wide =
+                  key.type === "digit" &&
+                  key.value === "0";
+
+                return (
+                  <Pressable
+                    key={`${key.label}-${index}`}
+                    onPress={() => pressKey(key)}
+                    style={({ pressed }) => [
+                      styles.calculatorKey,
+                      operationKey &&
+                        styles.calculatorKeyOperation,
+                      wide && styles.calculatorKeyWide,
+                      pressed && styles.calculatorPressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.calculatorKeyText,
+                        operationKey &&
+                          styles.calculatorKeyTextOperation,
+                      ]}
+                    >
+                      {key.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <EloActionButton
+              label="Usar este valor"
+              icon="CheckIcon"
+              onPress={applyCalculator}
+            />
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
 }
 
 export function FinanceScreen({ onBack }: { onBack: () => void }) {
@@ -999,13 +1342,9 @@ export function FinanceScreen({ onBack }: { onBack: () => void }) {
               />
 
               <Text style={styles.label}>Valor</Text>
-              <TextInput
+              <MoneyCalculatorInput
                 value={transactionAmount}
-                onChangeText={(value) => setTransactionAmount(maskMoneyBr(value))}
-                keyboardType="decimal-pad"
-                placeholder="0,00"
-                placeholderTextColor="#A1A9B0"
-                style={styles.input}
+                onChange={setTransactionAmount}
               />
 
               <Text style={styles.label}>Data</Text>
@@ -1637,6 +1976,130 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     fontSize: 14,
     color: eloColors.ink,
+  },
+  moneyInputWrap: {
+    minHeight: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: eloColors.line,
+    borderRadius: 13,
+    backgroundColor: "#FFFFFF",
+  },
+  moneyInput: {
+    flex: 1,
+    minHeight: 48,
+    paddingHorizontal: 13,
+    fontSize: 16,
+    fontWeight: "800",
+    color: eloColors.ink,
+  },
+  calculatorTrigger: {
+    width: 50,
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderLeftWidth: 1,
+    borderLeftColor: eloColors.line,
+    backgroundColor: "#F4F9FC",
+  },
+  calculatorPressed: {
+    opacity: 0.72,
+  },
+  calculatorBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    padding: 14,
+    backgroundColor: "rgba(11, 18, 24, 0.48)",
+  },
+  calculatorCard: {
+    padding: 16,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+  },
+  calculatorTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  calculatorEyebrow: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    color: eloColors.blue,
+  },
+  calculatorHint: {
+    marginTop: 4,
+    maxWidth: 260,
+    fontSize: 10,
+    lineHeight: 15,
+    color: eloColors.muted,
+  },
+  calculatorClose: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: eloColors.surfaceSoft,
+  },
+  calculatorDisplay: {
+    minHeight: 82,
+    marginTop: 14,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "flex-end",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: "#F3F6F8",
+  },
+  calculatorCurrency: {
+    paddingBottom: 4,
+    fontSize: 13,
+    fontWeight: "900",
+    color: eloColors.muted,
+  },
+  calculatorDisplayText: {
+    flexShrink: 1,
+    fontSize: 34,
+    lineHeight: 39,
+    fontWeight: "900",
+    textAlign: "right",
+    color: eloColors.ink,
+  },
+  calculatorGrid: {
+    marginBottom: 14,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  calculatorKey: {
+    flexBasis: "22%",
+    flexGrow: 1,
+    minHeight: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: "#F3F6F8",
+  },
+  calculatorKeyWide: {
+    flexBasis: "48%",
+  },
+  calculatorKeyOperation: {
+    backgroundColor: "#EAF5FB",
+  },
+  calculatorKeyText: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: eloColors.ink,
+  },
+  calculatorKeyTextOperation: {
+    color: eloColors.blue,
   },
   textarea: {
     minHeight: 88,
