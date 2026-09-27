@@ -40,6 +40,8 @@ export type OrganizationContextItem = {
   name: string;
   slug: string;
   status: string;
+  logo_url: string | null;
+  primary_color: string;
 
   person: OrganizationPerson;
 
