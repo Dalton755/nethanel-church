@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import * as Phosphor from "phosphor-react-native";
+import * as Clipboard from "expo-clipboard";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
 import { supabase } from "../../lib/supabase";
@@ -675,6 +676,8 @@ function ContributionScreen({ onBack }: { onBack: () => void }) {
 
   const [info, setInfo] = useState<ContributionInfo>({});
   const [loading, setLoading] = useState(true);
+  const [copiedField, setCopiedField] =
+    useState<"key" | "copyPaste" | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -702,6 +705,18 @@ function ContributionScreen({ onBack }: { onBack: () => void }) {
   }, [activeOrganization]);
 
   const pixValue = info.pix_copy_paste || info.pix_key || null;
+
+  async function copyPix(
+    value: string,
+    field: "key" | "copyPaste"
+  ) {
+    await Clipboard.setStringAsync(value);
+    setCopiedField(field);
+
+    setTimeout(() => {
+      setCopiedField((current) => (current === field ? null : current));
+    }, 1800);
+  }
 
   return (
     <EloScreen
@@ -742,9 +757,44 @@ function ContributionScreen({ onBack }: { onBack: () => void }) {
                 <Text style={styles.responseLabel}>
                   Chave Pix{info.pix_key_type ? ` • ${info.pix_key_type}` : ""}
                 </Text>
-                <Text selectable style={styles.pixValue}>
-                  {info.pix_key}
-                </Text>
+                <View style={styles.pixValueRow}>
+                  <Text selectable style={styles.pixValue}>
+                    {info.pix_key}
+                  </Text>
+                  <Pressable
+                    accessibilityLabel="Copiar chave Pix"
+                    onPress={() =>
+                      void copyPix(info.pix_key!, "key")
+                    }
+                    style={({ pressed }) => [
+                      styles.copyButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    {copiedField === "key" ? (
+                      <P.CheckIcon
+                        size={16}
+                        color={eloColors.green}
+                        weight="bold"
+                      />
+                    ) : (
+                      <P.CopySimpleIcon
+                        size={16}
+                        color={eloColors.blue}
+                        weight="duotone"
+                      />
+                    )}
+                    <Text
+                      style={[
+                        styles.copyButtonText,
+                        copiedField === "key" &&
+                          styles.copyButtonTextDone,
+                      ]}
+                    >
+                      {copiedField === "key" ? "Copiado" : "Copiar"}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
             ) : null}
 
@@ -754,8 +804,46 @@ function ContributionScreen({ onBack }: { onBack: () => void }) {
                 <Text selectable style={styles.pixCopy}>
                   {info.pix_copy_paste}
                 </Text>
+                <Pressable
+                  accessibilityLabel="Copiar código Pix copia e cola"
+                  onPress={() =>
+                    void copyPix(
+                      info.pix_copy_paste!,
+                      "copyPaste"
+                    )
+                  }
+                  style={({ pressed }) => [
+                    styles.copyWideButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  {copiedField === "copyPaste" ? (
+                    <P.CheckIcon
+                      size={16}
+                      color={eloColors.green}
+                      weight="bold"
+                    />
+                  ) : (
+                    <P.CopySimpleIcon
+                      size={16}
+                      color={eloColors.blue}
+                      weight="duotone"
+                    />
+                  )}
+                  <Text
+                    style={[
+                      styles.copyButtonText,
+                      copiedField === "copyPaste" &&
+                        styles.copyButtonTextDone,
+                    ]}
+                  >
+                    {copiedField === "copyPaste"
+                      ? "Código copiado"
+                      : "Copiar código"}
+                  </Text>
+                </Pressable>
                 <Text style={styles.copyHint}>
-                  Pressione e segure o código para copiar e cole no aplicativo do seu banco.
+                  Depois, cole o código no aplicativo do seu banco.
                 </Text>
               </View>
             ) : null}
@@ -1058,8 +1146,48 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: eloColors.line,
   },
-  pixValue: {
+  pixValueRow: {
     marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  copyButton: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#BBDCEC",
+    borderRadius: 12,
+    backgroundColor: "#F2F9FD",
+  },
+  copyWideButton: {
+    alignSelf: "flex-start",
+    minHeight: 40,
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 13,
+    borderWidth: 1,
+    borderColor: "#BBDCEC",
+    borderRadius: 12,
+    backgroundColor: "#F2F9FD",
+  },
+  copyButtonText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: eloColors.blue,
+  },
+  copyButtonTextDone: {
+    color: eloColors.green,
+  },
+  pixValue: {
+    flex: 1,
     fontSize: 17,
     lineHeight: 23,
     fontWeight: "900",
