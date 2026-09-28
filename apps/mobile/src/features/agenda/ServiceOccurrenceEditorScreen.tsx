@@ -45,6 +45,7 @@ type PreacherInvitation = {
   status: "pending" | "accepted" | "declined" | "cancelled";
   created_at: string;
   responded_at: string | null;
+  unavailable_reported_at: string | null;
 };
 
 type PreacherMode = "church" | "external";
