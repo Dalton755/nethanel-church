@@ -104,12 +104,37 @@ export function MainTabs() {
               | Record<string, unknown>
               | undefined;
 
-          if (
-            data?.target_module === "schedules" &&
-            navigationRef.isReady()
-          ) {
+          if (!navigationRef.isReady()) {
+            return;
+          }
+
+          const targetModule =
+            typeof data?.target_module === "string"
+              ? data.target_module
+              : null;
+
+          if (targetModule === "schedules") {
             navigationRef.navigate("Elo", {
               module: "schedules",
+              nonce: Date.now(),
+            });
+            return;
+          }
+
+          if (targetModule === "events") {
+            navigationRef.navigate("Elo", {
+              module: "events",
+              nonce: Date.now(),
+            });
+            return;
+          }
+
+          if (
+            targetModule === "pastoral" ||
+            data?.type === "pastoral_request"
+          ) {
+            navigationRef.navigate("Elo", {
+              module: memberExperience ? "pastoral" : "care",
               nonce: Date.now(),
             });
           }
