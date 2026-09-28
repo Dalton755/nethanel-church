@@ -17,6 +17,7 @@ import { useOrganization } from "../../contexts/OrganizationContext";
 import { supabase } from "../../lib/supabase";
 import type { MainTabParamList } from "../../navigation/MainTabs";
 import { unregisterCurrentPushDevice } from "../notifications/PushNotificationRegistration";
+import { PlatformAdminScreen } from "../management/PlatformAdminScreen";
 import { eloColors } from "../elo/EloUi";
 
 const P = Phosphor as any;
@@ -46,6 +47,8 @@ export function MoreScreen() {
 
   const [extra, setExtra] = useState<OrganizationExtra | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [platformAdminOpen, setPlatformAdminOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const canManage =
@@ -55,16 +58,25 @@ export function MoreScreen() {
     canAtOrganization("audit.view");
 
   const load = useCallback(async () => {
+    setLoading(true);
+
+    const adminRequest = supabase.rpc("is_platform_admin");
+
     if (!activeOrganization || !canManage) {
+      const adminResponse = await adminRequest;
+
+      setIsPlatformAdmin(
+        !adminResponse.error && adminResponse.data === true
+      );
       setExtra(null);
       setSubscription(null);
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    const [adminResponse, orgResponse, planResponse] = await Promise.all([
+      adminRequest,
 
-    const [orgResponse, planResponse] = await Promise.all([
       supabase
         .from("organizations")
         .select("join_code")
@@ -77,6 +89,10 @@ export function MoreScreen() {
         .eq("organization_id", activeOrganization.id)
         .maybeSingle(),
     ]);
+
+    setIsPlatformAdmin(
+      !adminResponse.error && adminResponse.data === true
+    );
 
     if (!orgResponse.error) {
       setExtra((orgResponse.data ?? null) as OrganizationExtra | null);
@@ -98,6 +114,14 @@ export function MoreScreen() {
   async function handleSignOut() {
     await unregisterCurrentPushDevice();
     await supabase.auth.signOut();
+  }
+
+  if (platformAdminOpen) {
+    return (
+      <PlatformAdminScreen
+        onBack={() => setPlatformAdminOpen(false)}
+      />
+    );
   }
 
   return (
@@ -170,6 +194,15 @@ export function MoreScreen() {
             <Text style={styles.sectionTitle}>Acessos</Text>
 
             <View style={styles.actions}>
+              {isPlatformAdmin ? (
+                <ActionRow
+                  icon="ChartLineUpIcon"
+                  title="Painel Nethanel"
+                  description="Clientes, receita, planos e cobrança da plataforma"
+                  onPress={() => setPlatformAdminOpen(true)}
+                />
+              ) : null}
+
               <ActionRow
                 icon="BellIcon"
                 title="Notificações"
