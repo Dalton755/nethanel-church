@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -38,6 +39,7 @@ export function CommunicationScreen({ onBack }: { onBack: () => void }) {
   const [items, setItems] = useState<Message[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [segment, setSegment] = useState<"all" | "workers">("all");
   const [showComposer, setShowComposer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -91,7 +93,7 @@ export function CommunicationScreen({ onBack }: { onBack: () => void }) {
         p_organization_id: activeOrganization.id,
         p_title: title.trim(),
         p_body: body.trim(),
-        p_segment_type: "ORGANIZATION",
+        p_segment_type: segment,
         p_segment_value: null,
         p_data: {},
       });
@@ -100,6 +102,7 @@ export function CommunicationScreen({ onBack }: { onBack: () => void }) {
 
       setTitle("");
       setBody("");
+      setSegment("all");
       setShowComposer(false);
       await load();
 
@@ -134,7 +137,66 @@ export function CommunicationScreen({ onBack }: { onBack: () => void }) {
 
       {showComposer ? (
         <EloCard>
-          <Text style={eloSharedStyles.cardTitle}>Enviar para toda a igreja</Text>
+          <Text style={eloSharedStyles.cardTitle}>
+            {segment === "all" ? "Enviar para toda a igreja" : "Enviar para os obreiros"}
+          </Text>
+
+          <Text style={styles.label}>Destinatários</Text>
+          <View style={styles.segmentRow}>
+            <Pressable
+              onPress={() => setSegment("all")}
+              style={[
+                styles.segmentChoice,
+                segment === "all" && styles.segmentChoiceActive,
+              ]}
+            >
+              <P.ChurchIcon
+                size={18}
+                color={segment === "all" ? eloColors.blue : eloColors.muted}
+                weight="duotone"
+              />
+              <View style={styles.segmentCopy}>
+                <Text
+                  style={[
+                    styles.segmentTitle,
+                    segment === "all" && styles.segmentTitleActive,
+                  ]}
+                >
+                  Toda a igreja
+                </Text>
+                <Text style={styles.segmentHelper}>
+                  Todos os usuários ativos do Elo.
+                </Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setSegment("workers")}
+              style={[
+                styles.segmentChoice,
+                segment === "workers" && styles.segmentChoiceActive,
+              ]}
+            >
+              <P.UsersThreeIcon
+                size={18}
+                color={segment === "workers" ? eloColors.blue : eloColors.muted}
+                weight="duotone"
+              />
+              <View style={styles.segmentCopy}>
+                <Text
+                  style={[
+                    styles.segmentTitle,
+                    segment === "workers" && styles.segmentTitleActive,
+                  ]}
+                >
+                  Obreiros
+                </Text>
+                <Text style={styles.segmentHelper}>
+                  Equipes de departamentos, escalados e pregadores confirmados.
+                </Text>
+              </View>
+            </Pressable>
+          </View>
 
           <Text style={styles.label}>Título</Text>
           <TextInput
@@ -193,6 +255,7 @@ export function CommunicationScreen({ onBack }: { onBack: () => void }) {
                 <View style={styles.headerCopy}>
                   <Text style={eloSharedStyles.cardTitle}>{item.title}</Text>
                   <Text style={styles.meta}>
+                    {item.segment_type === "workers" ? "Obreiros • " : "Toda a igreja • "}
                     {new Intl.DateTimeFormat("pt-BR", {
                       day: "2-digit",
                       month: "2-digit",
@@ -225,6 +288,41 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     fontSize: 12,
     fontWeight: "800",
+    color: eloColors.muted,
+  },
+  segmentRow: {
+    gap: 8,
+  },
+  segmentChoice: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: eloColors.line,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+  },
+  segmentChoiceActive: {
+    borderColor: "#8CC5E8",
+    backgroundColor: "#F2F9FD",
+  },
+  segmentCopy: {
+    flex: 1,
+  },
+  segmentTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: eloColors.ink,
+  },
+  segmentTitleActive: {
+    color: eloColors.blue,
+  },
+  segmentHelper: {
+    marginTop: 3,
+    fontSize: 10,
+    lineHeight: 15,
     color: eloColors.muted,
   },
   input: {
