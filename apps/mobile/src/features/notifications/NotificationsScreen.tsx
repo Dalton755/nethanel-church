@@ -180,6 +180,20 @@ export function NotificationsScreen() {
   } =
     useOrganization();
 
+  const managementRoles = new Set([
+    "owner",
+    "admin",
+    "pastor",
+    "secretario",
+    "tesoureiro",
+    "lider",
+  ]);
+
+  const memberExperience =
+    !(activeOrganization?.roles ?? []).some((role) =>
+      managementRoles.has(role.role_key.toLowerCase())
+    );
+
 
   const [
     notifications,
@@ -478,6 +492,29 @@ export function NotificationsScreen() {
     ) {
       navigation.navigate("Elo", {
         module: "schedules",
+        nonce: Date.now(),
+      });
+      return;
+    }
+
+    if (
+      notification.category === "event" ||
+      targetModule === "events"
+    ) {
+      navigation.navigate("Elo", {
+        module: "events",
+        nonce: Date.now(),
+      });
+      return;
+    }
+
+    if (
+      notification.category === "care" ||
+      targetModule === "pastoral" ||
+      notification.data?.type === "pastoral_request"
+    ) {
+      navigation.navigate("Elo", {
+        module: memberExperience ? "pastoral" : "care",
         nonce: Date.now(),
       });
     }
