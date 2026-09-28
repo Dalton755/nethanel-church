@@ -27,7 +27,8 @@
     "phosphor-react-native": "^3.0.6",
     "react-native-svg": "15.15.4",
     "react-native-qrcode-svg": "^6.3.26",
-    "expo-camera": "~57.0.5"
+    "expo-camera": "~57.0.5",
+    "expo-clipboard": "~57.0.2"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
