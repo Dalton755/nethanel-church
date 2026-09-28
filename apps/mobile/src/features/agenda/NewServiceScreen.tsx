@@ -71,6 +71,7 @@ type PreacherInvitation = {
   status: "pending" | "accepted" | "declined" | "cancelled";
   created_at: string;
   responded_at: string | null;
+  unavailable_reported_at: string | null;
 };
 
 type PreacherMode = "church" | "external";
@@ -1158,9 +1159,11 @@ export function NewServiceScreen({
                       {preacherInvitation.preacher_name}
                     </Text>
                     <Text style={styles.preacherStatusText}>
-                      {preacherStatusLabel(
-                        preacherInvitation.status
-                      )}
+                      {preacherInvitation.unavailable_reported_at
+                        ? "Troca solicitada pelo pregador"
+                        : preacherStatusLabel(
+                            preacherInvitation.status
+                          )}
                     </Text>
                   </View>
 
@@ -1177,9 +1180,11 @@ export function NewServiceScreen({
                   <View style={styles.preacherStatusActions}>
                     <EloActionButton
                       label={
-                        preacherInvitation.status === "accepted"
-                          ? "Trocar pregador"
-                          : "Cancelar convite"
+                        preacherInvitation.unavailable_reported_at
+                          ? "Escolher outro pregador"
+                          : preacherInvitation.status === "accepted"
+                            ? "Trocar pregador"
+                            : "Cancelar convite"
                       }
                       variant="secondary"
                       icon="ArrowsClockwiseIcon"
