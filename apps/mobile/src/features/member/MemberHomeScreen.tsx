@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Image,
   ImageBackground,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -107,6 +108,7 @@ export function MemberHomeScreen() {
   const [schedule, setSchedule] = useState<ScheduleSummary | null>(null);
   const [notices, setNotices] = useState<NoticeSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showNextEvent, setShowNextEvent] = useState(false);
 
   const canUseKids =
     can("kids.parent") ||
@@ -293,7 +295,8 @@ export function MemberHomeScreen() {
 
             {nextEvent && eventParts ? (
               <Pressable
-                onPress={() => navigation.navigate("Agenda")}
+                onPress={() => setShowNextEvent(true)}
+                accessibilityLabel="Abrir imagem e detalhes do próximo culto"
                 style={({ pressed }) => [
                   styles.heroWrap,
                   pressed && styles.pressed,
@@ -445,6 +448,93 @@ export function MemberHomeScreen() {
           </>
         )}
       </ScrollView>
+
+      <Modal
+        visible={showNextEvent}
+        transparent={false}
+        animationType="fade"
+        onRequestClose={() => setShowNextEvent(false)}
+      >
+        <View style={styles.eventPreview}>
+          <View style={styles.eventPreviewHeader}>
+            <Pressable
+              accessibilityLabel="Fechar culto"
+              onPress={() => setShowNextEvent(false)}
+              style={styles.eventPreviewClose}
+            >
+              <P.XIcon
+                size={22}
+                color="#FFFFFF"
+                weight="bold"
+              />
+            </Pressable>
+
+            <Text style={styles.eventPreviewKicker}>
+              PRÓXIMO CULTO
+            </Text>
+          </View>
+
+          {nextEvent?.cover_image_url ? (
+            <Image
+              source={{ uri: nextEvent.cover_image_url }}
+              resizeMode="contain"
+              style={styles.eventPreviewImage}
+            />
+          ) : (
+            <View style={styles.eventPreviewFallback}>
+              <P.ChurchIcon
+                size={56}
+                color="#FFFFFF"
+                weight="duotone"
+              />
+              <Text style={styles.eventPreviewFallbackText}>
+                Este culto ainda não possui imagem.
+              </Text>
+            </View>
+          )}
+
+          {nextEvent && eventParts ? (
+            <View style={styles.eventPreviewInfo}>
+              <View style={styles.eventPreviewDateRow}>
+                <View style={styles.eventPreviewDatePill}>
+                  <Text style={styles.eventPreviewDateLabel}>
+                    {eventParts.label}
+                  </Text>
+                  <Text style={styles.eventPreviewDateValue}>
+                    {eventParts.date}
+                  </Text>
+                </View>
+
+                <View style={styles.eventPreviewTime}>
+                  <P.ClockIcon
+                    size={17}
+                    color="#FFFFFF"
+                    weight="bold"
+                  />
+                  <Text style={styles.eventPreviewTimeText}>
+                    {eventParts.time}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.eventPreviewTitle}>
+                {nextEvent.title}
+              </Text>
+
+              <View style={styles.eventPreviewLocation}>
+                <P.MapPinIcon
+                  size={18}
+                  color="rgba(255,255,255,0.78)"
+                  weight="duotone"
+                />
+                <Text style={styles.eventPreviewLocationText}>
+                  {nextEvent.location_name ?? "Na sua igreja"}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -834,6 +924,107 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 14,
     color: eloColors.muted,
+  },
+  eventPreview: {
+    flex: 1,
+    backgroundColor: "#0D1318",
+  },
+  eventPreviewHeader: {
+    minHeight: 92,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingTop: 32,
+    paddingHorizontal: 18,
+  },
+  eventPreviewClose: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  eventPreviewKicker: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+    color: "rgba(255,255,255,0.78)",
+  },
+  eventPreviewImage: {
+    width: "100%",
+    flex: 1,
+    backgroundColor: "#0D1318",
+  },
+  eventPreviewFallback: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    paddingHorizontal: 28,
+  },
+  eventPreviewFallbackText: {
+    fontSize: 13,
+    textAlign: "center",
+    color: "rgba(255,255,255,0.72)",
+  },
+  eventPreviewInfo: {
+    paddingHorizontal: 22,
+    paddingTop: 18,
+    paddingBottom: 34,
+    backgroundColor: "#11191F",
+  },
+  eventPreviewDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  eventPreviewDatePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 13,
+    backgroundColor: "#FFFFFF",
+  },
+  eventPreviewDateLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+    color: "#40505B",
+  },
+  eventPreviewDateValue: {
+    marginTop: 2,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#111111",
+  },
+  eventPreviewTime: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  eventPreviewTimeText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+  eventPreviewTitle: {
+    marginTop: 18,
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+  eventPreviewLocation: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  eventPreviewLocationText: {
+    flex: 1,
+    fontSize: 13,
+    color: "rgba(255,255,255,0.82)",
   },
   pressed: {
     opacity: 0.76,
