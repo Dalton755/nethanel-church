@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -51,6 +52,7 @@ type PreacherInvitation = {
   location_name: string | null;
   theme: string | null;
   status: "pending" | "accepted";
+  unavailable_reported_at: string | null;
 };
 
 type LedDepartment = {
@@ -352,6 +354,95 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
     }
   }
 
+
+  async function reportPreacherProblem(item: PreacherInvitation) {
+    setWorkingId(item.invitation_id);
+    setErrorMessage(null);
+
+    try {
+      const { data, error } = await supabase.rpc(
+        "report_my_preacher_unavailability",
+        {
+          p_invitation_id: item.invitation_id,
+          p_note: "Pregador informou pelo aplicativo que não poderá comparecer.",
+        }
+      );
+
+      if (error) throw error;
+
+      const result = (data ?? {}) as {
+        ok?: boolean;
+        mode?: string;
+        pastor_phone?: string | null;
+        pastor_name?: string | null;
+        hours_until?: number | null;
+      };
+
+      if (result.mode === "contact_pastor") {
+        const rawPhone = String(result.pastor_phone ?? "").replace(/\D/g, "");
+        const whatsappPhone =
+          rawPhone.length === 10 || rawPhone.length === 11
+            ? "55" + rawPhone
+            : rawPhone;
+
+        const message =
+          "Faltam menos de 48 horas para " + item.event_title + ". " +
+          "Nesse prazo o Elo não abre substituição automática. " +
+          "Entre em contato diretamente com o pastor pelo WhatsApp para resolver a troca.";
+
+        const buttons: Array<{
+          text: string;
+          style?: "default" | "cancel" | "destructive";
+          onPress?: () => void;
+        }> = [{ text: "Entendi", style: "cancel" }];
+
+        if (whatsappPhone.length >= 12) {
+          buttons.push({
+            text: "Abrir WhatsApp",
+            onPress: () => {
+              const greeting = result.pastor_name
+                ? ", " + result.pastor_name
+                : "";
+              const text = encodeURIComponent(
+                "Olá" + greeting +
+                ". Tive um problema e não poderei pregar no culto " +
+                item.event_title +
+                ", marcado para " +
+                formatDateTime(item.starts_at) +
+                ". Podemos falar sobre a substituição?"
+              );
+
+              void Linking.openURL(
+                "https://wa.me/" + whatsappPhone + "?text=" + text
+              );
+            },
+          });
+        }
+
+        Alert.alert("Fale com o pastor", message, buttons);
+        return;
+      }
+
+      await load();
+
+      Alert.alert(
+        result.mode === "already_requested"
+          ? "Troca já solicitada"
+          : "Pastor avisado",
+        result.mode === "already_requested"
+          ? "A liderança já recebeu sua solicitação de troca."
+          : "A liderança recebeu um Push informando que você não poderá pregar e poderá escolher outro pregador."
+      );
+    } catch (error) {
+      Alert.alert(
+        "Não foi possível avisar",
+        error instanceof Error ? error.message : "Tente novamente."
+      );
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
   async function requestReplacement(item: ScheduleItem) {
     setWorkingId(item.assignment_id);
 
@@ -558,16 +649,62 @@ export function SchedulesScreen({ onBack }: { onBack: () => void }) {
                             </View>
                           </View>
                         ) : (
-                          <View style={styles.doneRow}>
-                            <P.CheckCircleIcon
-                              size={17}
-                              color={eloColors.green}
-                              weight="fill"
-                            />
-                            <Text style={styles.doneText}>
-                              Pregação confirmada na sua agenda
-                            </Text>
-                          </View>
+                          <>
+                            {item.unavailable_reported_at ? (
+                              <View style={styles.problemReported}>
+                                <P.WarningCircleIcon
+                                  size={18}
+                                  color={eloColors.danger}
+                                  weight="duotone"
+                                />
+                                <View style={styles.cardHeaderCopy}>
+                                  <Text style={styles.problemReportedTitle}>
+                                    Troca solicitada à liderança
+                                  </Text>
+                                  <Text style={styles.problemReportedText}>
+                                    O pastor já foi avisado de que você não poderá pregar.
+                                  </Text>
+                                </View>
+                              </View>
+                            ) : (
+                              <>
+                                <View style={styles.doneRow}>
+                                  <P.CheckCircleIcon
+                                    size={17}
+                                    color={eloColors.green}
+                                    weight="fill"
+                                  />
+                                  <Text style={styles.doneText}>
+                                    Pregação confirmada na sua agenda
+                                  </Text>
+                                </View>
+
+                                <View style={styles.preacherProblemAction}>
+                                  <EloActionButton
+                                    label="Tive um problema, não vou poder pregar"
+                                    variant="secondary"
+                                    icon="WarningCircleIcon"
+                                    loading={busy}
+                                    onPress={() =>
+                                      Alert.alert(
+                                        "Não poderá pregar?",
+                                        "Se faltarem 48 horas ou mais, o Elo avisará o pastor para providenciar a troca. Com menos de 48 horas, será necessário falar diretamente com ele.",
+                                        [
+                                          { text: "Voltar", style: "cancel" },
+                                          {
+                                            text: "Continuar",
+                                            style: "destructive",
+                                            onPress: () =>
+                                              void reportPreacherProblem(item),
+                                          },
+                                        ]
+                                      )
+                                    }
+                                  />
+                                </View>
+                              </>
+                            )}
+                          </>
                         )}
                       </EloCard>
                     );
@@ -930,6 +1067,31 @@ const styles = StyleSheet.create({
   half: {
     flexGrow: 1,
     flexBasis: 140,
+  },
+  preacherProblemAction: {
+    marginTop: 12,
+  },
+  problemReported: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 9,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#F0CBC8",
+    borderRadius: 14,
+    backgroundColor: "#FFF7F6",
+  },
+  problemReportedTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: eloColors.danger,
+  },
+  problemReportedText: {
+    marginTop: 3,
+    fontSize: 10,
+    lineHeight: 15,
+    color: eloColors.muted,
   },
   offeringAction: {
     marginTop: 10,
