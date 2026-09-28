@@ -682,7 +682,9 @@ export function ServiceOccurrenceEditorScreen({
               {preacherInvitation.preacher_name}
             </Text>
             <Text style={styles.preacherStatusText}>
-              {preacherStatusLabel(preacherInvitation.status)}
+              {preacherInvitation.unavailable_reported_at
+                ? "Troca solicitada pelo pregador"
+                : preacherStatusLabel(preacherInvitation.status)}
             </Text>
           </View>
 
@@ -699,9 +701,11 @@ export function ServiceOccurrenceEditorScreen({
           <View style={styles.preacherStatusActions}>
             <EloActionButton
               label={
-                preacherInvitation.status === "accepted"
-                  ? "Trocar pregador"
-                  : "Cancelar convite"
+                preacherInvitation.unavailable_reported_at
+                  ? "Escolher outro pregador"
+                  : preacherInvitation.status === "accepted"
+                    ? "Trocar pregador"
+                    : "Cancelar convite"
               }
               variant="secondary"
               icon="ArrowsClockwiseIcon"
