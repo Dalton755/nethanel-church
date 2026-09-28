@@ -73,6 +73,7 @@ type PreacherInvitation = {
   status: "pending" | "accepted" | "declined" | "cancelled";
   created_at: string;
   responded_at: string | null;
+  unavailable_reported_at: string | null;
 };
 
 function formatDateTime(value: string) {
@@ -572,9 +573,11 @@ export function ServiceScheduleScreen({
                       {preacherInvitation.preacher_name}
                     </Text>
                     <Text style={styles.preacherStatus}>
-                      {preacherStatusLabel(
-                        preacherInvitation.status
-                      )}
+                      {preacherInvitation.unavailable_reported_at
+                        ? "Troca solicitada pelo pregador"
+                        : preacherStatusLabel(
+                            preacherInvitation.status
+                          )}
                     </Text>
                   </View>
                 </View>
