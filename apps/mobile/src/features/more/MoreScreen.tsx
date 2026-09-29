@@ -18,6 +18,7 @@ import { supabase } from "../../lib/supabase";
 import type { MainTabParamList } from "../../navigation/MainTabs";
 import { unregisterCurrentPushDevice } from "../notifications/PushNotificationRegistration";
 import { PlatformAdminScreen } from "../management/PlatformAdminScreen";
+import { AccountPrivacyScreen } from "./AccountPrivacyScreen";
 import { eloColors } from "../elo/EloUi";
 
 const P = Phosphor as any;
@@ -49,6 +50,7 @@ export function MoreScreen() {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [platformAdminOpen, setPlatformAdminOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const canManage =
@@ -120,6 +122,14 @@ export function MoreScreen() {
     return (
       <PlatformAdminScreen
         onBack={() => setPlatformAdminOpen(false)}
+      />
+    );
+  }
+
+  if (privacyOpen) {
+    return (
+      <AccountPrivacyScreen
+        onBack={() => setPrivacyOpen(false)}
       />
     );
   }
@@ -237,6 +247,15 @@ export function MoreScreen() {
             </View>
 
             <Text style={styles.sectionTitle}>Conta</Text>
+
+            <View style={styles.actions}>
+              <ActionRow
+                icon="ShieldCheckIcon"
+                title="Privacidade e conta"
+                description="Política de privacidade e exclusão da conta"
+                onPress={() => setPrivacyOpen(true)}
+              />
+            </View>
 
             <Pressable onPress={handleSignOut} style={styles.signOut}>
               <P.SignOutIcon size={19} color={eloColors.danger} weight="bold" />
