@@ -96,14 +96,15 @@ export default function GerencialClient({ userEmail }: { userEmail: string }) {
     ]);
 
     const firstError = responses.find((response) => response.error)?.error;
-    if (firstError) {
+    const loadedProducts = (responses[0].data ?? []) as Product[];
+    if (firstError || loadedProducts.length === 0) {
       setAccessDenied(true);
       setMessage("Acesso restrito ou falha ao carregar os dados da Central.");
       setLoading(false);
       return;
     }
 
-    setProducts((responses[0].data ?? []) as Product[]);
+    setProducts(loadedProducts);
     setMetrics((responses[1].data ?? []) as Metric[]);
     setPlans((responses[2].data ?? []) as Plan[]);
     setLeads((responses[3].data ?? []) as Lead[]);
