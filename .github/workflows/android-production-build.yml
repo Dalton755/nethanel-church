@@ -53,12 +53,15 @@ jobs:
           python -m pip install --disable-pip-version-check pillow
           python apps/mobile/scripts/generate_elo_native_assets.py
 
-      - name: Build production AAB in EAS
+      - name: Build production AAB in EAS Cloud
+        id: cloud_build
+        continue-on-error: true
         working-directory: apps/mobile
         run: eas build --platform android --profile production --non-interactive --wait --json > build-result.json
 
-      - name: Resolve AAB URL
-        id: build
+      - name: Resolve cloud AAB URL
+        if: steps.cloud_build.outcome == 'success'
+        id: cloud_artifact
         working-directory: apps/mobile
         run: |
           node - <<'NODE'
@@ -74,9 +77,21 @@ jobs:
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `aab_url=${url}\n`);
           NODE
 
-      - name: Download production AAB
+      - name: Download cloud production AAB
+        if: steps.cloud_build.outcome == 'success'
         working-directory: apps/mobile
-        run: curl -fL "${{ steps.build.outputs.aab_url }}" -o nethanel-elo-production.aab
+        run: curl -fL "${{ steps.cloud_artifact.outputs.aab_url }}" -o nethanel-elo-production.aab
+
+      - name: Build production AAB locally when EAS quota is unavailable
+        if: steps.cloud_build.outcome == 'failure'
+        working-directory: apps/mobile
+        run: eas build --platform android --profile production --local --non-interactive --output ./nethanel-elo-production.aab
+
+      - name: Verify production AAB
+        working-directory: apps/mobile
+        run: |
+          test -s nethanel-elo-production.aab
+          ls -lh nethanel-elo-production.aab
 
       - name: Upload production AAB
         uses: actions/upload-artifact@v4
