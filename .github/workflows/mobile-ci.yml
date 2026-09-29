@@ -1,15 +1,16 @@
-name: Mobile CI
+name: App CI
 
 on:
   pull_request:
     paths:
       - "apps/mobile/**"
+      - "apps/web/**"
       - "package-lock.json"
       - ".github/workflows/mobile-ci.yml"
   workflow_dispatch:
 
 jobs:
-  typecheck:
+  mobile:
     runs-on: ubuntu-latest
 
     steps:
@@ -31,3 +32,25 @@ jobs:
       - name: Validate Expo config
         working-directory: apps/mobile
         run: npx expo config --type public
+
+  web:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck web
+        run: npm run typecheck --workspace=web
+
+      - name: Build web
+        run: npm run build --workspace=web
