@@ -1,0 +1,85 @@
+name: Build Android Production AAB
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/android-production-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  production-aab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck mobile
+        run: npm run typecheck --workspace=mobile
+
+      - name: Validate Expo config
+        working-directory: apps/mobile
+        run: npx expo config --type public
+
+      - name: Expo Doctor
+        working-directory: apps/mobile
+        run: npx expo-doctor
+
+      - name: Prepare Nethanel Elo native assets
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python apps/mobile/scripts/generate_elo_native_assets.py
+
+      - name: Build production AAB in EAS
+        working-directory: apps/mobile
+        run: eas build --platform android --profile production --non-interactive --wait --json > build-result.json
+
+      - name: Resolve AAB URL
+        id: build
+        working-directory: apps/mobile
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const raw = fs.readFileSync("build-result.json", "utf8");
+          const parsed = JSON.parse(raw);
+          const build = Array.isArray(parsed) ? parsed[0] : parsed;
+          const url = build?.artifacts?.buildUrl || build?.artifacts?.applicationArchiveUrl;
+          if (!url) {
+            console.error(raw);
+            throw new Error("EAS não retornou a URL do AAB.");
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `aab_url=${url}\n`);
+          NODE
+
+      - name: Download production AAB
+        working-directory: apps/mobile
+        run: curl -fL "${{ steps.build.outputs.aab_url }}" -o nethanel-elo-production.aab
+
+      - name: Upload production AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: nethanel-elo-production-aab
+          path: apps/mobile/nethanel-elo-production.aab
+          if-no-files-found: error
+          retention-days: 30
