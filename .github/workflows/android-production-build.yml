@@ -6,6 +6,8 @@ on:
     branches:
       - main
     paths:
+      - "apps/mobile/**"
+      - "package-lock.json"
       - ".github/workflows/android-production-build.yml"
 
 permissions:
