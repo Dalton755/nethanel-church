@@ -31,6 +31,13 @@ type Draft = {
   billing_day: string;
 };
 
+type ExchangeRate = {
+  pair: string;
+  rate: number;
+  rate_date: string;
+  source: string;
+};
+
 const kindLabels: Record<InfrastructureCost["amount_kind"], string> = {
   ACTUAL: "Valor real",
   ESTIMATED: "Estimativa",
@@ -46,9 +53,17 @@ function money(value: number | string, currency: string) {
   }).format(Number(value || 0));
 }
 
+function rateBr(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  }).format(value);
+}
+
 function dateBr(value: string | null) {
   if (!value) return "Não disponível via API";
-  const [year, month, day] = value.split("-");
+  const [year, month, day] = value.slice(0, 10).split("-");
+  if (!year || !month || !day) return value;
   return `${day}/${month}/${year}`;
 }
 
@@ -63,6 +78,9 @@ function dateTime(value: string | null) {
 export default function InfrastructureClient() {
   const supabase = useMemo(() => createClient(), []);
   const [items, setItems] = useState<InfrastructureCost[]>([]);
+  const [exchange, setExchange] = useState<ExchangeRate | null>(null);
+  const [exchangeLoading, setExchangeLoading] = useState(true);
+  const [exchangeError, setExchangeError] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
@@ -90,9 +108,39 @@ export default function InfrastructureClient() {
     setLoading(false);
   }, [supabase]);
 
+  const loadExchange = useCallback(async () => {
+    setExchangeLoading(true);
+    setExchangeError("");
+
+    try {
+      const response = await fetch("/api/gerencial/cotacao", {
+        cache: "no-store",
+      });
+      const payload = (await response.json()) as ExchangeRate & { error?: string };
+
+      if (!response.ok || !Number.isFinite(Number(payload.rate))) {
+        throw new Error(payload.error || "Cotação indisponível.");
+      }
+
+      setExchange({
+        pair: payload.pair,
+        rate: Number(payload.rate),
+        rate_date: payload.rate_date,
+        source: payload.source,
+      });
+    } catch (error) {
+      setExchange(null);
+      setExchangeError(
+        error instanceof Error ? error.message : "Cotação indisponível."
+      );
+    }
+
+    setExchangeLoading(false);
+  }, []);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    void Promise.all([load(), loadExchange()]);
+  }, [load, loadExchange]);
 
   const totals = useMemo(() => {
     const grouped = new Map<string, number>();
@@ -105,6 +153,38 @@ export default function InfrastructureClient() {
     }
     return Array.from(grouped.entries());
   }, [items]);
+
+  const totalBrl = useMemo(() => {
+    return items.reduce((sum, item) => {
+      if (item.status !== "ACTIVE") return sum;
+      const amount = Number(item.amount || 0);
+
+      if (item.currency === "BRL") return sum + amount;
+      if (item.currency === "USD" && exchange?.rate) {
+        return sum + amount * exchange.rate;
+      }
+
+      return sum;
+    }, 0);
+  }, [items, exchange]);
+
+  const hasConvertibleCosts = useMemo(
+    () =>
+      items.some(
+        (item) =>
+          item.status === "ACTIVE" &&
+          (item.currency === "BRL" ||
+            (item.currency === "USD" && Boolean(exchange?.rate)))
+      ),
+    [items, exchange]
+  );
+
+  function convertedToBrl(item: InfrastructureCost) {
+    const amount = Number(item.amount || 0);
+    if (item.currency === "BRL") return amount;
+    if (item.currency === "USD" && exchange?.rate) return amount * exchange.rate;
+    return null;
+  }
 
   function startEdit(item: InfrastructureCost) {
     setEditing(item.id);
@@ -172,7 +252,7 @@ export default function InfrastructureClient() {
           </div>
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => void Promise.all([load(), loadExchange()])}
             className="rounded-xl border border-white/10 px-4 py-2.5 text-xs font-bold text-zinc-300 hover:bg-white/5"
           >
             Atualizar dados
@@ -185,31 +265,59 @@ export default function InfrastructureClient() {
           </div>
         ) : null}
 
-        <section className="mt-6 grid gap-3 sm:grid-cols-3">
+        <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.04] p-5">
             <p className="text-xs font-semibold text-zinc-500">Serviços acompanhados</p>
             <p className="mt-2 text-3xl font-bold">{items.length}</p>
             <p className="mt-1 text-xs text-zinc-600">infraestrutura corporativa</p>
           </div>
-          <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.04] p-5 sm:col-span-2">
-            <p className="text-xs font-semibold text-zinc-500">Base mensal acompanhada</p>
-            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+
+          <div className="rounded-[1.5rem] border border-emerald-400/15 bg-emerald-400/[0.06] p-5">
+            <p className="text-xs font-semibold text-emerald-200/70">Total de infraestrutura</p>
+            <p className="mt-2 text-3xl font-bold text-emerald-100">
+              {hasConvertibleCosts && exchange ? money(totalBrl, "BRL") : "—"}
+            </p>
+            <p className="mt-1 text-xs text-emerald-200/50">custo mensal convertido em reais</p>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.04] p-5">
+            <p className="text-xs font-semibold text-zinc-500">Moedas originais</p>
+            <div className="mt-2 space-y-1">
               {totals.length === 0 ? (
                 <p className="text-2xl font-bold">—</p>
               ) : (
                 totals.map(([currency, total]) => (
-                  <p key={currency} className="text-3xl font-bold">
+                  <p key={currency} className="text-2xl font-bold">
                     {money(total, currency)}
                   </p>
                 ))
               )}
             </div>
-            <p className="mt-1 text-xs text-amber-300/80">
-              Soma de valores reais, manuais, estimados e valores-base. Veja a
-              classificação de cada serviço abaixo.
+            <p className="mt-1 text-xs text-zinc-600">antes da conversão cambial</p>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.04] p-5">
+            <p className="text-xs font-semibold text-zinc-500">Cotação USD/BRL</p>
+            <p className="mt-2 text-3xl font-bold">
+              {exchangeLoading
+                ? "..."
+                : exchange
+                  ? `R$ ${rateBr(exchange.rate)}`
+                  : "—"}
+            </p>
+            <p className="mt-1 text-xs text-zinc-600">
+              {exchange
+                ? `${exchange.source} · ${dateBr(exchange.rate_date)}`
+                : exchangeError || "Aguardando cotação"}
             </p>
           </div>
         </section>
+
+        <p className="mt-3 text-xs text-amber-300/80">
+          O total em reais usa a cotação USD/BRL mais recente disponível. A soma
+          inclui valores reais, manuais, estimados e valores-base conforme a
+          classificação de cada serviço.
+        </p>
 
         {loading ? (
           <div className="mt-6 rounded-[1.5rem] border border-white/8 bg-white/[0.035] p-6 text-sm text-zinc-500">
@@ -219,6 +327,8 @@ export default function InfrastructureClient() {
           <section className="mt-6 grid gap-4 lg:grid-cols-2">
             {items.map((item) => {
               const isEditing = editing === item.id;
+              const converted = convertedToBrl(item);
+
               return (
                 <article
                   key={item.id}
@@ -246,6 +356,19 @@ export default function InfrastructureClient() {
                         <p className="mt-1 text-3xl font-bold">
                           {money(item.amount, item.currency)}
                         </p>
+                        {converted !== null && item.currency !== "BRL" ? (
+                          <p className="mt-1 text-sm font-semibold text-emerald-300">
+                            ≈ {money(converted, "BRL")}
+                          </p>
+                        ) : item.currency === "BRL" ? (
+                          <p className="mt-1 text-sm font-semibold text-emerald-300">
+                            {money(converted ?? 0, "BRL")}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-xs text-zinc-600">
+                            Conversão indisponível
+                          </p>
+                        )}
                       </div>
                       <span
                         className={
