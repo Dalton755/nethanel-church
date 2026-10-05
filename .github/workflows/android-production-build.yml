@@ -37,6 +37,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Align Expo SDK 57 patch versions
+        run: npm install --no-save --workspace=mobile expo@57.0.26 expo-camera@57.0.6 expo-constants@57.0.20
+
       - name: Typecheck mobile
         run: npm run typecheck --workspace=mobile
 
