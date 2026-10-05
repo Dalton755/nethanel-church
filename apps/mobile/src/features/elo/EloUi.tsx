@@ -50,6 +50,19 @@ function brandSoft(color: string, alpha = 0.1) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+function useEloBrand() {
+  const { activeOrganization } = useOrganization();
+
+  return {
+    brandColor: activeOrganization?.primary_color ?? eloColors.blue,
+    secondaryColor:
+      activeOrganization?.secondary_color ?? eloColors.surfaceSoft,
+    backgroundColor:
+      activeOrganization?.background_color ?? eloColors.background,
+    logoUrl: activeOrganization?.logo_url ?? null,
+  };
+}
+
 export function EloScreen({
   title,
   eyebrow,
@@ -65,64 +78,59 @@ export function EloScreen({
   right?: ReactNode;
   children: ReactNode;
 }) {
-  const { activeOrganization } = useOrganization();
-  const brandColor =
-    activeOrganization?.primary_color ?? eloColors.blue;
-  const logoUrl = activeOrganization?.logo_url ?? null;
+  const { brandColor, secondaryColor, backgroundColor, logoUrl } =
+    useEloBrand();
 
   return (
-    <SafeAreaView edges={["top"]} style={styles.safeArea}>
+    <SafeAreaView
+      edges={["top"]}
+      style={[styles.safeArea, { backgroundColor }]}
+    >
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
+          style={{ backgroundColor }}
           contentContainerStyle={styles.screenContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         >
-        <View style={styles.topRow}>
-          {onBack ? (
-            <Pressable onPress={onBack} style={styles.iconButton}>
-              <P.ArrowLeftIcon size={20} color={eloColors.ink} weight="bold" />
-            </Pressable>
-          ) : (
-            <View
-              style={[
-                styles.brandMark,
-                { backgroundColor: brandSoft(brandColor, 0.1) },
-              ]}
-            >
-              {logoUrl ? (
-                <Image
-                  source={{ uri: logoUrl }}
-                  style={styles.brandMarkImage}
+          <View style={styles.topRow}>
+            {onBack ? (
+              <Pressable onPress={onBack} style={styles.iconButton}>
+                <P.ArrowLeftIcon
+                  size={20}
+                  color={eloColors.ink}
+                  weight="bold"
                 />
-              ) : (
-                <Text
-                  style={[
-                    styles.brandMarkText,
-                    { color: brandColor },
-                  ]}
-                >
-                  E
-                </Text>
-              )}
-            </View>
-          )}
+              </Pressable>
+            ) : (
+              <View
+                style={[
+                  styles.brandMark,
+                  { backgroundColor: brandSoft(secondaryColor, 0.22) },
+                ]}
+              >
+                {logoUrl ? (
+                  <Image source={{ uri: logoUrl }} style={styles.brandMarkImage} />
+                ) : (
+                  <Text style={[styles.brandMarkText, { color: brandColor }]}>E</Text>
+                )}
+              </View>
+            )}
 
-          <View style={styles.headingCopy}>
-            {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-            <Text style={styles.title}>{title}</Text>
+            <View style={styles.headingCopy}>
+              {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+              <Text style={styles.title}>{title}</Text>
+            </View>
+
+            {right ?? <View style={styles.iconButtonPlaceholder} />}
           </View>
 
-          {right ?? <View style={styles.iconButtonPlaceholder} />}
-        </View>
-
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-
+          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           {children}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -160,9 +168,7 @@ export function EloModuleCard({
   onPress: () => void;
 }) {
   const Icon = P[icon] ?? P.SquaresFourIcon;
-  const { activeOrganization } = useOrganization();
-  const brandColor =
-    activeOrganization?.primary_color ?? eloColors.blue;
+  const { brandColor, secondaryColor } = useEloBrand();
 
   return (
     <Pressable
@@ -175,7 +181,7 @@ export function EloModuleCard({
       <View
         style={[
           styles.moduleIcon,
-          { backgroundColor: brandSoft(brandColor, 0.1) },
+          { backgroundColor: brandSoft(secondaryColor, 0.22) },
         ]}
       >
         <Icon size={23} color={brandColor} weight="duotone" />
@@ -190,7 +196,7 @@ export function EloModuleCard({
                 styles.badge,
                 {
                   color: brandColor,
-                  backgroundColor: brandSoft(brandColor, 0.1),
+                  backgroundColor: brandSoft(secondaryColor, 0.22),
                 },
               ]}
             >
@@ -223,9 +229,7 @@ export function EloActionButton({
   icon?: string;
 }) {
   const Icon = icon ? P[icon] : null;
-  const { activeOrganization } = useOrganization();
-  const brandColor =
-    activeOrganization?.primary_color ?? eloColors.blue;
+  const { brandColor } = useEloBrand();
 
   return (
     <Pressable
@@ -241,7 +245,9 @@ export function EloActionButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "secondary" ? eloColors.ink : "#fff"} />
+        <ActivityIndicator
+          color={variant === "secondary" ? eloColors.ink : "#fff"}
+        />
       ) : (
         <>
           {Icon ? (
@@ -275,10 +281,16 @@ export function EloState({
   icon?: string;
 }) {
   const Icon = P[icon] ?? P.InfoIcon;
+  const { secondaryColor } = useEloBrand();
 
   return (
     <View style={styles.state}>
-      <View style={styles.stateIcon}>
+      <View
+        style={[
+          styles.stateIcon,
+          { backgroundColor: brandSoft(secondaryColor, 0.18) },
+        ]}
+      >
         <Icon size={23} color={eloColors.muted} weight="duotone" />
       </View>
       <Text style={styles.stateTitle}>{title}</Text>
@@ -302,16 +314,24 @@ export function EloQrModal({
   expiresAt?: string | null;
   onClose: () => void;
 }) {
-  const { activeOrganization } = useOrganization();
-  const brandColor =
-    activeOrganization?.primary_color ?? eloColors.blue;
+  const { brandColor, secondaryColor } = useEloBrand();
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
       <View style={styles.modalBackdrop}>
         <View style={styles.qrSheet}>
           <View style={styles.qrHeader}>
-            <View style={styles.qrIcon}>
+            <View
+              style={[
+                styles.qrIcon,
+                { backgroundColor: brandSoft(secondaryColor, 0.2) },
+              ]}
+            >
               <P.QrCodeIcon size={22} color={brandColor} weight="duotone" />
             </View>
             <Pressable onPress={onClose} style={styles.iconButton}>
@@ -324,13 +344,19 @@ export function EloQrModal({
 
           {token ? (
             <View style={styles.qrBox}>
-              <QRCode value={token} size={220} backgroundColor="#FFFFFF" color="#15191D" />
+              <QRCode
+                value={token}
+                size={220}
+                backgroundColor="#FFFFFF"
+                color="#15191D"
+              />
             </View>
           ) : null}
 
           {expiresAt ? (
             <Text style={styles.qrExpiry}>
-              Válido até {new Intl.DateTimeFormat("pt-BR", {
+              Válido até{" "}
+              {new Intl.DateTimeFormat("pt-BR", {
                 hour: "2-digit",
                 minute: "2-digit",
                 second: "2-digit",
@@ -407,6 +433,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: eloColors.surfaceSoft,
+    overflow: "hidden",
   },
   brandMarkText: {
     fontSize: 20,

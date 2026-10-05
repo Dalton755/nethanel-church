@@ -25,6 +25,8 @@ import {
 
 const P = Phosphor as any;
 
+type BrandAssetKind = "logo" | "app-icon" | "splash";
+
 const COLOR_PRESETS = [
   "#2387C9",
   "#5965D8",
@@ -38,9 +40,9 @@ const COLOR_PRESETS = [
   "#17191C",
 ];
 
-function normalizeColor(value: string) {
+function normalizeColor(value: string, fallback = "#2387C9") {
   const clean = value.trim().toUpperCase();
-  if (!clean) return "#2387C9";
+  if (!clean) return fallback;
   return clean.startsWith("#") ? clean : `#${clean}`;
 }
 
@@ -48,37 +50,78 @@ function isValidColor(value: string) {
   return /^#[0-9A-F]{6}$/.test(normalizeColor(value));
 }
 
+function sanitizeColorInput(value: string) {
+  const clean = value.replace(/[^0-9a-fA-F#]/g, "").slice(0, 7);
+  return normalizeColor(clean);
+}
+
+function assetLabel(kind: BrandAssetKind) {
+  if (kind === "logo") return "logo";
+  if (kind === "app-icon") return "ícone";
+  return "imagem de abertura";
+}
+
 export function ChurchPersonalizationScreen({
   onBack,
 }: {
   onBack: () => void;
 }) {
-  const {
-    activeOrganization,
-    canAtOrganization,
-    refreshContext,
-  } = useOrganization();
+  const { activeOrganization, canAtOrganization, refreshContext } =
+    useOrganization();
 
   const canManage = canAtOrganization("organization.manage");
 
   const [name, setName] = useState(activeOrganization?.name ?? "");
+  const [appName, setAppName] = useState(
+    activeOrganization?.app_name ?? activeOrganization?.name ?? ""
+  );
   const [primaryColor, setPrimaryColor] = useState(
     activeOrganization?.primary_color ?? "#2387C9"
   );
-  const [selectedImage, setSelectedImage] =
+  const [secondaryColor, setSecondaryColor] = useState(
+    activeOrganization?.secondary_color ?? "#DCE9F3"
+  );
+  const [backgroundColor, setBackgroundColor] = useState(
+    activeOrganization?.background_color ?? "#F6F8FB"
+  );
+
+  const [selectedLogo, setSelectedLogo] =
     useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [selectedAppIcon, setSelectedAppIcon] =
+    useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [selectedSplash, setSelectedSplash] =
+    useState<ImagePicker.ImagePickerAsset | null>(null);
+
   const [removeLogo, setRemoveLogo] = useState(false);
+  const [removeAppIcon, setRemoveAppIcon] = useState(false);
+  const [removeSplash, setRemoveSplash] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const displayLogo =
-    selectedImage?.uri ??
-    (!removeLogo ? activeOrganization?.logo_url : null) ??
-    null;
-
-  const normalizedColor = useMemo(
+  const normalizedPrimary = useMemo(
     () => normalizeColor(primaryColor),
     [primaryColor]
   );
+  const normalizedSecondary = useMemo(
+    () => normalizeColor(secondaryColor, "#DCE9F3"),
+    [secondaryColor]
+  );
+  const normalizedBackground = useMemo(
+    () => normalizeColor(backgroundColor, "#F6F8FB"),
+    [backgroundColor]
+  );
+
+  const displayLogo =
+    selectedLogo?.uri ??
+    (!removeLogo ? activeOrganization?.logo_url : null) ??
+    null;
+  const displayAppIcon =
+    selectedAppIcon?.uri ??
+    (!removeAppIcon ? activeOrganization?.app_icon_url : null) ??
+    displayLogo;
+  const displaySplash =
+    selectedSplash?.uri ??
+    (!removeSplash ? activeOrganization?.splash_url : null) ??
+    displayLogo;
 
   if (!activeOrganization) {
     return (
@@ -104,14 +147,13 @@ export function ChurchPersonalizationScreen({
     );
   }
 
-  async function pickLogo() {
-    const permission =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
+  async function pickAsset(kind: BrandAssetKind) {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
       Alert.alert(
         "Acesso às fotos",
-        "Permita o acesso às fotos para escolher a logo da igreja."
+        "Permita o acesso às fotos para escolher as imagens da igreja."
       );
       return;
     }
@@ -120,40 +162,64 @@ export function ChurchPersonalizationScreen({
       mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.9,
+      quality: 0.95,
     });
 
-    if (!result.canceled) {
-      setSelectedImage(result.assets[0]);
+    if (result.canceled) return;
+
+    const asset = result.assets[0];
+
+    if (kind === "logo") {
+      setSelectedLogo(asset);
       setRemoveLogo(false);
+    } else if (kind === "app-icon") {
+      setSelectedAppIcon(asset);
+      setRemoveAppIcon(false);
+    } else {
+      setSelectedSplash(asset);
+      setRemoveSplash(false);
     }
   }
 
-  async function uploadLogo() {
-    if (!selectedImage || !activeOrganization) {
-      return activeOrganization?.logo_url ?? null;
-    }
+  async function removeStoredAsset(kind: BrandAssetKind) {
+    if (!activeOrganization) return;
 
-    const file = new File(selectedImage.uri);
+    await supabase.storage
+      .from("church-branding")
+      .remove(
+        ["jpg", "png", "webp"].map(
+          (extension) => `${activeOrganization.id}/${kind}.${extension}`
+        )
+      );
+  }
+
+  async function uploadBrandAsset(
+    kind: BrandAssetKind,
+    asset: ImagePicker.ImagePickerAsset
+  ) {
+    if (!activeOrganization) return null;
+
+    const file = new File(asset.uri);
     const bytes = await file.arrayBuffer();
 
     if (bytes.byteLength < 1024) {
-      throw new Error("A imagem selecionada não pôde ser lida.");
+      throw new Error(
+        `A ${assetLabel(kind)} selecionada não pôde ser lida.`
+      );
     }
 
     if (bytes.byteLength > 5 * 1024 * 1024) {
-      throw new Error("A logo deve ter no máximo 5 MB.");
+      throw new Error(`A ${assetLabel(kind)} deve ter no máximo 5 MB.`);
     }
 
-    const mimeType = selectedImage.mimeType ?? "image/jpeg";
+    const mimeType = asset.mimeType ?? "image/jpeg";
     const extension =
       mimeType === "image/png"
         ? "png"
         : mimeType === "image/webp"
           ? "webp"
           : "jpg";
-
-    const path = `${activeOrganization.id}/logo.${extension}`;
+    const path = `${activeOrganization.id}/${kind}.${extension}`;
 
     const { error } = await supabase.storage
       .from("church-branding")
@@ -166,12 +232,10 @@ export function ChurchPersonalizationScreen({
 
     const oldPaths = ["jpg", "png", "webp"]
       .filter((item) => item !== extension)
-      .map((item) => `${activeOrganization.id}/logo.${item}`);
+      .map((item) => `${activeOrganization.id}/${kind}.${item}`);
 
     if (oldPaths.length > 0) {
-      await supabase.storage
-        .from("church-branding")
-        .remove(oldPaths);
+      await supabase.storage.from("church-branding").remove(oldPaths);
     }
 
     const { data } = supabase.storage
@@ -181,20 +245,51 @@ export function ChurchPersonalizationScreen({
     return `${data.publicUrl}?v=${Date.now()}`;
   }
 
+  async function resolveAsset(
+    kind: BrandAssetKind,
+    selected: ImagePicker.ImagePickerAsset | null,
+    remove: boolean,
+    currentUrl: string | null | undefined
+  ) {
+    if (remove) {
+      await removeStoredAsset(kind);
+      return null;
+    }
+
+    if (selected) {
+      return uploadBrandAsset(kind, selected);
+    }
+
+    return currentUrl ?? null;
+  }
+
   async function save() {
     if (!activeOrganization) return;
 
     const cleanName = name.trim();
+    const cleanAppName = appName.trim();
 
     if (cleanName.length < 2) {
       Alert.alert("Nome inválido", "Informe o nome da igreja.");
       return;
     }
 
-    if (!isValidColor(primaryColor)) {
+    if (cleanAppName.length < 2 || cleanAppName.length > 40) {
+      Alert.alert(
+        "Nome do aplicativo inválido",
+        "Use entre 2 e 40 caracteres."
+      );
+      return;
+    }
+
+    if (
+      !isValidColor(primaryColor) ||
+      !isValidColor(secondaryColor) ||
+      !isValidColor(backgroundColor)
+    ) {
       Alert.alert(
         "Cor inválida",
-        "Use uma cor hexadecimal com 6 dígitos, por exemplo #2387C9."
+        "Use cores hexadecimais com 6 dígitos, por exemplo #2387C9."
       );
       return;
     }
@@ -202,37 +297,52 @@ export function ChurchPersonalizationScreen({
     setSaving(true);
 
     try {
-      let logoUrl = activeOrganization.logo_url ?? null;
+      const logoUrl = await resolveAsset(
+        "logo",
+        selectedLogo,
+        removeLogo,
+        activeOrganization.logo_url
+      );
+      const appIconUrl = await resolveAsset(
+        "app-icon",
+        selectedAppIcon,
+        removeAppIcon,
+        activeOrganization.app_icon_url
+      );
+      const splashUrl = await resolveAsset(
+        "splash",
+        selectedSplash,
+        removeSplash,
+        activeOrganization.splash_url
+      );
 
-      if (removeLogo) {
-        await supabase.storage
-          .from("church-branding")
-          .remove([
-            `${activeOrganization.id}/logo.jpg`,
-            `${activeOrganization.id}/logo.png`,
-            `${activeOrganization.id}/logo.webp`,
-          ]);
-        logoUrl = null;
-      } else if (selectedImage) {
-        logoUrl = await uploadLogo();
-      }
-
-      const { error } = await supabase.rpc("save_organization_branding", {
+      const { error } = await supabase.rpc("save_organization_branding_v2", {
         p_organization_id: activeOrganization.id,
         p_name: cleanName,
-        p_primary_color: normalizedColor,
+        p_primary_color: normalizedPrimary,
+        p_secondary_color: normalizedSecondary,
+        p_background_color: normalizedBackground,
         p_logo_url: logoUrl,
+        p_app_name: cleanAppName,
+        p_app_icon_url: appIconUrl,
+        p_splash_url: splashUrl,
       });
 
       if (error) throw error;
 
       await refreshContext({ silent: true });
-      setSelectedImage(null);
+      setSelectedLogo(null);
+      setSelectedAppIcon(null);
+      setSelectedSplash(null);
       setRemoveLogo(false);
+      setRemoveAppIcon(false);
+      setRemoveSplash(false);
 
       Alert.alert(
         "Personalização salva",
-        "A identidade da igreja já foi aplicada ao Elo."
+        activeOrganization.white_label_enabled
+          ? "A identidade foi salva e também ficará disponível para a versão exclusiva da igreja."
+          : "A identidade já foi aplicada dentro do Elo e ficou pronta para uma futura versão white label."
       );
     } catch (error) {
       Alert.alert(
@@ -248,7 +358,7 @@ export function ChurchPersonalizationScreen({
     <EloScreen
       title="Personalização da igreja"
       eyebrow="IDENTIDADE • ELO"
-      subtitle="Defina como sua igreja aparece para membros, líderes e equipes."
+      subtitle="Defina nome, logo, cores, ícone e abertura da experiência da sua igreja."
       onBack={onBack}
     >
       <Text style={eloSharedStyles.sectionTitle}>Prévia</Text>
@@ -256,89 +366,79 @@ export function ChurchPersonalizationScreen({
       <View
         style={[
           styles.preview,
-          { borderTopColor: normalizedColor },
+          {
+            borderTopColor: normalizedPrimary,
+            backgroundColor: normalizedBackground,
+          },
         ]}
       >
-        <View style={styles.previewLogo}>
+        <View
+          style={[
+            styles.previewLogo,
+            { backgroundColor: normalizedSecondary },
+          ]}
+        >
           {displayLogo ? (
-            <Image
-              source={{ uri: displayLogo }}
-              style={styles.previewLogoImage}
-            />
+            <Image source={{ uri: displayLogo }} style={styles.previewLogoImage} />
           ) : (
             <P.ChurchIcon
               size={30}
-              color={normalizedColor}
+              color={normalizedPrimary}
               weight="duotone"
             />
           )}
         </View>
 
         <View style={styles.previewCopy}>
-          <Text style={styles.previewEyebrow}>MINHA IGREJA NO ELO</Text>
+          <Text style={styles.previewEyebrow}>MINHA IGREJA</Text>
           <Text style={styles.previewName}>
-            {name.trim() || activeOrganization.name}
+            {appName.trim() || name.trim() || activeOrganization.name}
           </Text>
           <Text style={styles.previewText}>
-            A cor principal será usada nos destaques e ações do aplicativo.
+            A identidade definida aqui acompanha a igreja em toda a experiência do Elo.
           </Text>
         </View>
       </View>
 
-      <Text style={eloSharedStyles.sectionTitle}>Logo</Text>
+      <Text style={eloSharedStyles.sectionTitle}>Marca</Text>
 
       <EloCard>
-        <View style={styles.logoRow}>
-          <View style={styles.logoBox}>
-            {displayLogo ? (
-              <Image
-                source={{ uri: displayLogo }}
-                style={styles.logoImage}
-              />
-            ) : (
-              <P.ImageIcon
-                size={28}
-                color={eloColors.muted}
-                weight="duotone"
-              />
-            )}
-          </View>
+        <BrandAssetEditor
+          title="Logo da igreja"
+          description="Usada no cabeçalho e na identificação da igreja. Recomendado: imagem quadrada."
+          imageUrl={displayLogo}
+          onPick={() => void pickAsset("logo")}
+          onRemove={() => {
+            setSelectedLogo(null);
+            setRemoveLogo(true);
+          }}
+        />
 
-          <View style={styles.logoCopy}>
-            <Text style={eloSharedStyles.cardTitle}>Logo da igreja</Text>
-            <Text style={styles.help}>
-              Recomendado: imagem quadrada, PNG/JPG/WebP, até 5 MB.
-            </Text>
-          </View>
-        </View>
+        <View style={styles.divider} />
 
-        <View style={styles.logoActions}>
-          <View style={styles.flexButton}>
-            <EloActionButton
-              label={displayLogo ? "Trocar logo" : "Escolher logo"}
-              icon="ImageIcon"
-              variant="secondary"
-              onPress={() => void pickLogo()}
-            />
-          </View>
+        <BrandAssetEditor
+          title="Ícone do aplicativo"
+          description="Base da versão white label. Para publicação, prefira PNG quadrado 1024 × 1024."
+          imageUrl={displayAppIcon}
+          onPick={() => void pickAsset("app-icon")}
+          onRemove={() => {
+            setSelectedAppIcon(null);
+            setRemoveAppIcon(true);
+          }}
+        />
 
-          {displayLogo ? (
-            <Pressable
-              onPress={() => {
-                setSelectedImage(null);
-                setRemoveLogo(true);
-              }}
-              style={styles.removeButton}
-            >
-              <P.TrashIcon
-                size={18}
-                color={eloColors.danger}
-                weight="duotone"
-              />
-              <Text style={styles.removeText}>Remover</Text>
-            </Pressable>
-          ) : null}
-        </View>
+        <View style={styles.divider} />
+
+        <BrandAssetEditor
+          title="Imagem de abertura"
+          description="Aparece na abertura da versão exclusiva. Prefira PNG quadrado com fundo transparente."
+          imageUrl={displaySplash}
+          onPick={() => void pickAsset("splash")}
+          onRemove={() => {
+            setSelectedSplash(null);
+            setRemoveSplash(true);
+          }}
+        />
       </EloCard>
 
       <Text style={eloSharedStyles.sectionTitle}>Identidade</Text>
@@ -355,11 +455,24 @@ export function ChurchPersonalizationScreen({
           style={styles.input}
         />
 
-        <Text style={styles.label}>Cor predominante</Text>
+        <Text style={styles.label}>Nome exibido no aplicativo</Text>
+        <TextInput
+          value={appName}
+          onChangeText={setAppName}
+          placeholder="Ex.: ADVE"
+          placeholderTextColor="#A1A9B0"
+          autoCapitalize="words"
+          maxLength={40}
+          style={styles.input}
+        />
+        <Text style={styles.help}>
+          Este será o nome usado na identidade da igreja e, no white label, no aplicativo instalado.
+        </Text>
 
+        <Text style={styles.label}>Cor principal</Text>
         <View style={styles.colorGrid}>
           {COLOR_PRESETS.map((color) => {
-            const selected = normalizedColor === color;
+            const selected = normalizedPrimary === color;
 
             return (
               <Pressable
@@ -380,60 +493,153 @@ export function ChurchPersonalizationScreen({
           })}
         </View>
 
-        <Text style={styles.label}>Cor personalizada</Text>
-        <TextInput
+        <ColorInput
+          label="Cor principal personalizada"
           value={primaryColor}
-          onChangeText={(value) =>
-            setPrimaryColor(
-              normalizeColor(value.replace(/[^0-9a-fA-F#]/g, "").slice(0, 7))
-            )
-          }
-          autoCapitalize="characters"
-          maxLength={7}
-          placeholder="#2387C9"
-          placeholderTextColor="#A1A9B0"
-          style={styles.input}
+          onChange={setPrimaryColor}
+          preview={normalizedPrimary}
         />
-
-        <View style={styles.colorPreviewRow}>
-          <View
-            style={[
-              styles.colorPreviewDot,
-              { backgroundColor: isValidColor(primaryColor)
-                  ? normalizedColor
-                  : eloColors.line },
-            ]}
-          />
-          <Text style={styles.colorPreviewText}>
-            {isValidColor(primaryColor)
-              ? normalizedColor
-              : "Cor ainda incompleta"}
-          </Text>
-        </View>
+        <ColorInput
+          label="Cor secundária"
+          value={secondaryColor}
+          onChange={setSecondaryColor}
+          preview={normalizedSecondary}
+        />
+        <ColorInput
+          label="Cor de fundo"
+          value={backgroundColor}
+          onChange={setBackgroundColor}
+          preview={normalizedBackground}
+        />
       </EloCard>
 
       <View style={styles.notice}>
-        <P.InfoIcon
-          size={18}
-          color={eloColors.blue}
-          weight="duotone"
-        />
-        <Text style={styles.noticeText}>
-          A personalização identifica a sua igreja dentro do Nethanel Elo.
-          O ícone instalado do aplicativo continua sendo o Elo para manter
-          uma única instalação segura para todas as igrejas.
-        </Text>
+        {activeOrganization.white_label_enabled ? (
+          <P.SealCheckIcon
+            size={20}
+            color={normalizedPrimary}
+            weight="duotone"
+          />
+        ) : (
+          <P.InfoIcon size={20} color={eloColors.blue} weight="duotone" />
+        )}
+        <View style={styles.noticeCopy}>
+          <Text style={styles.noticeTitle}>
+            {activeOrganization.white_label_enabled
+              ? "White label ativado"
+              : "Identidade pronta para white label"}
+          </Text>
+          <Text style={styles.noticeText}>
+            {activeOrganization.white_label_enabled
+              ? "Nome, ícone e imagem de abertura ficam disponíveis para gerar a versão exclusiva desta igreja."
+              : "No Elo compartilhado, logo e cores mudam dentro do app. O ícone da tela do celular só muda quando uma versão exclusiva da igreja for gerada e instalada."}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.footer}>
         <EloActionButton
-          label="Salvar personalização"
+          label="Salvar identidade"
           icon="CheckIcon"
           loading={saving}
           onPress={() => void save()}
         />
       </View>
     </EloScreen>
+  );
+}
+
+function BrandAssetEditor({
+  title,
+  description,
+  imageUrl,
+  onPick,
+  onRemove,
+}: {
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  onPick: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <View>
+      <View style={styles.logoRow}>
+        <View style={styles.logoBox}>
+          {imageUrl ? (
+            <Image source={{ uri: imageUrl }} style={styles.logoImage} />
+          ) : (
+            <P.ImageIcon size={28} color={eloColors.muted} weight="duotone" />
+          )}
+        </View>
+        <View style={styles.logoCopy}>
+          <Text style={eloSharedStyles.cardTitle}>{title}</Text>
+          <Text style={styles.help}>{description}</Text>
+        </View>
+      </View>
+
+      <View style={styles.logoActions}>
+        <View style={styles.flexButton}>
+          <EloActionButton
+            label={imageUrl ? "Trocar imagem" : "Escolher imagem"}
+            icon="ImageIcon"
+            variant="secondary"
+            onPress={onPick}
+          />
+        </View>
+
+        {imageUrl ? (
+          <Pressable onPress={onRemove} style={styles.removeButton}>
+            <P.TrashIcon
+              size={18}
+              color={eloColors.danger}
+              weight="duotone"
+            />
+            <Text style={styles.removeText}>Remover</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function ColorInput({
+  label,
+  value,
+  onChange,
+  preview,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  preview: string;
+}) {
+  return (
+    <>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={(next) => onChange(sanitizeColorInput(next))}
+        autoCapitalize="characters"
+        maxLength={7}
+        placeholder="#2387C9"
+        placeholderTextColor="#A1A9B0"
+        style={styles.input}
+      />
+      <View style={styles.colorPreviewRow}>
+        <View
+          style={[
+            styles.colorPreviewDot,
+            {
+              backgroundColor: isValidColor(value) ? preview : eloColors.line,
+            },
+          ]}
+        />
+        <Text style={styles.colorPreviewText}>
+          {isValidColor(value) ? preview : "Cor ainda incompleta"}
+        </Text>
+      </View>
+    </>
   );
 }
 
@@ -447,7 +653,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 4,
     borderColor: eloColors.line,
     borderRadius: 20,
-    backgroundColor: "#FFFFFF",
   },
   previewLogo: {
     width: 62,
@@ -456,7 +661,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
     borderRadius: 18,
-    backgroundColor: "#F3F6F8",
   },
   previewLogoImage: {
     width: "100%",
@@ -507,7 +711,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   help: {
-    marginTop: 4,
+    marginTop: 5,
     fontSize: 10,
     lineHeight: 15,
     color: eloColors.muted,
@@ -537,6 +741,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     color: eloColors.danger,
+  },
+  divider: {
+    height: 1,
+    marginVertical: 18,
+    backgroundColor: eloColors.line,
   },
   label: {
     marginTop: 14,
@@ -585,6 +794,8 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
+    borderWidth: 1,
+    borderColor: eloColors.line,
   },
   colorPreviewText: {
     fontSize: 11,
@@ -600,8 +811,16 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: "#EAF5FB",
   },
-  noticeText: {
+  noticeCopy: {
     flex: 1,
+  },
+  noticeTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: eloColors.ink,
+  },
+  noticeText: {
+    marginTop: 3,
     fontSize: 11,
     lineHeight: 17,
     color: "#557084",

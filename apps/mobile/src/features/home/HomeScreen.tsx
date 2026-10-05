@@ -70,6 +70,8 @@ export function HomeScreen() {
 
   const brandColor =
     activeOrganization?.primary_color ?? eloColors.blue;
+  const backgroundColor =
+    activeOrganization?.background_color ?? eloColors.background;
 
   const load = useCallback(async () => {
     if (!activeOrganization || !activeUnit) {
@@ -170,19 +172,30 @@ export function HomeScreen() {
         : "Boa noite";
 
   return (
-    <SafeAreaView edges={["top"]} style={styles.safeArea}>
+    <SafeAreaView
+      edges={["top"]}
+      style={[styles.safeArea, { backgroundColor }]}
+    >
       <ScrollView
+        style={{ backgroundColor }}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
-            <EloLogo compact />
             {activeOrganization?.logo_url ? (
               <Image
                 source={{ uri: activeOrganization.logo_url }}
                 style={styles.churchLogo}
               />
+            ) : (
+              <EloLogo compact />
+            )}
+
+            {activeOrganization?.logo_url ? (
+              <Text style={styles.brandName} numberOfLines={1}>
+                {activeOrganization.app_name || activeOrganization.name}
+              </Text>
             ) : null}
           </View>
 
@@ -238,7 +251,7 @@ export function HomeScreen() {
                 <View style={styles.heroIconBlue}>
                   <P.ClipboardTextIcon
                     size={22}
-                    color={eloColors.blue}
+                    color={brandColor}
                     weight="duotone"
                   />
                 </View>
@@ -329,21 +342,25 @@ export function HomeScreen() {
               <QuickAction
                 icon="ClipboardTextIcon"
                 label="Escalas"
+                color={brandColor}
                 onPress={() => openModule("schedules")}
               />
               <QuickAction
                 icon="TicketIcon"
                 label="Eventos"
+                color={brandColor}
                 onPress={() => openModule("events")}
               />
               <QuickAction
                 icon="BabyIcon"
                 label="Elo Kids"
+                color={brandColor}
                 onPress={() => openModule("kids")}
               />
               <QuickAction
                 icon="UsersThreeIcon"
                 label="Departamentos"
+                color={brandColor}
                 onPress={() => openModule("departments")}
               />
             </View>
@@ -357,10 +374,12 @@ export function HomeScreen() {
 function QuickAction({
   icon,
   label,
+  color,
   onPress,
 }: {
   icon: string;
   label: string;
+  color: string;
   onPress: () => void;
 }) {
   const Icon = P[icon] ?? P.SquaresFourIcon;
@@ -374,7 +393,7 @@ function QuickAction({
       ]}
     >
       <View style={styles.quickIcon}>
-        <Icon size={21} color={eloColors.blue} weight="duotone" />
+        <Icon size={21} color={color} weight="duotone" />
       </View>
       <Text style={styles.quickLabel}>{label}</Text>
     </Pressable>
@@ -399,15 +418,23 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   brandRow: {
+    minWidth: 0,
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
   churchLogo: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 13,
     resizeMode: "cover",
+  },
+  brandName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "900",
+    color: eloColors.ink,
   },
   notificationButton: {
     width: 44,

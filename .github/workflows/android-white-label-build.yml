@@ -1,0 +1,85 @@
+name: Build Android White Label APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: "Nome que aparecerá no celular"
+        required: true
+        type: string
+      icon_url:
+        description: "URL pública da logo/ícone da igreja"
+        required: true
+        type: string
+      splash_url:
+        description: "URL pública da imagem de abertura (opcional)"
+        required: false
+        type: string
+      background_color:
+        description: "Cor de fundo hexadecimal"
+        required: true
+        default: "#F6F8FB"
+        type: string
+      scheme:
+        description: "Scheme do app (opcional)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  ELO_WHITE_LABEL: "true"
+  ELO_APP_NAME: ${{ inputs.app_name }}
+  ELO_BACKGROUND_COLOR: ${{ inputs.background_color }}
+  ELO_SCHEME: ${{ inputs.scheme }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare white label assets
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python apps/mobile/scripts/prepare_white_label_assets.py \
+            --icon-url "${{ inputs.icon_url }}" \
+            --splash-url "${{ inputs.splash_url }}" \
+            --background-color "${{ inputs.background_color }}"
+
+      - name: Validate mobile
+        run: npm run typecheck --workspace=mobile
+
+      - name: Validate resolved Expo config
+        working-directory: apps/mobile
+        run: npx expo config --type public
+
+      - name: Build personalized APK
+        working-directory: apps/mobile
+        run: eas build --platform android --profile preview --local --non-interactive --output ./elo-white-label.apk
+
+      - name: Upload personalized APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: elo-white-label-apk
+          path: apps/mobile/elo-white-label.apk
+          if-no-files-found: error
+          retention-days: 14
