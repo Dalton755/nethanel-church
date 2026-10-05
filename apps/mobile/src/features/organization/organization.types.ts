@@ -40,22 +40,26 @@ export type OrganizationContextItem = {
   name: string;
   slug: string;
   status: string;
+
   logo_url: string | null;
   primary_color: string;
 
+  /* Identidade expandida do Elo. */
+  app_name: string;
+  secondary_color: string;
+  background_color: string;
+  app_icon_url: string | null;
+  splash_url: string | null;
+  white_label_enabled: boolean;
+  custom_domain: string | null;
+
   person: OrganizationPerson;
-
   units: OrganizationUnit[];
-
   roles: OrganizationRole[];
 
   /*
-   * Mantido porque get_my_context
-   * ainda retorna este campo.
-   *
-   * O aplicativo não usará mais
-   * esta lista como fonte autoritativa
-   * de autorização.
+   * Mantido porque get_my_context ainda retorna este campo.
+   * A autorização efetiva continua vindo de get_my_access_matrix().
    */
   permissions: string[];
 };
@@ -65,6 +69,22 @@ export type MyContextResponse = {
   organizations: OrganizationContextItem[];
 };
 
+export type OrganizationBrandingContextItem = {
+  organization_id: string;
+  app_name: string;
+  logo_url: string | null;
+  app_icon_url: string | null;
+  splash_url: string | null;
+  primary_color: string;
+  secondary_color: string;
+  background_color: string;
+  white_label_enabled: boolean;
+  custom_domain: string | null;
+};
+
+export type MyBrandingContextResponse = {
+  organizations: OrganizationBrandingContextItem[];
+};
 
 /*
  * ============================================================
@@ -79,19 +99,7 @@ export type AccessMatrixUnit = {
 
 export type AccessMatrixOrganization = {
   organization_id: string;
-
-  /*
-   * Permissões que realmente valem
-   * para toda a organização.
-   */
   organization_permissions: string[];
-
-  /*
-   * Permissões efetivas em cada unidade.
-   *
-   * Perfis globais aparecem aqui também,
-   * pois são válidos naquela unidade.
-   */
   units: AccessMatrixUnit[];
 };
 
