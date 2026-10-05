@@ -5,7 +5,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import * as Phosphor from "phosphor-react-native";
@@ -32,24 +31,6 @@ type DashboardSummary = {
   projected_arr_cents: number;
   collected_month_cents: number;
   collected_total_cents: number;
-};
-
-type PaidPlan = {
-  code: string;
-  name: string;
-  price_cents: number | null;
-  currency: string;
-  billing_interval: string | null;
-  trial_days: number;
-  grace_period_days: number;
-};
-
-type FreeLimits = {
-  units?: number;
-  people?: number;
-  management_users?: number;
-  departments?: number;
-  active_service_series?: number;
 };
 
 type ClientItem = {
@@ -86,69 +67,55 @@ type PaymentItem = {
 
 type DashboardData = {
   summary: DashboardSummary;
-  paid_plan: PaidPlan | null;
-  free_plan: {
-    code: string;
-    name: string;
-    limits: FreeLimits;
-  } | null;
   clients: ClientItem[];
   recent_payments: PaymentItem[];
 };
 
-type FormState = {
-  price: string;
-  trialDays: string;
-  graceDays: string;
-  units: string;
-  people: string;
-  managementUsers: string;
-  departments: string;
-  activeSeries: string;
+type PlanFeatures = {
+  church_logo?: boolean;
+  custom_colors?: boolean;
+  finance_level?: string;
+  reports_level?: string;
+  management_dashboard_level?: string;
+  data_export?: boolean;
+  custom_splash?: boolean;
+  custom_app_name?: boolean;
+  custom_launcher_icon?: boolean;
+  standalone_apk?: boolean;
+  custom_domain?: boolean | string;
+  remove_elo_brand?: boolean;
+  multi_unit?: boolean;
+  network_dashboard?: boolean;
+  support_level?: string;
 };
 
-const EMPTY_FORM: FormState = {
-  price: "",
-  trialDays: "",
-  graceDays: "",
-  units: "",
-  people: "",
-  managementUsers: "",
-  departments: "",
-  activeSeries: "",
+type PlanItem = {
+  code: string;
+  name: string;
+  description: string | null;
+  price_cents: number | null;
+  currency: string;
+  billing_interval: string | null;
+  trial_days: number;
+  grace_period_days: number;
+  limits: {
+    units?: number | null;
+    people?: number | null;
+  };
+  features: PlanFeatures;
+  recommended: boolean;
+  sort_order: number;
 };
 
 function money(cents: number | null | undefined) {
+  if (cents === null || cents === undefined) {
+    return "Sob consulta";
+  }
+
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
-  }).format((cents ?? 0) / 100);
-}
-
-function editableMoney(cents: number | null | undefined) {
-  return ((cents ?? 0) / 100).toFixed(2).replace(".", ",");
-}
-
-function parseMoneyToCents(value: string) {
-  const cleaned = value.trim().replace(/[^0-9,.]/g, "");
-
-  if (!cleaned) return Number.NaN;
-
-  let normalized = cleaned;
-
-  if (cleaned.includes(",")) {
-    normalized = cleaned.replace(/\./g, "").replace(",", ".");
-  } else if ((cleaned.match(/\./g)?.length ?? 0) > 1) {
-    normalized = cleaned.replace(/\./g, "");
-  }
-
-  const amount = Number(normalized);
-  return Number.isFinite(amount) ? Math.round(amount * 100) : Number.NaN;
-}
-
-function parseWholeNumber(value: string) {
-  const parsed = Number(value.replace(/\D/g, ""));
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
+  }).format(cents / 100);
 }
 
 function dateLabel(value: string | null | undefined) {
@@ -161,97 +128,87 @@ function dateLabel(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+function peopleLimitLabel(plan: PlanItem) {
+  const limit = plan.limits?.people;
+
+  if (limit === null || limit === undefined) {
+    return "Sem limite fixo";
+  }
+
+  return `Até ${limit.toLocaleString("pt-BR")} pessoas`;
+}
+
+function planHighlights(plan: PlanItem) {
+  const highlights: string[] = [];
+
+  if (plan.features.finance_level === "basic") {
+    highlights.push("Financeiro básico");
+  } else if (plan.features.finance_level === "full") {
+    highlights.push("Financeiro completo");
+  }
+
+  if (plan.features.reports_level === "advanced") {
+    highlights.push("Relatórios avançados");
+  } else if (plan.features.reports_level === "standard") {
+    highlights.push("Relatórios completos");
+  }
+
+  if (plan.features.data_export) {
+    highlights.push("Exportação de dados");
+  }
+
+  if (plan.features.standalone_apk) {
+    highlights.push("App próprio da igreja");
+  }
+
+  if (plan.features.multi_unit) {
+    highlights.push("Matriz + congregações");
+  }
+
+  if (plan.features.custom_colors && highlights.length < 3) {
+    highlights.push("Personalização visual");
+  }
+
+  return highlights.slice(0, 3);
+}
+
 export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [plans, setPlans] = useState<PlanItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [blessingOrganizationId, setBlessingOrganizationId] = useState<string | null>(null);
+  const [assigningPlanOrganizationId, setAssigningPlanOrganizationId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const applyDashboard = useCallback((data: DashboardData) => {
-    setDashboard(data);
-
-    const paid = data.paid_plan;
-    const limits = data.free_plan?.limits ?? {};
-
-    setForm({
-      price: editableMoney(paid?.price_cents),
-      trialDays: String(paid?.trial_days ?? 14),
-      graceDays: String(paid?.grace_period_days ?? 3),
-      units: String(limits.units ?? 1),
-      people: String(limits.people ?? 50),
-      managementUsers: String(limits.management_users ?? 2),
-      departments: String(limits.departments ?? 2),
-      activeSeries: String(limits.active_service_series ?? 4),
-    });
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setErrorMessage(null);
 
-    const { data, error } = await supabase.rpc("platform_admin_dashboard");
+    const [dashboardResponse, plansResponse] = await Promise.all([
+      supabase.rpc("platform_admin_dashboard"),
+      supabase.rpc("platform_admin_plan_catalog"),
+    ]);
 
-    if (error) {
+    if (dashboardResponse.error || plansResponse.error) {
       setDashboard(null);
-      setErrorMessage(error.message);
+      setPlans([]);
+      setErrorMessage(
+        dashboardResponse.error?.message ??
+          plansResponse.error?.message ??
+          "Não foi possível carregar o painel."
+      );
       setLoading(false);
       return;
     }
 
-    applyDashboard(data as DashboardData);
+    setDashboard(dashboardResponse.data as DashboardData);
+    setPlans((plansResponse.data ?? []) as PlanItem[]);
     setLoading(false);
-  }, [applyDashboard]);
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
-
-  function updateForm(key: keyof FormState, value: string) {
-    setForm((current) => ({ ...current, [key]: value }));
-  }
-
-  async function saveBilling() {
-    const values = {
-      priceCents: parseMoneyToCents(form.price),
-      trialDays: parseWholeNumber(form.trialDays),
-      graceDays: parseWholeNumber(form.graceDays),
-      units: parseWholeNumber(form.units),
-      people: parseWholeNumber(form.people),
-      managementUsers: parseWholeNumber(form.managementUsers),
-      departments: parseWholeNumber(form.departments),
-      activeSeries: parseWholeNumber(form.activeSeries),
-    };
-
-    if (Object.values(values).some((value) => !Number.isFinite(value))) {
-      Alert.alert("Revise os campos", "Preencha todos os valores com números válidos.");
-      return;
-    }
-
-    setSaving(true);
-
-    const { data, error } = await supabase.rpc("platform_admin_update_billing", {
-      p_price_cents: values.priceCents,
-      p_trial_days: values.trialDays,
-      p_grace_period_days: values.graceDays,
-      p_free_units_limit: values.units,
-      p_free_people_limit: values.people,
-      p_free_management_users_limit: values.managementUsers,
-      p_free_departments_limit: values.departments,
-      p_free_active_series_limit: values.activeSeries,
-    });
-
-    setSaving(false);
-
-    if (error) {
-      Alert.alert("Não foi possível salvar", error.message);
-      return;
-    }
-
-    applyDashboard(data as DashboardData);
-    Alert.alert("Configuração atualizada", "Preço, teste e limites do Elo Livre foram atualizados.");
-  }
 
   async function setChurchBlessing(client: ClientItem, active: boolean) {
     setBlessingOrganizationId(client.id);
@@ -269,13 +226,13 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
       return;
     }
 
-    applyDashboard(data as DashboardData);
+    setDashboard(data as DashboardData);
 
     Alert.alert(
       active ? "Igreja abençoada" : "Bênção encerrada",
       active
-        ? `${client.name} agora tem todos os recursos do Elo Igreja gratuitamente, sem mensalidade.`
-        : `${client.name} voltou a seguir as regras do plano e da assinatura cadastrada.`
+        ? `${client.name} agora tem acesso integral ao Nethanel Elo sem mensalidade.`
+        : `${client.name} voltou a seguir as regras do plano comercial cadastrado.`
     );
   }
 
@@ -285,7 +242,7 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
     Alert.alert(
       nextActive ? "Abençoar esta igreja?" : "Encerrar a bênção?",
       nextActive
-        ? `A ${client.name} receberá acesso completo ao Elo Igreja sem cobrança de mensalidade.`
+        ? `A ${client.name} receberá acesso integral ao Elo sem cobrança de mensalidade.`
         : `A ${client.name} deixará de ter a cortesia social. Nenhum dado da igreja será apagado.`,
       [
         { text: "Cancelar", style: "cancel" },
@@ -294,6 +251,57 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
           style: nextActive ? "default" : "destructive",
           onPress: () => {
             void setChurchBlessing(client, nextActive);
+          },
+        },
+      ]
+    );
+  }
+
+  async function assignPlan(client: ClientItem, plan: PlanItem) {
+    if (client.is_blessed) {
+      Alert.alert(
+        "Igreja abençoada",
+        "Encerre a bênção antes de alterar o plano cobrado. O plano cadastrado pode ser alterado depois sem apagar nenhum dado."
+      );
+      return;
+    }
+
+    if (client.plan_code === plan.code) {
+      return;
+    }
+
+    setAssigningPlanOrganizationId(client.id);
+
+    const { data, error } = await supabase.rpc("platform_admin_assign_plan", {
+      p_organization_id: client.id,
+      p_plan_code: plan.code,
+    });
+
+    setAssigningPlanOrganizationId(null);
+
+    if (error) {
+      Alert.alert("Não foi possível alterar o plano", error.message);
+      return;
+    }
+
+    setDashboard(data as DashboardData);
+    Alert.alert("Plano atualizado", `${client.name} agora está no ${plan.name}.`);
+  }
+
+  function confirmAssignPlan(client: ClientItem, plan: PlanItem) {
+    if (client.plan_code === plan.code) return;
+
+    Alert.alert(
+      `Mover para ${plan.name}?`,
+      plan.price_cents === null
+        ? `${client.name} ficará no ${plan.name}. O valor comercial deverá ser definido manualmente.`
+        : `${client.name} ficará no ${plan.name} (${money(plan.price_cents)}/mês).`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Alterar plano",
+          onPress: () => {
+            void assignPlan(client, plan);
           },
         },
       ]
@@ -325,71 +333,49 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
           <Text style={eloSharedStyles.sectionTitle}>Visão geral</Text>
           <View style={styles.metricsGrid}>
             <MetricCard label="Clientes" value={String(summary.clients)} caption="igrejas ativas" />
-            <MetricCard label="Elo Igreja" value={String(summary.paid_clients)} caption="assinaturas pagas" />
-            <MetricCard label="Abençoadas" value={String(summary.blessed_clients)} caption="acesso integral gratuito" accent />
-            <MetricCard label="Elo Livre" value={String(summary.free_clients)} caption="plano gratuito" />
+            <MetricCard label="Assinaturas" value={String(summary.paid_clients)} caption="planos pagos" />
+            <MetricCard
+              label="Abençoadas"
+              value={String(summary.blessed_clients)}
+              caption="acesso integral gratuito"
+              accent
+            />
+            <MetricCard label="Legado grátis" value={String(summary.free_clients)} caption="Elo Livre antigo" />
             <MetricCard label="Pessoas" value={String(summary.people)} caption="cadastradas" />
           </View>
 
           <Text style={eloSharedStyles.sectionTitle}>Financeiro da plataforma</Text>
           <View style={styles.metricsGrid}>
-            <MetricCard label="MRR contratado" value={money(summary.contracted_mrr_cents)} caption="receita mensal recorrente" />
-            <MetricCard label="ARR projetado" value={money(summary.projected_arr_cents)} caption="12 meses" />
-            <MetricCard label="Recebido no mês" value={money(summary.collected_month_cents)} caption="pagamentos confirmados" />
-            <MetricCard label="Recebido total" value={money(summary.collected_total_cents)} caption="histórico confirmado" />
+            <MetricCard
+              label="MRR contratado"
+              value={money(summary.contracted_mrr_cents)}
+              caption="receita mensal recorrente"
+            />
+            <MetricCard
+              label="ARR projetado"
+              value={money(summary.projected_arr_cents)}
+              caption="12 meses"
+            />
+            <MetricCard
+              label="Recebido no mês"
+              value={money(summary.collected_month_cents)}
+              caption="pagamentos confirmados"
+            />
+            <MetricCard
+              label="Recebido total"
+              value={money(summary.collected_total_cents)}
+              caption="histórico confirmado"
+            />
           </View>
 
-          <Text style={eloSharedStyles.sectionTitle}>Planos e cobrança</Text>
-          <EloCard>
-            <Text style={styles.cardHeadline}>Elo Igreja</Text>
-            <Text style={styles.cardCopy}>
-              Estes valores ficam no banco e podem ser alterados sem publicar uma nova versão do aplicativo.
-            </Text>
+          <Text style={eloSharedStyles.sectionTitle}>Planos oficiais</Text>
+          <Text style={styles.sectionIntro}>
+            A grade abaixo vem do banco. Crescimento é o plano recomendado; Rede permanece sob consulta.
+          </Text>
 
-            <Field label="Mensalidade" value={form.price} prefix="R$" keyboardType="decimal-pad" onChangeText={(value) => updateForm("price", value)} />
-
-            <View style={styles.inlineFields}>
-              <View style={styles.inlineField}>
-                <Field label="Teste gratuito" value={form.trialDays} suffix="dias" keyboardType="number-pad" onChangeText={(value) => updateForm("trialDays", value)} />
-              </View>
-              <View style={styles.inlineField}>
-                <Field label="Tolerância" value={form.graceDays} suffix="dias" keyboardType="number-pad" onChangeText={(value) => updateForm("graceDays", value)} />
-              </View>
-            </View>
-
-            <View style={styles.planPreview}>
-              <Text style={styles.planPreviewLabel}>VALOR ATUAL</Text>
-              <Text style={styles.planPreviewValue}>{money(dashboard.paid_plan?.price_cents)}</Text>
-              <Text style={styles.planPreviewHint}>
-                {dashboard.paid_plan?.trial_days ?? 0} dias grátis • cobrança mensal
-              </Text>
-            </View>
-          </EloCard>
-
-          <Text style={styles.freeTitle}>Limites do Elo Livre</Text>
-          <EloCard>
-            <View style={styles.inlineFields}>
-              <View style={styles.inlineField}>
-                <Field label="Igrejas/unidades" value={form.units} keyboardType="number-pad" onChangeText={(value) => updateForm("units", value)} />
-              </View>
-              <View style={styles.inlineField}>
-                <Field label="Pessoas" value={form.people} keyboardType="number-pad" onChangeText={(value) => updateForm("people", value)} />
-              </View>
-            </View>
-            <View style={styles.inlineFields}>
-              <View style={styles.inlineField}>
-                <Field label="Usuários de gestão" value={form.managementUsers} keyboardType="number-pad" onChangeText={(value) => updateForm("managementUsers", value)} />
-              </View>
-              <View style={styles.inlineField}>
-                <Field label="Departamentos" value={form.departments} keyboardType="number-pad" onChangeText={(value) => updateForm("departments", value)} />
-              </View>
-            </View>
-            <Field label="Séries/cultos recorrentes ativos" value={form.activeSeries} keyboardType="number-pad" onChangeText={(value) => updateForm("activeSeries", value)} />
-            <Text style={styles.auditNote}>Toda alteração fica registrada no histórico administrativo da plataforma.</Text>
-            <View style={styles.saveButton}>
-              <EloActionButton label="Salvar configuração" icon="FloppyDiskIcon" loading={saving} onPress={() => void saveBilling()} />
-            </View>
-          </EloCard>
+          {plans.map((plan) => (
+            <PlanCard key={plan.code} plan={plan} />
+          ))}
 
           <Text style={eloSharedStyles.sectionTitle}>Abençoar igrejas</Text>
           <EloCard style={styles.blessingInfoCard}>
@@ -400,7 +386,7 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
               <View style={styles.blessingInfoCopy}>
                 <Text style={styles.cardHeadline}>Cortesia social Nethanel</Text>
                 <Text style={styles.cardCopy}>
-                  Use “Abençoar” para uma igreja que não pode pagar. Ela recebe todos os recursos do Elo Igreja, sem mensalidade, enquanto a bênção estiver ativa.
+                  Use “Abençoar” quando uma igreja não puder pagar. Ela recebe acesso integral ao Elo por R$ 0 enquanto a bênção estiver ativa.
                 </Text>
               </View>
             </View>
@@ -408,14 +394,21 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
 
           <Text style={eloSharedStyles.sectionTitle}>Clientes</Text>
           {dashboard.clients.length === 0 ? (
-            <EloState icon="BuildingsIcon" title="Nenhum cliente ainda" description="As igrejas cadastradas no Elo aparecerão aqui." />
+            <EloState
+              icon="BuildingsIcon"
+              title="Nenhum cliente ainda"
+              description="As igrejas cadastradas no Elo aparecerão aqui."
+            />
           ) : (
             dashboard.clients.map((client) => (
               <ClientCard
                 key={client.id}
                 client={client}
+                plans={plans}
                 blessingLoading={blessingOrganizationId === client.id}
+                planLoading={assigningPlanOrganizationId === client.id}
                 onToggleBlessing={() => confirmChurchBlessing(client)}
+                onAssignPlan={(plan) => confirmAssignPlan(client, plan)}
               />
             ))
           )}
@@ -432,7 +425,9 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
                 <View style={styles.paymentRow}>
                   <View style={styles.paymentCopy}>
                     <Text style={styles.clientName}>{payment.organization_name}</Text>
-                    <Text style={styles.clientMeta}>{payment.provider} • {dateLabel(payment.paid_at ?? payment.created_at)}</Text>
+                    <Text style={styles.clientMeta}>
+                      {payment.provider} • {dateLabel(payment.paid_at ?? payment.created_at)}
+                    </Text>
                   </View>
                   <Text style={styles.paymentAmount}>{money(payment.amount_cents)}</Text>
                 </View>
@@ -445,7 +440,17 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-function MetricCard({ label, value, caption, accent = false }: { label: string; value: string; caption: string; accent?: boolean }) {
+function MetricCard({
+  label,
+  value,
+  caption,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  caption: string;
+  accent?: boolean;
+}) {
   return (
     <View style={[styles.metricCard, accent && styles.metricCardAccent]}>
       <Text style={[styles.metricLabel, accent && styles.metricLabelAccent]}>{label}</Text>
@@ -455,47 +460,73 @@ function MetricCard({ label, value, caption, accent = false }: { label: string; 
   );
 }
 
-function Field({
-  label,
-  value,
-  onChangeText,
-  keyboardType,
-  prefix,
-  suffix,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  keyboardType: "decimal-pad" | "number-pad";
-  prefix?: string;
-  suffix?: string;
-}) {
+function PlanCard({ plan }: { plan: PlanItem }) {
+  const highlights = planHighlights(plan);
+
   return (
-    <View style={styles.fieldBlock}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.inputWrap}>
-        {prefix ? <Text style={styles.inputAffix}>{prefix}</Text> : null}
-        <TextInput
-          value={value}
-          onChangeText={onChangeText}
-          keyboardType={keyboardType}
-          style={styles.input}
-          selectTextOnFocus
-        />
-        {suffix ? <Text style={styles.inputAffix}>{suffix}</Text> : null}
+    <EloCard style={[styles.planCard, plan.recommended && styles.planCardRecommended]}>
+      <View style={styles.planHeader}>
+        <View style={styles.planCopy}>
+          <View style={styles.planTitleRow}>
+            <Text style={styles.cardHeadline}>{plan.name}</Text>
+            {plan.recommended ? (
+              <View style={styles.recommendedBadge}>
+                <Text style={styles.recommendedBadgeText}>MAIS ESCOLHIDO</Text>
+              </View>
+            ) : null}
+          </View>
+          <Text style={styles.cardCopy}>{plan.description ?? ""}</Text>
+        </View>
+
+        <View style={styles.planPriceWrap}>
+          <Text style={styles.planPrice}>{money(plan.price_cents)}</Text>
+          {plan.price_cents !== null ? <Text style={styles.planPerMonth}>/mês</Text> : null}
+        </View>
       </View>
-    </View>
+
+      <View style={styles.planDivider} />
+
+      <View style={styles.planMetaRow}>
+        <View style={styles.planMetaPill}>
+          <P.UsersThreeIcon size={15} color={eloColors.blue} weight="duotone" />
+          <Text style={styles.planMetaText}>{peopleLimitLabel(plan)}</Text>
+        </View>
+        {plan.trial_days > 0 ? (
+          <View style={styles.planMetaPill}>
+            <P.GiftIcon size={15} color={eloColors.green} weight="duotone" />
+            <Text style={styles.planMetaText}>{plan.trial_days} dias grátis</Text>
+          </View>
+        ) : null}
+      </View>
+
+      {highlights.length > 0 ? (
+        <View style={styles.planHighlights}>
+          {highlights.map((highlight) => (
+            <View key={highlight} style={styles.highlightRow}>
+              <P.CheckCircleIcon size={16} color={eloColors.green} weight="fill" />
+              <Text style={styles.highlightText}>{highlight}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </EloCard>
   );
 }
 
 function ClientCard({
   client,
+  plans,
   blessingLoading,
+  planLoading,
   onToggleBlessing,
+  onAssignPlan,
 }: {
   client: ClientItem;
+  plans: PlanItem[];
   blessingLoading: boolean;
+  planLoading: boolean;
   onToggleBlessing: () => void;
+  onAssignPlan: (plan: PlanItem) => void;
 }) {
   const location = [client.city, client.state].filter(Boolean).join(" • ") || "Local não informado";
 
@@ -512,23 +543,93 @@ function ClientCard({
               </View>
             ) : null}
           </View>
-          <Text style={styles.clientMeta}>{location} • {client.people_count} pessoas</Text>
+          <Text style={styles.clientMeta}>
+            {location} • {client.people_count} pessoas
+          </Text>
         </View>
 
-        <View style={[styles.planBadge, client.plan_code === "GRATUITO" && !client.is_blessed && styles.freeBadge, client.is_blessed && styles.blessedPlanBadge]}>
-          <Text style={[styles.planBadgeText, client.plan_code === "GRATUITO" && !client.is_blessed && styles.freeBadgeText, client.is_blessed && styles.blessedPlanBadgeText]}>
-            {client.is_blessed ? "Elo completo" : client.plan_name}
+        <View
+          style={[
+            styles.planBadge,
+            client.plan_code === "GRATUITO" && !client.is_blessed && styles.freeBadge,
+            client.is_blessed && styles.blessedPlanBadge,
+          ]}
+        >
+          <Text
+            style={[
+              styles.planBadgeText,
+              client.plan_code === "GRATUITO" && !client.is_blessed && styles.freeBadgeText,
+              client.is_blessed && styles.blessedPlanBadgeText,
+            ]}
+          >
+            {client.is_blessed ? "Elo Abençoar" : client.plan_name}
           </Text>
         </View>
       </View>
 
       <View style={styles.divider} />
-      <InfoLine label="Status" value={client.is_blessed ? "Cortesia integral ativa" : client.subscription_status} />
+      <InfoLine
+        label="Status"
+        value={client.is_blessed ? "Cortesia integral ativa" : client.subscription_status}
+      />
       <InfoLine label="Cliente desde" value={dateLabel(client.created_at)} />
-      {client.is_blessed ? <InfoLine label="Abençoada em" value={dateLabel(client.blessed_at)} /> : null}
+      {client.is_blessed ? (
+        <InfoLine label="Abençoada em" value={dateLabel(client.blessed_at)} />
+      ) : null}
       <InfoLine label="Contato" value={client.contact_name ?? "—"} />
       <InfoLine label="E-mail" value={client.contact_email ?? "—"} />
       <InfoLine label="Telefone" value={client.contact_phone ?? "—"} />
+
+      <Text style={styles.planChooserTitle}>Plano comercial</Text>
+      {planLoading ? (
+        <View style={styles.planLoading}>
+          <ActivityIndicator size="small" />
+          <Text style={styles.planLoadingText}>Atualizando plano...</Text>
+        </View>
+      ) : (
+        <View style={styles.planChooser}>
+          {plans.map((plan) => {
+            const selected = client.plan_code === plan.code && !client.is_blessed;
+
+            return (
+              <Pressable
+                key={plan.code}
+                disabled={client.is_blessed}
+                onPress={() => onAssignPlan(plan)}
+                style={({ pressed }) => [
+                  styles.planChoice,
+                  selected && styles.planChoiceSelected,
+                  client.is_blessed && styles.planChoiceDisabled,
+                  pressed && !client.is_blessed && !selected && styles.planChoicePressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.planChoiceName,
+                    selected && styles.planChoiceNameSelected,
+                  ]}
+                >
+                  {plan.name.replace("Elo ", "")}
+                </Text>
+                <Text
+                  style={[
+                    styles.planChoicePrice,
+                    selected && styles.planChoicePriceSelected,
+                  ]}
+                >
+                  {money(plan.price_cents)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      {client.is_blessed ? (
+        <Text style={styles.blessedPlanHint}>
+          A bênção está acima do plano comercial. Encerre a bênção para alterar a cobrança.
+        </Text>
+      ) : null}
 
       <View style={styles.blessingAction}>
         <EloActionButton
@@ -547,7 +648,9 @@ function InfoLine({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.infoLine}>
       <Text style={styles.infoLabel}>{label}</Text>
-      <Text selectable style={styles.infoValue}>{value}</Text>
+      <Text selectable style={styles.infoValue}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -575,38 +678,76 @@ const styles = StyleSheet.create({
     backgroundColor: eloColors.surface,
   },
   metricCardAccent: { backgroundColor: "#FFF9E8", borderColor: "#F0D992" },
-  metricLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase", color: eloColors.muted },
+  metricLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: eloColors.muted,
+  },
   metricLabelAccent: { color: "#8A5B00" },
-  metricValue: { marginTop: 9, fontSize: 24, lineHeight: 29, fontWeight: "900", color: eloColors.ink },
+  metricValue: {
+    marginTop: 9,
+    fontSize: 24,
+    lineHeight: 29,
+    fontWeight: "900",
+    color: eloColors.ink,
+  },
   metricCaption: { marginTop: 4, fontSize: 10, lineHeight: 14, color: eloColors.muted },
+  sectionIntro: {
+    marginTop: -3,
+    marginBottom: 10,
+    fontSize: 11,
+    lineHeight: 17,
+    color: eloColors.muted,
+  },
   cardHeadline: { fontSize: 18, fontWeight: "900", color: eloColors.ink },
   cardCopy: { marginTop: 5, fontSize: 12, lineHeight: 18, color: eloColors.muted },
-  fieldBlock: { flex: 1, marginTop: 15 },
-  fieldLabel: { marginBottom: 7, fontSize: 11, fontWeight: "800", color: eloColors.muted },
-  inputWrap: {
-    minHeight: 50,
+  planCard: { marginBottom: 10 },
+  planCardRecommended: { borderColor: "#B8D6EA", backgroundColor: "#F8FCFF" },
+  planHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  planCopy: { flex: 1 },
+  planTitleRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 7 },
+  recommendedBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#E5F3FC",
+  },
+  recommendedBadgeText: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    color: eloColors.blue,
+  },
+  planPriceWrap: { alignItems: "flex-end" },
+  planPrice: { fontSize: 16, fontWeight: "900", color: eloColors.ink },
+  planPerMonth: { marginTop: 1, fontSize: 9, fontWeight: "700", color: eloColors.muted },
+  planDivider: { height: 1, marginVertical: 12, backgroundColor: eloColors.line },
+  planMetaRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  planMetaPill: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 13,
-    borderWidth: 1,
-    borderColor: eloColors.line,
-    borderRadius: 14,
-    backgroundColor: "#FAFBFC",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: eloColors.surfaceSoft,
   },
-  input: { flex: 1, minWidth: 40, paddingVertical: 11, fontSize: 16, fontWeight: "800", color: eloColors.ink },
-  inputAffix: { marginRight: 7, fontSize: 12, fontWeight: "800", color: eloColors.muted },
-  inlineFields: { flexDirection: "row", gap: 10 },
-  inlineField: { flex: 1 },
-  planPreview: { marginTop: 16, padding: 14, borderRadius: 15, backgroundColor: eloColors.surfaceSoft },
-  planPreviewLabel: { fontSize: 9, fontWeight: "900", letterSpacing: 0.8, color: eloColors.muted },
-  planPreviewValue: { marginTop: 4, fontSize: 25, fontWeight: "900", color: eloColors.ink },
-  planPreviewHint: { marginTop: 2, fontSize: 11, color: eloColors.muted },
-  freeTitle: { marginTop: 14, marginBottom: 8, fontSize: 13, fontWeight: "900", color: eloColors.ink },
-  auditNote: { marginTop: 15, fontSize: 10, lineHeight: 15, color: eloColors.muted },
-  saveButton: { marginTop: 15 },
+  planMetaText: { fontSize: 9, fontWeight: "800", color: eloColors.ink },
+  planHighlights: { marginTop: 11, gap: 7 },
+  highlightRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  highlightText: { flex: 1, fontSize: 10, lineHeight: 14, color: eloColors.muted },
   blessingInfoCard: { backgroundColor: "#FFF9E8", borderColor: "#F0D992" },
   blessingInfoRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  blessingIcon: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF1C7" },
+  blessingIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF1C7",
+  },
   blessingInfoCopy: { flex: 1 },
   clientCard: { marginBottom: 10 },
   clientCardBlessed: { borderColor: "#E9CC76", backgroundColor: "#FFFDF5" },
@@ -615,18 +756,86 @@ const styles = StyleSheet.create({
   clientTitleRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 7 },
   clientName: { fontSize: 15, fontWeight: "900", color: eloColors.ink },
   clientMeta: { marginTop: 3, fontSize: 10, color: eloColors.muted },
-  blessedBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 4, borderRadius: 999, backgroundColor: "#FFF0BD" },
-  blessedBadgeText: { fontSize: 8, fontWeight: "900", letterSpacing: 0.5, color: "#8A5B00" },
-  planBadge: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 9, backgroundColor: eloColors.successSoft },
-  planBadgeText: { fontSize: 9, fontWeight: "900", color: eloColors.green },
+  blessedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#FFF0BD",
+  },
+  blessedBadgeText: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    color: "#8A5B00",
+  },
+  planBadge: {
+    maxWidth: 122,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 9,
+    backgroundColor: eloColors.successSoft,
+  },
+  planBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    textAlign: "center",
+    color: eloColors.green,
+  },
   freeBadge: { backgroundColor: eloColors.surfaceSoft },
   freeBadgeText: { color: eloColors.blue },
   blessedPlanBadge: { backgroundColor: "#FFF0BD" },
   blessedPlanBadgeText: { color: "#8A5B00" },
   divider: { height: 1, marginVertical: 12, backgroundColor: eloColors.line },
-  infoLine: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 4 },
+  infoLine: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingVertical: 4,
+  },
   infoLabel: { width: 88, fontSize: 10, fontWeight: "800", color: eloColors.muted },
-  infoValue: { flex: 1, textAlign: "right", fontSize: 11, fontWeight: "700", color: eloColors.ink },
+  infoValue: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: 11,
+    fontWeight: "700",
+    color: eloColors.ink,
+  },
+  planChooserTitle: {
+    marginTop: 15,
+    marginBottom: 8,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: eloColors.muted,
+  },
+  planChooser: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  planChoice: {
+    minWidth: "30%",
+    flexGrow: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: eloColors.line,
+    borderRadius: 12,
+    backgroundColor: eloColors.surface,
+  },
+  planChoiceSelected: {
+    borderColor: eloColors.blue,
+    backgroundColor: "#EAF6FD",
+  },
+  planChoiceDisabled: { opacity: 0.45 },
+  planChoicePressed: { opacity: 0.7 },
+  planChoiceName: { fontSize: 9, fontWeight: "900", color: eloColors.ink },
+  planChoiceNameSelected: { color: eloColors.blue },
+  planChoicePrice: { marginTop: 2, fontSize: 8, fontWeight: "700", color: eloColors.muted },
+  planChoicePriceSelected: { color: eloColors.blue },
+  planLoading: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10 },
+  planLoadingText: { fontSize: 10, fontWeight: "700", color: eloColors.muted },
+  blessedPlanHint: { marginTop: 8, fontSize: 9, lineHeight: 14, color: "#8A5B00" },
   blessingAction: { marginTop: 14 },
   emptyTitle: { fontSize: 14, fontWeight: "900", color: eloColors.ink },
   paymentCard: { marginBottom: 10 },
