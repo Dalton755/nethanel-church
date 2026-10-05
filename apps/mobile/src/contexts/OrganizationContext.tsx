@@ -21,17 +21,43 @@ import type {
   OrganizationUnit,
 } from "../features/organization/organization.types";
 
+export type OrganizationPlanFeatureValue =
+  | boolean
+  | string
+  | number
+  | null;
+
+export type OrganizationPlanContext = {
+  organization_id: string;
+  is_blessed: boolean;
+  is_trial: boolean;
+  trial_ends_at: string | null;
+  subscription_status: string;
+  billing_plan_code: string;
+  effective_plan_code: string;
+  price_cents: number | null;
+  name: string;
+  base_plan_name: string;
+  limits: Record<string, number | null>;
+  features: Record<string, OrganizationPlanFeatureValue>;
+  usage: Record<string, number>;
+};
+
 type OrganizationContextValue = {
   profile: OrganizationProfile | null;
   organizations: OrganizationContextItem[];
   activeOrganization: OrganizationContextItem | null;
   activeUnit: OrganizationUnit | null;
+  planContext: OrganizationPlanContext | null;
+  planFeatures: Record<string, OrganizationPlanFeatureValue>;
   permissions: string[];
   organizationPermissions: string[];
   loading: boolean;
   errorMessage: string | null;
   can: (permissionKey: string, unitId?: string) => boolean;
   canAtOrganization: (permissionKey: string) => boolean;
+  hasPlanFeature: (featureKey: string) => boolean;
+  planFeature: (featureKey: string) => OrganizationPlanFeatureValue;
   refreshContext: (options?: { silent?: boolean }) => Promise<void>;
   selectOrganization: (organizationId: string) => Promise<void>;
   selectUnit: (unitId: string) => Promise<void>;
@@ -104,6 +130,8 @@ export function OrganizationProvider({
   const [activeOrganization, setActiveOrganization] =
     useState<OrganizationContextItem | null>(null);
   const [activeUnit, setActiveUnit] = useState<OrganizationUnit | null>(null);
+  const [planContext, setPlanContext] =
+    useState<OrganizationPlanContext | null>(null);
   const [accessMatrix, setAccessMatrix] = useState<MyAccessMatrixResponse>({
     organizations: [],
   });
@@ -116,6 +144,21 @@ export function OrganizationProvider({
       `@nethanel/active-unit/${userId}/${organizationId}`,
     [userId]
   );
+
+  const loadPlanContext = useCallback(async (organizationId: string) => {
+    const { data, error } = await supabase.rpc("get_organization_plan_context", {
+      p_organization_id: organizationId,
+    });
+
+    if (error) {
+      setPlanContext(null);
+      return null;
+    }
+
+    const nextPlanContext = data as OrganizationPlanContext | null;
+    setPlanContext(nextPlanContext);
+    return nextPlanContext;
+  }, []);
 
   const refreshContext = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -180,13 +223,14 @@ export function OrganizationProvider({
 
         if (!nextOrganization) {
           setActiveUnit(null);
+          setPlanContext(null);
           return;
         }
 
-        await AsyncStorage.setItem(
-          organizationStorageKey,
-          nextOrganization.id
-        );
+        await Promise.all([
+          AsyncStorage.setItem(organizationStorageKey, nextOrganization.id),
+          loadPlanContext(nextOrganization.id),
+        ]);
 
         const storedUnitId = await AsyncStorage.getItem(
           unitStorageKey(nextOrganization.id)
@@ -217,12 +261,13 @@ export function OrganizationProvider({
         setOrganizations([]);
         setActiveOrganization(null);
         setActiveUnit(null);
+        setPlanContext(null);
         setAccessMatrix({ organizations: [] });
       } finally {
         if (!silent) setLoading(false);
       }
     },
-    [organizationStorageKey, unitStorageKey]
+    [organizationStorageKey, unitStorageKey, loadPlanContext]
   );
 
   useEffect(() => {
@@ -250,7 +295,10 @@ export function OrganizationProvider({
       }
 
       setActiveOrganization(organization);
-      await AsyncStorage.setItem(organizationStorageKey, organization.id);
+      await Promise.all([
+        AsyncStorage.setItem(organizationStorageKey, organization.id),
+        loadPlanContext(organization.id),
+      ]);
 
       const storedUnitId = await AsyncStorage.getItem(
         unitStorageKey(organization.id)
@@ -265,7 +313,7 @@ export function OrganizationProvider({
         await AsyncStorage.setItem(unitStorageKey(organization.id), unit.id);
       }
     },
-    [organizations, organizationStorageKey, unitStorageKey]
+    [organizations, organizationStorageKey, unitStorageKey, loadPlanContext]
   );
 
   const selectUnit = useCallback(
@@ -292,6 +340,7 @@ export function OrganizationProvider({
   const clearOrganizationSelection = useCallback(async () => {
     setActiveOrganization(null);
     setActiveUnit(null);
+    setPlanContext(null);
     await AsyncStorage.removeItem(organizationStorageKey);
   }, [organizationStorageKey]);
 
@@ -319,6 +368,21 @@ export function OrganizationProvider({
         ?.permissions ?? []
     );
   }, [activeAccess, activeUnit]);
+
+  const planFeatures = useMemo(
+    () => planContext?.features ?? {},
+    [planContext]
+  );
+
+  const planFeature = useCallback(
+    (featureKey: string) => planFeatures[featureKey] ?? null,
+    [planFeatures]
+  );
+
+  const hasPlanFeature = useCallback(
+    (featureKey: string) => planFeatures[featureKey] === true,
+    [planFeatures]
+  );
 
   const can = useCallback(
     (permissionKey: string, unitId?: string) => {
@@ -351,12 +415,16 @@ export function OrganizationProvider({
       organizations,
       activeOrganization,
       activeUnit,
+      planContext,
+      planFeatures,
       permissions,
       organizationPermissions,
       loading,
       errorMessage,
       can,
       canAtOrganization,
+      hasPlanFeature,
+      planFeature,
       refreshContext,
       selectOrganization,
       selectUnit,
@@ -367,12 +435,16 @@ export function OrganizationProvider({
       organizations,
       activeOrganization,
       activeUnit,
+      planContext,
+      planFeatures,
       permissions,
       organizationPermissions,
       loading,
       errorMessage,
       can,
       canAtOrganization,
+      hasPlanFeature,
+      planFeature,
       refreshContext,
       selectOrganization,
       selectUnit,
