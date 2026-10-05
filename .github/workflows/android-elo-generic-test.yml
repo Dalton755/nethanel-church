@@ -1,0 +1,65 @@
+name: Build Nethanel Elo Generic APK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/android-elo-generic-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install compatible splash package
+        working-directory: apps/mobile
+        run: npx expo install expo-splash-screen
+
+      - name: Prepare Nethanel Elo native assets
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python apps/mobile/scripts/generate_elo_native_assets.py
+
+      - name: Validate mobile
+        run: npm run typecheck --workspace=mobile
+
+      - name: Validate generic Elo Expo config
+        working-directory: apps/mobile
+        run: |
+          npx expo config --type public > /tmp/elo-config.json
+          node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('/tmp/elo-config.json','utf8')); if(c.name!=='Nethanel Elo') throw new Error('Nome inesperado: '+c.name); if(c.android?.package!=='br.com.nethanel.church') throw new Error('Package inesperado: '+c.android?.package); const schemes=Array.isArray(c.scheme)?c.scheme:[c.scheme]; if(!schemes.includes('nethanelelo')) throw new Error('Scheme nethanelelo ausente'); console.log('Config genérica validada:', c.name, c.android.package, schemes);"
+
+      - name: Build generic Elo APK locally
+        working-directory: apps/mobile
+        run: eas build --platform android --profile preview --local --non-interactive --output ./nethanel-elo-generic.apk
+
+      - name: Upload generic Elo APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nethanel-elo-generic-apk
+          path: apps/mobile/nethanel-elo-generic.apk
+          if-no-files-found: error
+          retention-days: 14
