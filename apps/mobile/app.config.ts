@@ -22,7 +22,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const splashPath =
     process.env.ELO_SPLASH_PATH || "./assets/white-label/splash-icon.png";
   const androidPackage =
-    process.env.ELO_ANDROID_PACKAGE || config.android?.package || "br.com.nethanel.church";
+    process.env.ELO_ANDROID_PACKAGE ||
+    config.android?.package ||
+    "br.com.nethanel.church";
   const iosBundleIdentifier =
     process.env.ELO_IOS_BUNDLE_ID ||
     config.ios?.bundleIdentifier ||
@@ -72,8 +74,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     web: {
       ...config.web,
       favicon: appIconPath,
-      name: appName,
-      shortName: appName.slice(0, 12),
     },
     plugins,
     extra: {
