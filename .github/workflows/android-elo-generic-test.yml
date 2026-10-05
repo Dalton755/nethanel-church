@@ -45,7 +45,7 @@ jobs:
       - name: Validate generic Elo Expo config
         working-directory: apps/mobile
         run: |
-          npx expo config --type public > /tmp/elo-config.json
+          npx expo config --type public --json > /tmp/elo-config.json
           node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('/tmp/elo-config.json','utf8')); if(c.name!=='Nethanel Elo') throw new Error('Nome inesperado: '+c.name); if(c.android?.package!=='br.com.nethanel.church') throw new Error('Package inesperado: '+c.android?.package); const schemes=Array.isArray(c.scheme)?c.scheme:[c.scheme]; if(!schemes.includes('nethanelelo')) throw new Error('Scheme nethanelelo ausente'); console.log('Config genérica validada:', c.name, c.android.package, schemes);"
 
       - name: Build generic Elo APK locally
