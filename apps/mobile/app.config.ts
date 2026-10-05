@@ -21,14 +21,16 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     "./assets/white-label/android-icon-foreground.png";
   const splashPath =
     process.env.ELO_SPLASH_PATH || "./assets/white-label/splash-icon.png";
+
+  const defaultAndroidPackage =
+    config.android?.package || "br.com.nethanel.church";
   const androidPackage =
-    process.env.ELO_ANDROID_PACKAGE ||
-    config.android?.package ||
-    "br.com.nethanel.church";
+    process.env.ELO_ANDROID_PACKAGE?.trim() || defaultAndroidPackage;
   const iosBundleIdentifier =
-    process.env.ELO_IOS_BUNDLE_ID ||
+    process.env.ELO_IOS_BUNDLE_ID?.trim() ||
     config.ios?.bundleIdentifier ||
     "br.com.nethanel.church";
+
   const scheme =
     process.env.ELO_SCHEME?.trim() ||
     appName
@@ -37,6 +39,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "") ||
     "nethanelelo";
+
+  const googleServicesFile =
+    process.env.ELO_GOOGLE_SERVICES_FILE?.trim() ||
+    (androidPackage === defaultAndroidPackage
+      ? config.android?.googleServicesFile
+      : undefined);
 
   const plugins = (config.plugins ?? []).filter(
     (plugin) => pluginName(plugin) !== "expo-splash-screen"
@@ -65,6 +73,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     android: {
       ...config.android,
       package: androidPackage,
+      googleServicesFile,
       adaptiveIcon: {
         ...config.android?.adaptiveIcon,
         backgroundColor,
@@ -80,6 +89,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ...config.extra,
       whiteLabel: true,
       whiteLabelAppName: appName,
+      whiteLabelAndroidPackage: androidPackage,
+      whiteLabelScheme: scheme,
     },
   };
 };
