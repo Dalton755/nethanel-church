@@ -59,3 +59,5 @@ jobs:
           path: apps/mobile/nethanel-elo-generic.apk
           if-no-files-found: error
           retention-days: 14
+
+# Trigger build: planos e assinatura integrados ao Mercado Pago
