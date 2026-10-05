@@ -34,10 +34,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install compatible splash package
-        working-directory: apps/mobile
-        run: npx expo install expo-splash-screen
-
       - name: Prepare Nethanel Elo native assets
         run: |
           python -m pip install --disable-pip-version-check pillow
