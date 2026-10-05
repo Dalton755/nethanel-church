@@ -29,6 +29,9 @@ type BillingPlanContext = OrganizationPlanContext & {
   subscription_provider?: string | null;
   current_period_end?: string | null;
   can_cancel_subscription?: boolean;
+  renewal_canceled?: boolean;
+  is_grace_period?: boolean;
+  access_ends_at?: string | null;
 };
 
 type PlanItem = {
@@ -198,8 +201,8 @@ export function ChurchBillingScreen({ onBack }: { onBack: () => void }) {
 
       await refreshContext({ silent: true });
       Alert.alert(
-        "Assinatura cancelada",
-        "A renovação automática foi cancelada. Os dados da igreja permanecem preservados."
+        "Renovação cancelada",
+        "A cobrança automática foi encerrada. O acesso do plano permanece até o fim do período já pago e nenhum dado da igreja será apagado."
       );
     } catch (error) {
       Alert.alert(
@@ -213,12 +216,12 @@ export function ChurchBillingScreen({ onBack }: { onBack: () => void }) {
 
   function confirmCancellation() {
     Alert.alert(
-      "Cancelar assinatura?",
-      "A renovação automática será encerrada no Mercado Pago. Nenhum cadastro da igreja será apagado.",
+      "Cancelar renovação?",
+      "O Mercado Pago deixará de renovar a assinatura. O acesso permanece até o fim do período já pago e nenhum cadastro será apagado.",
       [
         { text: "Manter assinatura", style: "cancel" },
         {
-          text: "Cancelar assinatura",
+          text: "Cancelar renovação",
           style: "destructive",
           onPress: () => void cancelSubscription(),
         },
@@ -250,6 +253,18 @@ export function ChurchBillingScreen({ onBack }: { onBack: () => void }) {
     );
   }
 
+  const currentMeta = billing?.is_blessed
+    ? "Cortesia integral concedida pela Nethanel"
+    : billing?.is_trial
+      ? `Teste gratuito até ${dateLabel(billing.trial_ends_at)}`
+      : billing?.renewal_canceled
+        ? `Renovação cancelada • acesso até ${dateLabel(billing.access_ends_at)}`
+        : billing?.is_grace_period
+          ? `Pagamento pendente • tolerância até ${dateLabel(billing.access_ends_at)}`
+          : billing?.subscription_status === "active"
+            ? `${money(billing.price_cents)}/mês`
+            : "Escolha um plano para continuar com os recursos contratados.";
+
   return (
     <EloScreen
       title="Plano e assinatura"
@@ -266,25 +281,25 @@ export function ChurchBillingScreen({ onBack }: { onBack: () => void }) {
               <P.HandHeartIcon size={25} color="#9A6700" weight="duotone" />
             ) : billing?.is_trial ? (
               <P.TimerIcon size={25} color={eloColors.blue} weight="duotone" />
+            ) : billing?.renewal_canceled ? (
+              <P.CalendarCheckIcon size={25} color={eloColors.yellow} weight="duotone" />
+            ) : billing?.is_grace_period ? (
+              <P.WarningCircleIcon size={25} color={eloColors.yellow} weight="duotone" />
             ) : (
               <P.CreditCardIcon size={25} color={eloColors.green} weight="duotone" />
             )}
           </View>
           <View style={styles.currentCopy}>
             <Text style={styles.currentPlan}>{billing?.name ?? "Plano do Elo"}</Text>
-            <Text style={styles.currentMeta}>
-              {billing?.is_blessed
-                ? "Cortesia integral concedida pela Nethanel"
-                : billing?.is_trial
-                  ? `Teste gratuito até ${dateLabel(billing.trial_ends_at)}`
-                  : billing?.subscription_status === "active"
-                    ? `${money(billing.price_cents)}/mês`
-                    : "Escolha um plano para continuar com os recursos contratados."}
-            </Text>
+            <Text style={styles.currentMeta}>{currentMeta}</Text>
           </View>
         </View>
 
-        {billing?.current_period_end && !billing.is_trial && !billing.is_blessed ? (
+        {billing?.current_period_end &&
+        !billing.is_trial &&
+        !billing.is_blessed &&
+        !billing.renewal_canceled &&
+        !billing.is_grace_period ? (
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Próxima referência</Text>
             <Text style={styles.infoValue}>{dateLabel(billing.current_period_end)}</Text>
@@ -320,6 +335,15 @@ export function ChurchBillingScreen({ onBack }: { onBack: () => void }) {
         </View>
       ) : null}
 
+      {billing?.is_grace_period ? (
+        <View style={styles.paymentNotice}>
+          <P.WarningCircleIcon size={20} color="#8A5B00" weight="duotone" />
+          <Text style={styles.paymentNoticeText}>
+            O pagamento da renovação está pendente. O Elo mantém o acesso durante a tolerância para evitar interrupção imediata da operação da igreja.
+          </Text>
+        </View>
+      ) : null}
+
       <Text style={eloSharedStyles.sectionTitle}>Planos do Elo</Text>
 
       {loading ? (
@@ -330,10 +354,12 @@ export function ChurchBillingScreen({ onBack }: { onBack: () => void }) {
         <EloState icon="WarningCircleIcon" title="Não foi possível carregar os planos" description={errorMessage} />
       ) : (
         plans.map((plan) => {
-          const billingIsActive =
-            billing?.subscription_status === "active" &&
-            billing?.subscription_provider === "mercado_pago";
-          const current = billingIsActive && billing?.billing_plan_code === plan.code;
+          const hasCurrentPaidAccess =
+            billing?.subscription_provider === "mercado_pago" &&
+            billing?.effective_plan_code === plan.code &&
+            ["active", "canceled", "past_due"].includes(billing?.subscription_status ?? "");
+          const current = Boolean(hasCurrentPaidAccess);
+          const lockedCurrent = current && billing?.subscription_status === "active";
           const network = plan.code === "ELO_REDE";
 
           return (
@@ -356,7 +382,9 @@ export function ChurchBillingScreen({ onBack }: { onBack: () => void }) {
                     ) : null}
                     {current ? (
                       <View style={styles.currentBadge}>
-                        <Text style={styles.currentBadgeText}>ATUAL</Text>
+                        <Text style={styles.currentBadgeText}>
+                          {billing?.renewal_canceled ? "ACESSO ATÉ O VENCIMENTO" : billing?.is_grace_period ? "EM TOLERÂNCIA" : "ATUAL"}
+                        </Text>
                       </View>
                     ) : null}
                   </View>
@@ -381,17 +409,21 @@ export function ChurchBillingScreen({ onBack }: { onBack: () => void }) {
               <View style={styles.planButton}>
                 <EloActionButton
                   label={
-                    current
+                    lockedCurrent
                       ? "Plano atual"
-                      : network
-                        ? "Ver contratação consultiva"
-                        : billing?.is_trial
-                          ? `Assinar ${plan.name}`
-                          : `Escolher ${plan.name}`
+                      : current && billing?.renewal_canceled
+                        ? `Assinar novamente ${plan.name}`
+                        : current && billing?.is_grace_period
+                          ? `Regularizar ${plan.name}`
+                          : network
+                            ? "Ver contratação consultiva"
+                            : billing?.is_trial
+                              ? `Assinar ${plan.name}`
+                              : `Escolher ${plan.name}`
                   }
-                  icon={current ? "CheckIcon" : network ? "BuildingsIcon" : "CreditCardIcon"}
-                  variant={plan.recommended && !current ? "primary" : "secondary"}
-                  disabled={current || Boolean(billing?.is_blessed)}
+                  icon={lockedCurrent ? "CheckIcon" : network ? "BuildingsIcon" : "CreditCardIcon"}
+                  variant={plan.recommended && !lockedCurrent ? "primary" : "secondary"}
+                  disabled={lockedCurrent || Boolean(billing?.is_blessed)}
                   loading={checkoutPlanCode === plan.code}
                   onPress={() => void startCheckout(plan)}
                 />
@@ -448,6 +480,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF9E8",
   },
   blessingText: { flex: 1, fontSize: 11, lineHeight: 17, color: "#765B19" },
+  paymentNotice: {
+    marginTop: 12,
+    padding: 13,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 9,
+    borderRadius: 15,
+    backgroundColor: "#FFF9E8",
+  },
+  paymentNoticeText: { flex: 1, fontSize: 11, lineHeight: 17, color: "#765B19" },
   planCard: { marginBottom: 12 },
   recommendedCard: { borderColor: "#9CCBE7", borderWidth: 2 },
   currentCard: { borderColor: "#A9D4B0", backgroundColor: "#FBFEFC" },
