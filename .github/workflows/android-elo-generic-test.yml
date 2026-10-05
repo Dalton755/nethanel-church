@@ -23,6 +23,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -37,6 +43,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Align Expo SDK 57 patch versions
+        run: npm install --no-save --workspace=mobile expo@57.0.26 expo-camera@57.0.6 expo-constants@57.0.20
 
       - name: Prepare Nethanel Elo native assets
         run: |
@@ -63,5 +72,3 @@ jobs:
           path: apps/mobile/nethanel-elo-generic.apk
           if-no-files-found: error
           retention-days: 14
-
-# Trigger build: planos e assinatura integrados ao Mercado Pago
