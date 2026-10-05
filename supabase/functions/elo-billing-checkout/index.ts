@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
     }, 502);
   }
 
-  const { error: attachError } = await userClient.rpc("billing_attach_provider_subscription", {
+  const { error: attachError } = await adminClient.rpc("billing_attach_provider_subscription", {
     p_checkout_session_id: sessionId,
     p_provider_subscription_id: String(mpData.id),
     p_checkout_url: String(mpData.init_point),
