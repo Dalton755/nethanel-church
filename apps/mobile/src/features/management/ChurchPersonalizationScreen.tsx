@@ -207,6 +207,8 @@ export function ChurchPersonalizationScreen({
   }
 
   async function removeStoredAsset(kind: BrandAssetKind) {
+    if (!activeOrganization) return;
+
     await supabase.storage
       .from("church-branding")
       .remove(
@@ -220,6 +222,8 @@ export function ChurchPersonalizationScreen({
     kind: BrandAssetKind,
     asset: ImagePicker.ImagePickerAsset
   ) {
+    if (!activeOrganization) return null;
+
     const file = new File(asset.uri);
     const bytes = await file.arrayBuffer();
 
@@ -285,6 +289,8 @@ export function ChurchPersonalizationScreen({
   }
 
   async function save() {
+    if (!activeOrganization) return;
+
     const cleanName = name.trim();
     const cleanAppName = canCustomAppName ? appName.trim() : cleanName;
 
