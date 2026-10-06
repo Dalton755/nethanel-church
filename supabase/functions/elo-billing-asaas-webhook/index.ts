@@ -42,10 +42,21 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const webhookToken = (Deno.env.get("ASAAS_WEBHOOK_TOKEN") ?? "").trim();
+  const asaasBase = (Deno.env.get("ASAAS_API_URL") ?? "https://api.asaas.com/v3").replace(/\/$/, "");
+  const urlEnvironment = asaasBase.toLowerCase().includes("sandbox") ? "sandbox" : "production";
+  const configuredEnvironment = (Deno.env.get("BILLING_ENV") ?? "").trim().toLowerCase();
 
   if (!supabaseUrl || !serviceKey || !webhookToken) {
     return json({ ok: false, message: "Asaas billing webhook not configured" }, 503);
   }
+  if (configuredEnvironment && !["sandbox", "production"].includes(configuredEnvironment)) {
+    return json({ ok: false, message: "Invalid billing environment" }, 503);
+  }
+  if (configuredEnvironment && configuredEnvironment !== urlEnvironment) {
+    console.error(JSON.stringify({ billingEnvironmentMismatch: true, configuredEnvironment, urlEnvironment }));
+    return json({ ok: false, message: "Billing environment mismatch" }, 503);
+  }
+  const billingEnvironment = configuredEnvironment || urlEnvironment;
 
   const receivedToken = (req.headers.get("asaas-access-token") ?? "").trim();
   if (!receivedToken || receivedToken !== webhookToken) {
@@ -59,13 +70,14 @@ Deno.serve(async (req) => {
   const payment = body?.payment ?? null;
   const authorization = body?.authorization ?? body?.paymentInstruction?.authorization ?? null;
   const resourceId = String(payment?.id ?? authorization?.id ?? body?.paymentInstruction?.id ?? "");
-  const eventKey = String(body?.id ?? `${event}:${resourceId}:${body?.dateCreated ?? body?.date_created ?? ""}`);
+  const rawEventKey = String(body?.id ?? `${event}:${resourceId}:${body?.dateCreated ?? body?.date_created ?? ""}`);
+  const eventKey = `${billingEnvironment}:${rawEventKey}`;
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
   const { data: existingEvent } = await admin
     .from("platform_webhook_events")
-    .select("status")
+    .select("status,billing_environment")
     .eq("provider", "asaas")
     .eq("event_key", eventKey)
     .maybeSingle();
@@ -80,6 +92,7 @@ Deno.serve(async (req) => {
       .update({
         event_type: event,
         resource_id: resourceId || null,
+        billing_environment: billingEnvironment,
         status: "received",
         payload: body,
         error_message: null,
@@ -97,6 +110,7 @@ Deno.serve(async (req) => {
         event_key: eventKey,
         event_type: event,
         resource_id: resourceId || null,
+        billing_environment: billingEnvironment,
         status: "received",
         payload: body,
       });
@@ -124,17 +138,18 @@ Deno.serve(async (req) => {
       }
 
       const status = authorizationStatusFromEvent(event, auth);
-      const { data, error } = await admin.rpc("billing_apply_recurring_authorization", {
+      const { data, error } = await admin.rpc("billing_apply_recurring_authorization_secure", {
         p_provider: "asaas",
         p_provider_authorization_id: String(auth.id),
         p_status: status,
         p_next_due_date: auth?.nextDueDate ?? auth?.nextPaymentDate ?? null,
         p_provider_subscription_id: auth?.subscriptionId ?? auth?.subscription?.id ?? null,
         p_provider_payload: auth,
+        p_billing_environment: billingEnvironment,
       });
       if (error) throw error;
-      await finish(data?.ignored ? "ignored" : "processed");
-      return json({ ok: true });
+      await finish(data?.ignored ? "ignored" : "processed", data?.ignored ? String(data?.reason ?? "ignored") : undefined);
+      return json({ ok: true, ignored: Boolean(data?.ignored) });
     }
 
     if (event.startsWith("PAYMENT_")) {
@@ -156,7 +171,7 @@ Deno.serve(async (req) => {
         ?? payment?.creditDate
         ?? null;
 
-      const { data, error } = await admin.rpc("billing_apply_provider_payment", {
+      const { data, error } = await admin.rpc("billing_apply_provider_payment_secure", {
         p_provider: "asaas",
         p_provider_payment_id: String(payment.id),
         p_external_reference: String(payment?.externalReference ?? ""),
@@ -167,10 +182,11 @@ Deno.serve(async (req) => {
         p_provider_authorization_id: authorizationId ? String(authorizationId) : null,
         p_provider_subscription_id: subscriptionId ? String(subscriptionId) : null,
         p_provider_payload: payment,
+        p_billing_environment: billingEnvironment,
       });
       if (error) throw error;
-      await finish(data?.ignored ? "ignored" : "processed");
-      return json({ ok: true });
+      await finish(data?.ignored ? "ignored" : "processed", data?.ignored ? String(data?.reason ?? "ignored") : undefined);
+      return json({ ok: true, ignored: Boolean(data?.ignored) });
     }
 
     if (event.startsWith("PIX_AUTOMATIC_RECURRING_PAYMENT_INSTRUCTION_")) {
