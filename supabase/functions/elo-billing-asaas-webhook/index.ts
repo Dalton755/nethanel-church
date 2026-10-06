@@ -1,10 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
+  return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 }
 
 function errorMessage(error: any, fallback = "unknown_asaas_webhook_error") {
@@ -42,16 +39,13 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const webhookToken = (Deno.env.get("ASAAS_WEBHOOK_TOKEN") ?? "").trim();
+  const asaasKey = (Deno.env.get("ASAAS_API_KEY") ?? "").trim();
   const asaasBase = (Deno.env.get("ASAAS_API_URL") ?? "https://api.asaas.com/v3").replace(/\/$/, "");
   const urlEnvironment = asaasBase.toLowerCase().includes("sandbox") ? "sandbox" : "production";
   const configuredEnvironment = (Deno.env.get("BILLING_ENV") ?? "").trim().toLowerCase();
 
-  if (!supabaseUrl || !serviceKey || !webhookToken) {
-    return json({ ok: false, message: "Asaas billing webhook not configured" }, 503);
-  }
-  if (configuredEnvironment && !["sandbox", "production"].includes(configuredEnvironment)) {
-    return json({ ok: false, message: "Invalid billing environment" }, 503);
-  }
+  if (!supabaseUrl || !serviceKey || !webhookToken) return json({ ok: false, message: "Asaas billing webhook not configured" }, 503);
+  if (configuredEnvironment && !["sandbox", "production"].includes(configuredEnvironment)) return json({ ok: false, message: "Invalid billing environment" }, 503);
   if (configuredEnvironment && configuredEnvironment !== urlEnvironment) {
     console.error(JSON.stringify({ billingEnvironmentMismatch: true, configuredEnvironment, urlEnvironment }));
     return json({ ok: false, message: "Billing environment mismatch" }, 503);
@@ -59,9 +53,7 @@ Deno.serve(async (req) => {
   const billingEnvironment = configuredEnvironment || urlEnvironment;
 
   const receivedToken = (req.headers.get("asaas-access-token") ?? "").trim();
-  if (!receivedToken || receivedToken !== webhookToken) {
-    return json({ ok: false, message: "Unauthorized webhook" }, 401);
-  }
+  if (!receivedToken || receivedToken !== webhookToken) return json({ ok: false, message: "Unauthorized webhook" }, 401);
 
   let body: any = {};
   try { body = await req.json(); } catch { body = {}; }
@@ -75,58 +67,68 @@ Deno.serve(async (req) => {
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-  const { data: existingEvent } = await admin
-    .from("platform_webhook_events")
-    .select("status,billing_environment")
-    .eq("provider", "asaas")
-    .eq("event_key", eventKey)
-    .maybeSingle();
-
-  if (existingEvent?.status === "processed" || existingEvent?.status === "ignored") {
-    return json({ ok: true, duplicate: true });
-  }
+  const { data: existingEvent } = await admin.from("platform_webhook_events").select("status,billing_environment").eq("provider", "asaas").eq("event_key", eventKey).maybeSingle();
+  if (existingEvent?.status === "processed" || existingEvent?.status === "ignored") return json({ ok: true, duplicate: true });
 
   if (existingEvent) {
-    const { error: resetError } = await admin
-      .from("platform_webhook_events")
-      .update({
-        event_type: event,
-        resource_id: resourceId || null,
-        billing_environment: billingEnvironment,
-        status: "received",
-        payload: body,
-        error_message: null,
-        processed_at: null,
-        received_at: new Date().toISOString(),
-      })
-      .eq("provider", "asaas")
-      .eq("event_key", eventKey);
+    const { error: resetError } = await admin.from("platform_webhook_events").update({
+      event_type: event,
+      resource_id: resourceId || null,
+      billing_environment: billingEnvironment,
+      status: "received",
+      payload: body,
+      error_message: null,
+      processed_at: null,
+      received_at: new Date().toISOString(),
+    }).eq("provider", "asaas").eq("event_key", eventKey);
     if (resetError) return json({ ok: false, message: resetError.message }, 500);
   } else {
-    const { error: insertError } = await admin
-      .from("platform_webhook_events")
-      .insert({
-        provider: "asaas",
-        event_key: eventKey,
-        event_type: event,
-        resource_id: resourceId || null,
-        billing_environment: billingEnvironment,
-        status: "received",
-        payload: body,
-      });
+    const { error: insertError } = await admin.from("platform_webhook_events").insert({
+      provider: "asaas",
+      event_key: eventKey,
+      event_type: event,
+      resource_id: resourceId || null,
+      billing_environment: billingEnvironment,
+      status: "received",
+      payload: body,
+    });
     if (insertError) return json({ ok: false, message: insertError.message }, 500);
   }
 
   async function finish(status: "processed" | "ignored" | "failed", message?: string) {
-    await admin
-      .from("platform_webhook_events")
-      .update({
-        status,
-        error_message: message ?? null,
-        processed_at: new Date().toISOString(),
-      })
+    await admin.from("platform_webhook_events").update({ status, error_message: message ?? null, processed_at: new Date().toISOString() }).eq("provider", "asaas").eq("event_key", eventKey);
+  }
+
+  async function cancelActiveRecurring(organizationId: string) {
+    const { data: rows, error } = await admin
+      .from("billing_recurring_authorizations")
+      .select("id,provider_authorization_id,provider_subscription_id,plan_code,status,billing_environment,provider_payload")
+      .eq("organization_id", organizationId)
       .eq("provider", "asaas")
-      .eq("event_key", eventKey);
+      .eq("billing_environment", billingEnvironment)
+      .in("status", ["created", "pending", "active"]);
+    if (error) throw error;
+    if (!rows?.length) return;
+    if (!asaasKey) throw new Error("Asaas API key unavailable for recurring cancellation");
+
+    for (const row of rows) {
+      const authorizationId = String(row.provider_authorization_id ?? "");
+      if (!authorizationId) continue;
+      const response = await fetch(`${asaasBase}/pix/automatic/authorizations/${encodeURIComponent(authorizationId)}`, {
+        method: "DELETE",
+        headers: { accept: "application/json", access_token: asaasKey, "User-Agent": "Nethanel-Elo/1.0" },
+      });
+      const providerData = await response.json().catch(() => ({}));
+      if (!response.ok && ![404, 410].includes(response.status)) {
+        throw new Error(String(providerData?.message ?? providerData?.errors?.[0]?.description ?? `Asaas recurring cancellation ${response.status}`));
+      }
+      await admin.from("billing_recurring_authorizations").update({
+        status: "cancelled",
+        provider_payload: { ...(row.provider_payload ?? {}), cancellation: providerData, cancelled_by: "payment_method_switch" },
+        updated_at: new Date().toISOString(),
+      }).eq("id", row.id);
+      await admin.from("billing_payment_attempts").update({ status: "canceled", updated_at: new Date().toISOString() }).eq("provider", "asaas").eq("provider_authorization_id", authorizationId).in("status", ["created", "pending", "active"]);
+    }
   }
 
   try {
@@ -136,7 +138,6 @@ Deno.serve(async (req) => {
         await finish("ignored", "missing_authorization_id");
         return json({ ok: true, ignored: true });
       }
-
       const status = authorizationStatusFromEvent(event, auth);
       const { data, error } = await admin.rpc("billing_apply_recurring_authorization_secure", {
         p_provider: "asaas",
@@ -157,19 +158,11 @@ Deno.serve(async (req) => {
         await finish("ignored", "missing_payment_id");
         return json({ ok: true, ignored: true });
       }
-
       const status = paymentStatusFromEvent(event, payment);
       const amountCents = Math.round(Number(payment?.value ?? payment?.netValue ?? 0) * 100);
-      const authorizationId = payment?.pixAutomaticAuthorizationId
-        ?? payment?.pixAutomaticAuthorization?.id
-        ?? payment?.automaticPixAuthorizationId
-        ?? null;
+      const authorizationId = payment?.pixAutomaticAuthorizationId ?? payment?.pixAutomaticAuthorization?.id ?? payment?.automaticPixAuthorizationId ?? null;
       const subscriptionId = payment?.subscription ?? payment?.subscriptionId ?? null;
-      const paidAt = payment?.confirmedDate
-        ?? payment?.clientPaymentDate
-        ?? payment?.paymentDate
-        ?? payment?.creditDate
-        ?? null;
+      const paidAt = payment?.confirmedDate ?? payment?.clientPaymentDate ?? payment?.paymentDate ?? payment?.creditDate ?? null;
 
       const { data, error } = await admin.rpc("billing_apply_provider_payment_secure", {
         p_provider: "asaas",
@@ -185,6 +178,11 @@ Deno.serve(async (req) => {
         p_billing_environment: billingEnvironment,
       });
       if (error) throw error;
+
+      if (!data?.ignored && data?.paid && !authorizationId && !subscriptionId && data?.organization_id) {
+        await cancelActiveRecurring(String(data.organization_id));
+      }
+
       await finish(data?.ignored ? "ignored" : "processed", data?.ignored ? String(data?.reason ?? "ignored") : undefined);
       return json({ ok: true, ignored: Boolean(data?.ignored) });
     }
