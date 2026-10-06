@@ -18,7 +18,10 @@ function digits(value: unknown) {
 
 function asaasError(data: any, fallback: string) {
   if (Array.isArray(data?.errors) && data.errors.length) {
-    return data.errors.map((item: any) => item?.description ?? item?.code).filter(Boolean).join(" • ") || fallback;
+    return data.errors
+      .map((item: any) => item?.description ?? item?.code)
+      .filter(Boolean)
+      .join(" • ") || fallback;
   }
   return data?.message ?? fallback;
 }
@@ -71,7 +74,7 @@ Deno.serve(async (req) => {
       ok: false,
       code: "asaas_not_configured",
       message: "As novas formas de pagamento ainda estão sendo ativadas. O Mercado Pago continua disponível enquanto isso.",
-    }, 503);
+    });
   }
 
   if (!body.organizationId || !body.planCode || !body.paymentMethod) {
@@ -117,9 +120,7 @@ Deno.serve(async (req) => {
       },
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(asaasError(data, `Asaas ${response.status}`));
-    }
+    if (!response.ok) throw new Error(asaasError(data, `Asaas ${response.status}`));
     return data;
   }
 
@@ -210,7 +211,10 @@ Deno.serve(async (req) => {
           value: amount,
           description: `Elo ${planName}`.slice(0, 35),
           customerId,
-          immediateQrCode: {},
+          immediateQrCode: {
+            expirationSeconds: 3600,
+            originalValue: amount,
+          },
           paymentCreationMode: "SUBSCRIPTION",
           retryPolicy: "ALLOW_THREE_IN_SEVEN_DAYS",
         }),
@@ -219,9 +223,10 @@ Deno.serve(async (req) => {
       const authorizationId = String(authorization?.id ?? "");
       if (!authorizationId) throw new Error("O Asaas não retornou a autorização do Pix Automático.");
 
-      const qr = authorization?.immediateQrCode ?? authorization?.qrCode ?? {};
-      const pixPayload = qr?.payload ?? qr?.copyPaste ?? qr?.brCode ?? null;
+      const qr = authorization?.immediateQrCode ?? {};
+      const pixPayload = authorization?.payload ?? qr?.payload ?? qr?.copyPaste ?? qr?.brCode ?? null;
       const pixExpiration = qr?.expirationDate ?? qr?.expiration ?? null;
+      const qrCodeBase64 = authorization?.encodedImage ?? qr?.encodedImage ?? null;
       const subscriptionId = authorization?.subscriptionId ?? authorization?.subscription?.id ?? null;
 
       await registerAttempt({
@@ -253,7 +258,7 @@ Deno.serve(async (req) => {
         authorizationId,
         pixPayload,
         pixExpiration,
-        qrCodeBase64: qr?.encodedImage ?? null,
+        qrCodeBase64,
         message: "Pague o primeiro Pix e autorize a recorrência no aplicativo do seu banco.",
       });
     }
@@ -274,6 +279,18 @@ Deno.serve(async (req) => {
     const paymentId = String(payment?.id ?? "");
     if (!paymentId) throw new Error("O Asaas não retornou o identificador da cobrança.");
 
+    const checkoutUrl = payment?.invoiceUrl ? String(payment.invoiceUrl) : null;
+    const boletoUrl = payment?.bankSlipUrl ? String(payment.bankSlipUrl) : null;
+
+    await registerAttempt({
+      customerId,
+      paymentId,
+      status: String(payment?.status ?? "pending").toLowerCase(),
+      checkoutUrl,
+      boletoUrl,
+      providerPayload: payment,
+    });
+
     let pixPayload: string | null = null;
     let pixExpiration: string | null = null;
     let qrCodeBase64: string | null = null;
@@ -286,21 +303,18 @@ Deno.serve(async (req) => {
       pixPayload = qr?.payload ? String(qr.payload) : null;
       pixExpiration = qr?.expirationDate ? String(qr.expirationDate) : null;
       qrCodeBase64 = qr?.encodedImage ? String(qr.encodedImage) : null;
+
+      await registerAttempt({
+        customerId,
+        paymentId,
+        status: String(payment?.status ?? "pending").toLowerCase(),
+        checkoutUrl,
+        boletoUrl,
+        pixPayload,
+        pixExpiration,
+        providerPayload: payment,
+      });
     }
-
-    const checkoutUrl = payment?.invoiceUrl ? String(payment.invoiceUrl) : null;
-    const boletoUrl = payment?.bankSlipUrl ? String(payment.bankSlipUrl) : null;
-
-    await registerAttempt({
-      customerId,
-      paymentId,
-      status: String(payment?.status ?? "pending").toLowerCase(),
-      checkoutUrl,
-      pixPayload,
-      pixExpiration,
-      boletoUrl,
-      providerPayload: payment,
-    });
 
     return json({
       ok: true,
@@ -317,10 +331,12 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Não foi possível gerar a cobrança.";
+    console.error(JSON.stringify({ billingPaymentError: true, method, message }));
     await admin
       .from("billing_payment_attempts")
       .update({ status: "failed", provider_payload: { error: message }, updated_at: new Date().toISOString() })
       .eq("id", attemptId);
-    return json({ ok: false, code: "asaas_payment_failed", message }, 502);
+
+    return json({ ok: false, code: "asaas_payment_failed", message });
   }
 });
