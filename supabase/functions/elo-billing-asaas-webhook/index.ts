@@ -37,14 +37,25 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const webhookToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN") ?? "";
+  const webhookToken = (Deno.env.get("ASAAS_WEBHOOK_TOKEN") ?? "").trim();
 
   if (!supabaseUrl || !serviceKey || !webhookToken) {
+    console.warn(JSON.stringify({
+      asaasWebhookConfigured: Boolean(webhookToken),
+      supabaseConfigured: Boolean(supabaseUrl && serviceKey),
+    }));
     return json({ ok: false, message: "Asaas billing webhook not configured" }, 503);
   }
 
-  const receivedToken = req.headers.get("asaas-access-token") ?? "";
+  const receivedToken = (req.headers.get("asaas-access-token") ?? "").trim();
   if (!receivedToken || receivedToken !== webhookToken) {
+    console.warn(JSON.stringify({
+      asaasWebhookAuth: "rejected",
+      expectedTokenPresent: Boolean(webhookToken),
+      receivedTokenPresent: Boolean(receivedToken),
+      expectedTokenLength: webhookToken.length,
+      receivedTokenLength: receivedToken.length,
+    }));
     return json({ ok: false, message: "Unauthorized webhook" }, 401);
   }
 
