@@ -7,6 +7,10 @@ function json(data: unknown, status = 200) {
   });
 }
 
+function errorMessage(error: any, fallback = "unknown_asaas_webhook_error") {
+  return String(error?.message ?? error?.error_description ?? error?.details ?? fallback);
+}
+
 function paymentStatusFromEvent(event: string, payment: any) {
   switch (event) {
     case "PAYMENT_RECEIVED": return "received";
@@ -40,22 +44,11 @@ Deno.serve(async (req) => {
   const webhookToken = (Deno.env.get("ASAAS_WEBHOOK_TOKEN") ?? "").trim();
 
   if (!supabaseUrl || !serviceKey || !webhookToken) {
-    console.warn(JSON.stringify({
-      asaasWebhookConfigured: Boolean(webhookToken),
-      supabaseConfigured: Boolean(supabaseUrl && serviceKey),
-    }));
     return json({ ok: false, message: "Asaas billing webhook not configured" }, 503);
   }
 
   const receivedToken = (req.headers.get("asaas-access-token") ?? "").trim();
   if (!receivedToken || receivedToken !== webhookToken) {
-    console.warn(JSON.stringify({
-      asaasWebhookAuth: "rejected",
-      expectedTokenPresent: Boolean(webhookToken),
-      receivedTokenPresent: Boolean(receivedToken),
-      expectedTokenLength: webhookToken.length,
-      receivedTokenLength: receivedToken.length,
-    }));
     return json({ ok: false, message: "Unauthorized webhook" }, 401);
   }
 
@@ -70,19 +63,45 @@ Deno.serve(async (req) => {
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-  const { error: insertError } = await admin
+  const { data: existingEvent } = await admin
     .from("platform_webhook_events")
-    .insert({
-      provider: "asaas",
-      event_key: eventKey,
-      event_type: event,
-      resource_id: resourceId || null,
-      status: "received",
-      payload: body,
-    });
+    .select("status")
+    .eq("provider", "asaas")
+    .eq("event_key", eventKey)
+    .maybeSingle();
 
-  if (insertError?.code === "23505") return json({ ok: true, duplicate: true });
-  if (insertError) return json({ ok: false, message: insertError.message }, 500);
+  if (existingEvent?.status === "processed" || existingEvent?.status === "ignored") {
+    return json({ ok: true, duplicate: true });
+  }
+
+  if (existingEvent) {
+    const { error: resetError } = await admin
+      .from("platform_webhook_events")
+      .update({
+        event_type: event,
+        resource_id: resourceId || null,
+        status: "received",
+        payload: body,
+        error_message: null,
+        processed_at: null,
+        received_at: new Date().toISOString(),
+      })
+      .eq("provider", "asaas")
+      .eq("event_key", eventKey);
+    if (resetError) return json({ ok: false, message: resetError.message }, 500);
+  } else {
+    const { error: insertError } = await admin
+      .from("platform_webhook_events")
+      .insert({
+        provider: "asaas",
+        event_key: eventKey,
+        event_type: event,
+        resource_id: resourceId || null,
+        status: "received",
+        payload: body,
+      });
+    if (insertError) return json({ ok: false, message: insertError.message }, 500);
+  }
 
   async function finish(status: "processed" | "ignored" | "failed", message?: string) {
     await admin
@@ -162,7 +181,7 @@ Deno.serve(async (req) => {
     await finish("ignored", `unsupported_event:${event}`);
     return json({ ok: true, ignored: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "unknown_asaas_webhook_error";
+    const message = errorMessage(error);
     await finish("failed", message);
     return json({ ok: false, message }, 500);
   }
