@@ -35,11 +35,22 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const asaasKey = (Deno.env.get("ASAAS_API_KEY") ?? "").trim();
   const asaasBase = (Deno.env.get("ASAAS_API_URL") ?? "https://api.asaas.com/v3").replace(/\/$/, "");
+  const urlEnvironment = asaasBase.toLowerCase().includes("sandbox") ? "sandbox" : "production";
+  const configuredEnvironment = (Deno.env.get("BILLING_ENV") ?? "").trim().toLowerCase();
   const authHeader = req.headers.get("Authorization") ?? "";
 
   if (!supabaseUrl || !anonKey || !serviceKey) {
     return json({ ok: false, code: "supabase_not_configured", message: "Configuração interna indisponível." }, 503);
   }
+
+  if (configuredEnvironment && !["sandbox", "production"].includes(configuredEnvironment)) {
+    return json({ ok: false, code: "billing_environment_invalid", message: "Ambiente de cobrança inválido." }, 503);
+  }
+  if (configuredEnvironment && configuredEnvironment !== urlEnvironment) {
+    console.error(JSON.stringify({ billingEnvironmentMismatch: true, configuredEnvironment, urlEnvironment }));
+    return json({ ok: false, code: "billing_environment_mismatch", message: "A configuração do ambiente de cobrança não corresponde ao endpoint do Asaas." }, 503);
+  }
+  const billingEnvironment = configuredEnvironment || urlEnvironment;
 
   let body: {
     action?: string;
@@ -58,12 +69,14 @@ Deno.serve(async (req) => {
     console.log(JSON.stringify({
       billingCapabilities: true,
       asaasConfigured: Boolean(asaasKey),
-      asaasEnvironment: asaasBase.includes("sandbox") ? "sandbox" : "production",
+      billingEnvironment,
       mercadoPagoAvailable: Boolean(Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN")),
     }));
     return json({
       ok: true,
       asaasConfigured: Boolean(asaasKey),
+      billingEnvironment,
+      testMode: billingEnvironment === "sandbox",
       methods: ["pix", "pix_automatic", "boleto", "card"],
       mercadoPagoAvailable: Boolean(Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN")),
     });
@@ -92,6 +105,28 @@ Deno.serve(async (req) => {
   });
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
+  const { data: allowedEnvironment, error: environmentError } = await admin.rpc("billing_environment_for_organization", {
+    p_organization_id: body.organizationId,
+  });
+  if (environmentError) {
+    return json({ ok: false, code: "billing_environment_lookup_failed", message: "Não foi possível validar o ambiente de cobrança." }, 503);
+  }
+  if (String(allowedEnvironment) !== billingEnvironment) {
+    console.warn(JSON.stringify({
+      billingEnvironmentBlocked: true,
+      organizationId: body.organizationId,
+      allowedEnvironment,
+      providerEnvironment: billingEnvironment,
+    }));
+    return json({
+      ok: false,
+      code: "billing_environment_blocked",
+      message: billingEnvironment === "sandbox"
+        ? "Cobranças de teste não podem ativar esta igreja."
+        : "Esta igreja está reservada para testes e não pode usar cobranças de produção.",
+    }, 403);
+  }
+
   const { data: context, error: contextError } = await userClient.rpc("billing_prepare_invoice", {
     p_organization_id: body.organizationId,
     p_plan_code: body.planCode,
@@ -107,6 +142,7 @@ Deno.serve(async (req) => {
   const amount = Number(context.amount_cents) / 100;
   const dueDate = String(context.due_date);
   const planName = String(context.plan_name ?? "Plano Elo");
+  const customerKey = billingEnvironment === "sandbox" ? "asaas_sandbox" : "asaas_production";
 
   async function asaas(path: string, init: RequestInit = {}) {
     const response = await fetch(`${asaasBase}${path}`, {
@@ -128,15 +164,19 @@ Deno.serve(async (req) => {
     await admin
       .from("billing_payers")
       .update({
-        provider_customer_ids: { ...(payer.provider_customer_ids ?? {}), asaas: customerId },
+        provider_customer_ids: { ...(payer.provider_customer_ids ?? {}), [customerKey]: customerId },
         updated_at: new Date().toISOString(),
       })
       .eq("organization_id", body.organizationId!);
   }
 
   async function ensureCustomer() {
-    const saved = payer?.provider_customer_ids?.asaas;
-    if (saved) return String(saved);
+    const providerIds = payer?.provider_customer_ids ?? {};
+    const saved = providerIds?.[customerKey] ?? (billingEnvironment === "sandbox" ? providerIds?.asaas : null);
+    if (saved) {
+      if (!providerIds?.[customerKey]) await rememberCustomer(String(saved));
+      return String(saved);
+    }
 
     const found = await asaas(`/customers?externalReference=${encodeURIComponent(body.organizationId!)}&limit=1`, {
       method: "GET",
@@ -252,6 +292,7 @@ Deno.serve(async (req) => {
       return json({
         ok: true,
         provider: "asaas",
+        billingEnvironment,
         paymentMethod: method,
         invoiceId,
         attemptId,
@@ -319,6 +360,7 @@ Deno.serve(async (req) => {
     return json({
       ok: true,
       provider: "asaas",
+      billingEnvironment,
       paymentMethod: method,
       invoiceId,
       attemptId,
@@ -331,7 +373,7 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Não foi possível gerar a cobrança.";
-    console.error(JSON.stringify({ billingPaymentError: true, method, message }));
+    console.error(JSON.stringify({ billingPaymentError: true, billingEnvironment, method, message }));
     await admin
       .from("billing_payment_attempts")
       .update({ status: "failed", provider_payload: { error: message }, updated_at: new Date().toISOString() })
