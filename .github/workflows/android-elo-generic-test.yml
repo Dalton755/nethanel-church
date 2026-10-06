@@ -72,3 +72,5 @@ jobs:
           path: apps/mobile/nethanel-elo-generic.apk
           if-no-files-found: error
           retention-days: 14
+
+# Trigger: Nethanel Billing Pix/Pix Automático/boleto/cartão
