@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     return json({ ok: false, code: "mercado_pago_not_configured", message: "Mercado Pago ainda não foi configurado para o Elo." }, 503);
   }
 
-  let body: { organizationId?: string; planCode?: string };
+  let body: { organizationId?: string; planCode?: string; payerEmail?: string };
   try {
     body = await req.json();
   } catch {
@@ -47,9 +47,10 @@ Deno.serve(async (req) => {
   });
   const adminClient = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-  const { data: checkoutContext, error: contextError } = await userClient.rpc("billing_prepare_checkout", {
+  const { data: checkoutContext, error: contextError } = await userClient.rpc("billing_prepare_checkout_v2", {
     p_organization_id: body.organizationId,
     p_plan_code: body.planCode,
+    p_payer_email: body.payerEmail?.trim() || null,
   });
 
   if (contextError) return json({ ok: false, message: contextError.message }, 403);
@@ -109,9 +110,7 @@ Deno.serve(async (req) => {
     p_provider_payload: mpData,
   });
 
-  if (attachError) {
-    return json({ ok: false, message: attachError.message }, 500);
-  }
+  if (attachError) return json({ ok: false, message: attachError.message }, 500);
 
   return json({
     ok: true,
@@ -122,5 +121,6 @@ Deno.serve(async (req) => {
     planCode: checkoutContext.plan_code,
     planName: checkoutContext.plan_name,
     amountCents: checkoutContext.amount_cents,
+    payerEmail: checkoutContext.payer_email,
   });
 });
