@@ -44,8 +44,12 @@ Deno.serve(async (req) => {
   const urlEnvironment = asaasBase.toLowerCase().includes("sandbox") ? "sandbox" : "production";
   const configuredEnvironment = (Deno.env.get("BILLING_ENV") ?? "").trim().toLowerCase();
 
-  if (!supabaseUrl || !serviceKey || !webhookToken) return json({ ok: false, message: "Asaas billing webhook not configured" }, 503);
-  if (configuredEnvironment && !["sandbox", "production"].includes(configuredEnvironment)) return json({ ok: false, message: "Invalid billing environment" }, 503);
+  if (!supabaseUrl || !serviceKey || !webhookToken || !asaasKey) {
+    return json({ ok: false, message: "Asaas billing webhook not configured" }, 503);
+  }
+  if (configuredEnvironment && !["sandbox", "production"].includes(configuredEnvironment)) {
+    return json({ ok: false, message: "Invalid billing environment" }, 503);
+  }
   if (configuredEnvironment && configuredEnvironment !== urlEnvironment) {
     console.error(JSON.stringify({ billingEnvironmentMismatch: true, configuredEnvironment, urlEnvironment }));
     return json({ ok: false, message: "Billing environment mismatch" }, 503);
@@ -64,89 +68,75 @@ Deno.serve(async (req) => {
   const resourceId = String(payment?.id ?? authorization?.id ?? body?.paymentInstruction?.id ?? "");
   const rawEventKey = String(body?.id ?? `${event}:${resourceId}:${body?.dateCreated ?? body?.date_created ?? ""}`);
   const eventKey = `${billingEnvironment}:${rawEventKey}`;
-
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-  const { data: existingEvent } = await admin.from("platform_webhook_events").select("status,billing_environment").eq("provider", "asaas").eq("event_key", eventKey).maybeSingle();
-  if (existingEvent?.status === "processed" || existingEvent?.status === "ignored") return json({ ok: true, duplicate: true });
+  const { data: existingEvent } = await admin.from("platform_webhook_events")
+    .select("status").eq("provider", "asaas").eq("event_key", eventKey).maybeSingle();
+  if (existingEvent?.status === "processed" || existingEvent?.status === "ignored") {
+    return json({ ok: true, duplicate: true });
+  }
 
   if (existingEvent) {
-    const { error: resetError } = await admin.from("platform_webhook_events").update({
-      event_type: event,
-      resource_id: resourceId || null,
-      billing_environment: billingEnvironment,
-      status: "received",
-      payload: body,
-      error_message: null,
-      processed_at: null,
-      received_at: new Date().toISOString(),
+    const { error } = await admin.from("platform_webhook_events").update({
+      event_type: event, resource_id: resourceId || null, billing_environment: billingEnvironment,
+      status: "received", payload: body, error_message: null, processed_at: null, received_at: new Date().toISOString(),
     }).eq("provider", "asaas").eq("event_key", eventKey);
-    if (resetError) return json({ ok: false, message: resetError.message }, 500);
+    if (error) return json({ ok: false, message: error.message }, 500);
   } else {
-    const { error: insertError } = await admin.from("platform_webhook_events").insert({
-      provider: "asaas",
-      event_key: eventKey,
-      event_type: event,
-      resource_id: resourceId || null,
-      billing_environment: billingEnvironment,
-      status: "received",
-      payload: body,
+    const { error } = await admin.from("platform_webhook_events").insert({
+      provider: "asaas", event_key: eventKey, event_type: event, resource_id: resourceId || null,
+      billing_environment: billingEnvironment, status: "received", payload: body,
     });
-    if (insertError) return json({ ok: false, message: insertError.message }, 500);
+    if (error) return json({ ok: false, message: error.message }, 500);
   }
 
   async function finish(status: "processed" | "ignored" | "failed", message?: string) {
-    await admin.from("platform_webhook_events").update({ status, error_message: message ?? null, processed_at: new Date().toISOString() }).eq("provider", "asaas").eq("event_key", eventKey);
+    await admin.from("platform_webhook_events").update({
+      status, error_message: message ?? null, processed_at: new Date().toISOString(),
+    }).eq("provider", "asaas").eq("event_key", eventKey);
   }
 
-  async function cancelActiveRecurring(organizationId: string) {
-    const { data: rows, error } = await admin
-      .from("billing_recurring_authorizations")
-      .select("id,provider_authorization_id,provider_subscription_id,plan_code,status,billing_environment,provider_payload")
+  async function cancelConflictingRecurring(organizationId: string, activePlanCode: string) {
+    const { data: recurring, error } = await admin.from("billing_recurring_authorizations")
+      .select("id,plan_code,provider_authorization_id,status")
       .eq("organization_id", organizationId)
       .eq("provider", "asaas")
       .eq("billing_environment", billingEnvironment)
-      .in("status", ["created", "pending", "active"]);
+      .in("status", ["created", "pending", "active"])
+      .neq("plan_code", activePlanCode);
     if (error) throw error;
-    if (!rows?.length) return;
-    if (!asaasKey) throw new Error("Asaas API key unavailable for recurring cancellation");
 
-    for (const row of rows) {
+    for (const row of recurring ?? []) {
       const authorizationId = String(row.provider_authorization_id ?? "");
       if (!authorizationId) continue;
       const response = await fetch(`${asaasBase}/pix/automatic/authorizations/${encodeURIComponent(authorizationId)}`, {
         method: "DELETE",
         headers: { accept: "application/json", access_token: asaasKey, "User-Agent": "Nethanel-Elo/1.0" },
       });
-      const providerData = await response.json().catch(() => ({}));
-      if (!response.ok && ![404, 410].includes(response.status)) {
-        throw new Error(String(providerData?.message ?? providerData?.errors?.[0]?.description ?? `Asaas recurring cancellation ${response.status}`));
+      if (!response.ok && response.status !== 404) {
+        const providerError = await response.json().catch(() => ({}));
+        throw new Error(String(providerError?.errors?.[0]?.description ?? providerError?.message ?? `Asaas cancel ${response.status}`));
       }
-      await admin.from("billing_recurring_authorizations").update({
-        status: "cancelled",
-        provider_payload: { ...(row.provider_payload ?? {}), cancellation: providerData, cancelled_by: "payment_method_switch" },
-        updated_at: new Date().toISOString(),
-      }).eq("id", row.id);
-      await admin.from("billing_payment_attempts").update({ status: "canceled", updated_at: new Date().toISOString() }).eq("provider", "asaas").eq("provider_authorization_id", authorizationId).in("status", ["created", "pending", "active"]);
+      await admin.from("billing_recurring_authorizations").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", row.id);
+
+      const { data: pendingInvoices } = await admin.from("billing_invoices")
+        .select("id,metadata").eq("organization_id", organizationId).eq("plan_code", row.plan_code)
+        .eq("billing_environment", billingEnvironment).eq("status", "pending");
+      const ids = (pendingInvoices ?? []).filter((item: any) => item?.metadata?.source === "pix_automatic").map((item: any) => item.id);
+      if (ids.length) await admin.from("billing_invoices").update({ status: "canceled", updated_at: new Date().toISOString() }).in("id", ids);
     }
   }
 
   try {
     if (event.startsWith("PIX_AUTOMATIC_RECURRING_AUTHORIZATION_")) {
       const auth = body?.authorization;
-      if (!auth?.id) {
-        await finish("ignored", "missing_authorization_id");
-        return json({ ok: true, ignored: true });
-      }
+      if (!auth?.id) { await finish("ignored", "missing_authorization_id"); return json({ ok: true, ignored: true }); }
       const status = authorizationStatusFromEvent(event, auth);
       const { data, error } = await admin.rpc("billing_apply_recurring_authorization_secure", {
-        p_provider: "asaas",
-        p_provider_authorization_id: String(auth.id),
-        p_status: status,
+        p_provider: "asaas", p_provider_authorization_id: String(auth.id), p_status: status,
         p_next_due_date: auth?.nextDueDate ?? auth?.nextPaymentDate ?? null,
         p_provider_subscription_id: auth?.subscriptionId ?? auth?.subscription?.id ?? null,
-        p_provider_payload: auth,
-        p_billing_environment: billingEnvironment,
+        p_provider_payload: auth, p_billing_environment: billingEnvironment,
       });
       if (error) throw error;
       await finish(data?.ignored ? "ignored" : "processed", data?.ignored ? String(data?.reason ?? "ignored") : undefined);
@@ -154,42 +144,29 @@ Deno.serve(async (req) => {
     }
 
     if (event.startsWith("PAYMENT_")) {
-      if (!payment?.id) {
-        await finish("ignored", "missing_payment_id");
-        return json({ ok: true, ignored: true });
-      }
+      if (!payment?.id) { await finish("ignored", "missing_payment_id"); return json({ ok: true, ignored: true }); }
       const status = paymentStatusFromEvent(event, payment);
       const amountCents = Math.round(Number(payment?.value ?? payment?.netValue ?? 0) * 100);
       const authorizationId = payment?.pixAutomaticAuthorizationId ?? payment?.pixAutomaticAuthorization?.id ?? payment?.automaticPixAuthorizationId ?? null;
       const subscriptionId = payment?.subscription ?? payment?.subscriptionId ?? null;
       const paidAt = payment?.confirmedDate ?? payment?.clientPaymentDate ?? payment?.paymentDate ?? payment?.creditDate ?? null;
-
       const { data, error } = await admin.rpc("billing_apply_provider_payment_secure", {
-        p_provider: "asaas",
-        p_provider_payment_id: String(payment.id),
-        p_external_reference: String(payment?.externalReference ?? ""),
-        p_status: status,
-        p_amount_cents: amountCents,
-        p_currency: "BRL",
-        p_paid_at: paidAt,
+        p_provider: "asaas", p_provider_payment_id: String(payment.id), p_external_reference: String(payment?.externalReference ?? ""),
+        p_status: status, p_amount_cents: amountCents, p_currency: "BRL", p_paid_at: paidAt,
         p_provider_authorization_id: authorizationId ? String(authorizationId) : null,
         p_provider_subscription_id: subscriptionId ? String(subscriptionId) : null,
-        p_provider_payload: payment,
-        p_billing_environment: billingEnvironment,
+        p_provider_payload: payment, p_billing_environment: billingEnvironment,
       });
       if (error) throw error;
-
-      if (!data?.ignored && data?.paid && !authorizationId && !subscriptionId && data?.organization_id) {
-        await cancelActiveRecurring(String(data.organization_id));
+      if (data?.paid && data?.organization_id && data?.plan_code) {
+        await cancelConflictingRecurring(String(data.organization_id), String(data.plan_code));
       }
-
       await finish(data?.ignored ? "ignored" : "processed", data?.ignored ? String(data?.reason ?? "ignored") : undefined);
       return json({ ok: true, ignored: Boolean(data?.ignored) });
     }
 
     if (event.startsWith("PIX_AUTOMATIC_RECURRING_PAYMENT_INSTRUCTION_")) {
-      await finish("processed");
-      return json({ ok: true });
+      await finish("processed"); return json({ ok: true });
     }
 
     await finish("ignored", `unsupported_event:${event}`);
