@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const asaasKey = Deno.env.get("ASAAS_API_KEY") ?? "";
+  const asaasKey = (Deno.env.get("ASAAS_API_KEY") ?? "").trim();
   const asaasBase = (Deno.env.get("ASAAS_API_URL") ?? "https://api.asaas.com/v3").replace(/\/$/, "");
   const authHeader = req.headers.get("Authorization") ?? "";
 
@@ -52,6 +52,12 @@ Deno.serve(async (req) => {
   }
 
   if (body.action === "capabilities") {
+    console.log(JSON.stringify({
+      billingCapabilities: true,
+      asaasConfigured: Boolean(asaasKey),
+      asaasEnvironment: asaasBase.includes("sandbox") ? "sandbox" : "production",
+      mercadoPagoAvailable: Boolean(Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN")),
+    }));
     return json({
       ok: true,
       asaasConfigured: Boolean(asaasKey),
