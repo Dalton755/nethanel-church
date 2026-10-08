@@ -58,6 +58,7 @@ export function EloHubScreen({ route }: EloHubProps) {
 
   const [activeModule, setActiveModule] =
     useState<EloModuleKey | null>(null);
+  const [selectedDepartmentName, setSelectedDepartmentName] = useState<string | null>(null);
 
   const { structure } = useChurchStructure(activeModule);
   const structureReady = structure?.configured === true;
@@ -134,7 +135,13 @@ export function EloHubScreen({ route }: EloHubProps) {
   }
 
   if (activeModule === "departments") {
-    return <DepartmentsScreen onBack={() => setActiveModule(null)} />;
+    return <DepartmentsScreen
+      initialDepartmentName={selectedDepartmentName}
+      onBack={() => {
+        setSelectedDepartmentName(null);
+        setActiveModule(null);
+      }}
+    />;
   }
 
   if (activeModule === "communication") {
@@ -230,7 +237,7 @@ export function EloHubScreen({ route }: EloHubProps) {
           title="Equipes para escala"
           description="Organize os departamentos e as pessoas disponíveis. A escala é criada na data específica de cada culto."
           badge="Admin"
-          onPress={() => setActiveModule("departments")}
+          onPress={() => { setSelectedDepartmentName(null); setActiveModule("departments"); }}
         />
       ) : null}
 
@@ -242,6 +249,24 @@ export function EloHubScreen({ route }: EloHubProps) {
           badge="Real"
           onPress={() => setActiveModule("departments")}
         />
+      ) : null}
+
+      {permissions.departments && structureReady && structure.departments.length > 0 ? (
+        <>
+          <Text style={eloSharedStyles.sectionTitle}>Acesso rápido às equipes</Text>
+          {structure.departments.slice(0, 4).map((department) => (
+            <EloModuleCard
+              key={department.key}
+              icon={department.key === "infantil" ? "BabyIcon" : "UsersThreeIcon"}
+              title={department.name}
+              description="Abrir equipe, liderança, funções e escalas."
+              onPress={() => {
+                setSelectedDepartmentName(department.name);
+                setActiveModule("departments");
+              }}
+            />
+          ))}
+        </>
       ) : null}
 
       {permissions.care ? (
