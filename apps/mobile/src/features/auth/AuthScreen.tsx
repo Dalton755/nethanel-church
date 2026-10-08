@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -13,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
+import Constants from "expo-constants";
 
 import { EloLogo } from "../../branding/EloBrand";
 import { supabase } from "../../lib/supabase";
@@ -25,8 +27,26 @@ const PENDING_JOIN_CODE_KEY =
 const PENDING_ENTRY_INTENT_KEY =
   "@elo/pending-entry-intent";
 
+const whiteLabelScheme = Constants.expoConfig?.extra?.whiteLabelScheme as string | undefined;
+const customLogo = Constants.expoConfig?.extra?.eloBrandLogoUrl as string | undefined;
+const customName = Constants.expoConfig?.extra?.eloBrandName as string | undefined;
+
+function BrandLogo() {
+  return customLogo ? (
+    <View style={{ alignItems: "center", gap: 10, marginBottom: 14 }}>
+      <Image source={{ uri: customLogo }} style={{ width: 92, height: 92, borderRadius: 22 }} resizeMode="contain" />
+      <Text style={{ fontSize: 17, fontWeight: "800", color: "#1c2934", textAlign: "center" }}>
+        {customName || "Minha igreja"}
+      </Text>
+      <Text style={{ fontSize: 10, color: "#667584", fontWeight: "700" }}>Tecnologia Nethanel Elo</Text>
+    </View>
+  ) : <EloLogo />;
+}
+
 const OAUTH_REDIRECT_URL =
-  "nethanelelo://auth/callback";
+  whiteLabelScheme ? `${whiteLabelScheme}://auth/callback` : "nethanelelo://auth/callback";
+const EMAIL_CONFIRM_REDIRECT_URL =
+  whiteLabelScheme ? `${whiteLabelScheme}://auth/confirm` : "nethanelchurch://auth/confirm";
 
 type ScreenMode =
   | "home"
@@ -484,7 +504,7 @@ export function AuthScreen() {
 
                 options: {
                   emailRedirectTo:
-                    "nethanelchurch://auth/confirm",
+                    EMAIL_CONFIRM_REDIRECT_URL,
 
                   data: {
                     full_name:
@@ -634,7 +654,7 @@ export function AuthScreen() {
                 </Text>
               </Pressable>
 
-              <EloLogo />
+              <BrandLogo />
 
               <Text
                 style={
@@ -822,7 +842,7 @@ export function AuthScreen() {
                 </Text>
               </Pressable>
 
-              <EloLogo />
+              <BrandLogo />
 
               <Text
                 style={
@@ -1071,7 +1091,7 @@ export function AuthScreen() {
               styles.logoCenter
             }
           >
-            <EloLogo />
+            <BrandLogo />
           </View>
 
           <Text

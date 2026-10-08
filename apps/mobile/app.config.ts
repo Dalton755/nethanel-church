@@ -14,6 +14,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const appName = process.env.ELO_APP_NAME?.trim() || config.name || "Nethanel Elo";
   const backgroundColor =
     process.env.ELO_BACKGROUND_COLOR?.trim() || "#F6F8FB";
+  const brandColor = process.env.ELO_PRIMARY_COLOR?.trim() || "#2387C9";
+  const brandLogoUrl = process.env.ELO_LOGO_URL?.trim() || null;
+  const organizationId = process.env.ELO_ORGANIZATION_ID?.trim() || null;
+  const brandedPush = process.env.ELO_BRANDED_PUSH === "true";
   const appIconPath =
     process.env.ELO_APP_ICON_PATH || "./assets/white-label/icon.png";
   const adaptiveIconPath =
@@ -49,6 +53,24 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const plugins = (config.plugins ?? []).filter(
     (plugin) => pluginName(plugin) !== "expo-splash-screen"
   );
+
+  // Android exige um ícone monocromático e transparente na barra de notificações.
+  // Esse arquivo é gerado por igreja no momento da compilação.
+  if (brandedPush) {
+    const oldNotifications = plugins.findIndex(
+      (plugin) => pluginName(plugin) === "expo-notifications"
+    );
+    const configuredNotifications: NonNullable<ExpoConfig["plugins"]>[number] = [
+      "expo-notifications",
+      {
+        defaultChannel: "elo-geral",
+        icon: "./assets/white-label/notification-icon.png",
+        color: /^#[0-9a-fA-F]{6}$/.test(brandColor) ? brandColor : "#2387C9",
+      },
+    ];
+    if (oldNotifications >= 0) plugins[oldNotifications] = configuredNotifications;
+    else plugins.push(configuredNotifications);
+  }
 
   plugins.push([
     "expo-splash-screen",
@@ -91,6 +113,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       whiteLabelAppName: appName,
       whiteLabelAndroidPackage: androidPackage,
       whiteLabelScheme: scheme,
+      eloOrganizationId: organizationId,
+      eloBrandName: appName,
+      eloBrandLogoUrl: brandLogoUrl,
+      eloBrandColor: brandColor,
+      eloBrandedPush: brandedPush,
     },
   };
 };
