@@ -15,10 +15,13 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Constants from "expo-constants";
 
 import { EloLogo } from "../../branding/EloBrand";
 import { supabase } from "../../lib/supabase";
 import { OrganizationSetupScreen } from "./OrganizationSetupScreen";
+
+const fixedOrganizationId = Constants.expoConfig?.extra?.eloOrganizationId as string | undefined;
 
 const PENDING_JOIN_CODE_KEY =
   "@elo/pending-join-code";
@@ -151,7 +154,7 @@ export function OrganizationEntryScreen({
 
           if (
             pendingIntent ===
-            "create"
+            "create" && !fixedOrganizationId
           ) {
             setMode(
               "create"
@@ -269,6 +272,10 @@ export function OrganizationEntryScreen({
           throw new Error(
             "Código de igreja não encontrado."
           );
+        }
+
+        if (fixedOrganizationId && (found as OrganizationLookup).organization_id !== fixedOrganizationId) {
+          throw new Error("Esse código não pertence à igreja deste aplicativo.");
         }
 
         setChurch(
@@ -808,6 +815,7 @@ export function OrganizationEntryScreen({
           </Text>
         </Pressable>
 
+        {!fixedOrganizationId ? (
         <Pressable
           onPress={() =>
             setMode(
@@ -864,6 +872,7 @@ export function OrganizationEntryScreen({
             →
           </Text>
         </Pressable>
+        ) : null}
 
         <Text
           style={
