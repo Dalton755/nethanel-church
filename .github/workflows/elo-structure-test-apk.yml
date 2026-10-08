@@ -1,0 +1,79 @@
+name: Elo - disponibilizar APK de teste
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: "ID do build Android no Expo EAS"
+        required: true
+        default: "a292a6c0-c7c9-461d-b4a6-ec379f45d863"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/elo-structure-test-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  download-test-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ELO_EAS_BUILD_ID: ${{ inputs.build_id || 'a292a6c0-c7c9-461d-b4a6-ec379f45d863' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Expo/EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check cloud build and fetch APK
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            eas build:view "$ELO_EAS_BUILD_ID" --json > /tmp/elo-test-build.json
+            status="$(node -e 'const f=require("/tmp/elo-test-build.json"); console.log(String(f.status || "").toUpperCase())')"
+            echo "Build status: $status"
+            if [ "$status" = "FINISHED" ]; then
+              break
+            fi
+            if [ "$status" = "ERRORED" ] || [ "$status" = "CANCELED" ]; then
+              echo "Build EAS sem APK de sucesso."
+              exit 1
+            fi
+            sleep 60
+          done
+
+          url="$(node -e 'const f=require("/tmp/elo-test-build.json"); if (String(f.status).toUpperCase() !== "FINISHED") process.exit(2); console.log(f.artifacts?.buildUrl || "")')"
+          if [ -z "$url" ]; then
+            echo "EAS não retornou URL do APK."
+            exit 1
+          fi
+
+          curl --fail --location --retry 3 --output nethanel-elo-estrutura-teste.apk "$url"
+          unzip -tq nethanel-elo-estrutura-teste.apk >/dev/null
+          echo "APK de teste validado como arquivo ZIP Android."
+
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nethanel-elo-estrutura-teste
+          path: apps/mobile/nethanel-elo-estrutura-teste.apk
+          retention-days: 14
+          if-no-files-found: error
