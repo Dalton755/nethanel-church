@@ -11,6 +11,7 @@ import {
 import * as Phosphor from "phosphor-react-native";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
+import { useChurchStructure } from "../organization/useChurchStructure";
 import { supabase } from "../../lib/supabase";
 import {
   EloActionButton,
@@ -155,6 +156,8 @@ export function ServiceScheduleScreen({
 
   const [saving, setSaving] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [applyingChurchTemplate, setApplyingChurchTemplate] = useState(false);
+  const { structure } = useChurchStructure();
   const [removingRuleId, setRemovingRuleId] =
     useState<string | null>(null);
 
@@ -409,6 +412,38 @@ export function ServiceScheduleScreen({
     }
   }
 
+  async function applyChurchTemplate() {
+    if (!activeOrganization || !activeUnit) return;
+    setApplyingChurchTemplate(true);
+    try {
+      const { data, error } = await supabase.rpc(
+        "apply_church_structure_event_templates",
+        {
+          p_organization_id: activeOrganization.id,
+          p_unit_id: activeUnit.id,
+          p_event_id: service.id,
+        }
+      );
+      if (error) throw error;
+      await load();
+      const result = data as {
+        departments_applied?: number;
+        functions_applied?: number;
+      } | null;
+      Alert.alert(
+        "Modelo da igreja aplicado",
+        `${result?.departments_applied ?? 0} departamentos e ${result?.functions_applied ?? 0} funções adicionados à escala desta data. Agora confira as pessoas disponíveis.`
+      );
+    } catch (error) {
+      Alert.alert(
+        "Não foi possível aplicar a estrutura",
+        error instanceof Error ? error.message : "Tente novamente."
+      );
+    } finally {
+      setApplyingChurchTemplate(false);
+    }
+  }
+
   async function applyTemplate() {
     if (!activeOrganization || !selectedDepartmentId) {
       Alert.alert(
@@ -609,8 +644,21 @@ export function ServiceScheduleScreen({
 
       {canManage ? (
         <View style={styles.primaryAction}>
+          {structure?.configured && structure.departments.length > 0 ? (
+            <>
+              <EloActionButton
+                label="Aplicar modelo da minha igreja"
+                icon="SparkleIcon"
+                loading={applyingChurchTemplate}
+                onPress={() => void applyChurchTemplate()}
+              />
+              <Text style={styles.eventHint}>
+                Preenche as funções dos departamentos selecionados somente nesta data.
+              </Text>
+            </>
+          ) : null}
           <EloActionButton
-            label={showForm ? "Fechar" : "Montar escala desta data"}
+            label={showForm ? "Fechar" : "Montar escala manualmente"}
             variant={showForm ? "secondary" : "primary"}
             icon={showForm ? "XIcon" : "PlusIcon"}
             onPress={() => setShowForm((value) => !value)}

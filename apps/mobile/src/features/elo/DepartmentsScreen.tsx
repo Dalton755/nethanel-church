@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,7 +26,14 @@ import {
 
 const P = Phosphor as any;
 
-export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
+export function DepartmentsScreen({
+  onBack,
+  initialDepartmentName,
+}: {
+  onBack: () => void;
+  initialDepartmentName?: string | null;
+}) {
+  const openedInitial = useRef<string | null>(null);
   const {
     activeOrganization,
     activeUnit,
@@ -69,7 +76,15 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
       );
 
       if (error) throw error;
-      setItems((data ?? []) as DepartmentSummary[]);
+      const next = (data ?? []) as DepartmentSummary[];
+      setItems(next);
+      if (initialDepartmentName && openedInitial.current !== initialDepartmentName) {
+        openedInitial.current = initialDepartmentName;
+        const match = next.find((item) =>
+          item.name.toLocaleLowerCase("pt-BR") === initialDepartmentName.toLocaleLowerCase("pt-BR")
+        );
+        if (match) setSelected(match);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -79,7 +94,7 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganization, activeUnit]);
+  }, [activeOrganization, activeUnit, initialDepartmentName]);
 
   useEffect(() => {
     void load();
