@@ -16,6 +16,7 @@ import * as Phosphor from "phosphor-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
+import { useChurchStructure } from "../organization/useChurchStructure";
 import { supabase } from "../../lib/supabase";
 import type { MainTabParamList } from "../../navigation/MainTabs";
 import { eloColors } from "../elo/EloUi";
@@ -109,6 +110,9 @@ export function MemberHomeScreen() {
   const [notices, setNotices] = useState<NoticeSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNextEvent, setShowNextEvent] = useState(false);
+  const { structure } = useChurchStructure();
+  const kidsEnabled = structure?.configured !== true ||
+    structure.departments.some((item) => item.key === "infantil");
 
   const canUseKids =
     can("kids.parent") ||
@@ -428,7 +432,7 @@ export function MemberHomeScreen() {
                 helper="Inscrições e próximos encontros"
                 onPress={() => openMemberModule("events")}
               />
-              {canUseKids ? (
+              {canUseKids && kidsEnabled ? (
                 <MemberAction
                   icon="BabyIcon"
                   label="Elo Kids"
