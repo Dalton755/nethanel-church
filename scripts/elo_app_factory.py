@@ -3,6 +3,7 @@
 A chave de service_role nunca deve ir para apps/web ou APK.
 Uso: python scripts/elo_app_factory.py claim|prepare|complete|fail
 """
+import base64
 import json
 import os
 import re
@@ -128,6 +129,27 @@ def prepare():
         "ELO_SPLASH_URL": brand["splash_url"],
         "ELO_BRANDED_PUSH": "true" if record["branded_push"] else "false",
     }
+    if record["branded_push"]:
+        encoded = os.environ.get("ELO_FIREBASE_GOOGLE_SERVICES_JSON_B64")
+        if not encoded:
+            raise RuntimeError(
+                "O push exclusivo necessita ELO_FIREBASE_GOOGLE_SERVICES_JSON_B64 "
+                "com o app Android registrado no Firebase."
+            )
+        google_services = base64.b64decode(encoded, validate=True)
+        parsed = json.loads(google_services)
+        registered = [
+            client.get("client_info", {}).get("android_client_info", {}).get("package_name")
+            for client in parsed.get("client", [])
+        ]
+        if record["android_package"] not in registered:
+            raise RuntimeError(
+                "Package Android da igreja não foi registrado no Firebase; "
+                "adicione-o e atualize a credencial de push."
+            )
+        Path("apps/mobile/google-services-white-label.json").write_bytes(google_services)
+        values["ELO_GOOGLE_SERVICES_FILE"] = "./google-services-white-label.json"
+
     # O arquivo GITHUB_ENV será interpretado pelo runner, nunca por um shell eval.
     environment = Path(os.environ["GITHUB_ENV"])
     with environment.open("a", encoding="utf-8") as output:
