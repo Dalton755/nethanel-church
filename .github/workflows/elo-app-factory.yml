@@ -97,9 +97,6 @@ jobs:
       - name: Compilar APK exclusivo
         if: steps.claim.outputs.pending == 'true'
         working-directory: apps/mobile
-        env:
-          EXPO_PUBLIC_SUPABASE_URL: https://esukjhuyooppxgfmltkb.supabase.co
-          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.ELO_SUPABASE_PUBLISHABLE_KEY }}
         run: eas build --platform android --profile preview --local --non-interactive --output ./elo-church-app.apk
 
       - name: Publicar APK em bucket privado da igreja
