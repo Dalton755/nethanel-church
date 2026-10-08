@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useOrganization } from "../../contexts/OrganizationContext";
 
 import { AccessRolesScreen } from "./AccessRolesScreen";
 import { ChurchBillingScreen } from "./ChurchBillingScreen";
 import { ChurchPersonalizationScreen } from "./ChurchPersonalizationScreen";
+import { ChurchStructureScreen } from "./ChurchStructureScreen";
 import { PeopleAccessScreen } from "./PeopleAccessScreen";
 import { EloModuleCard, EloScreen } from "../elo/EloUi";
 
@@ -10,10 +12,22 @@ type Props = {
   onBack: () => void;
 };
 
-type Section = "home" | "roles" | "people" | "branding" | "billing";
+type Section = "home" | "roles" | "people" | "branding" | "billing" | "structure";
 
 export function ChurchManagementScreen({ onBack }: Props) {
   const [section, setSection] = useState<Section>("home");
+  const { activeOrganization, activeUnit } = useOrganization();
+
+  if (section === "structure" && activeOrganization && activeUnit) {
+    return (
+      <ChurchStructureScreen
+        organizationId={activeOrganization.id}
+        unitId={activeUnit.id}
+        onBack={() => setSection("home")}
+        onCompleted={() => setSection("home")}
+      />
+    );
+  }
 
   if (section === "roles") {
     return <AccessRolesScreen onBack={() => setSection("home")} />;
@@ -42,6 +56,14 @@ export function ChurchManagementScreen({ onBack }: Props) {
       subtitle="Controle acessos, identidade da igreja e a contratação do Nethanel Elo."
       onBack={onBack}
     >
+      <EloModuleCard
+        icon="TreeStructureIcon"
+        title="Estrutura da igreja"
+        description="Defina departamentos, equipes, cargos ministeriais e modelos de escala. Pode mudar quando quiser."
+        badge="Todos os planos"
+        onPress={() => setSection("structure")}
+      />
+
       <EloModuleCard
         icon="UsersThreeIcon"
         title="Pessoas e acessos"
