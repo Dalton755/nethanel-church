@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { AppState } from "react-native";
+import Constants from "expo-constants";
 
 import { supabase } from "../lib/supabase";
 import type {
@@ -65,6 +66,11 @@ type OrganizationContextValue = {
 };
 
 const OrganizationContext = createContext<OrganizationContextValue | null>(null);
+
+// APK exclusivo fica vinculado à igreja que o contratou.
+const fixedOrganizationId: string | null =
+  typeof Constants.expoConfig?.extra?.eloOrganizationId === "string"
+    ? Constants.expoConfig.extra.eloOrganizationId : null;
 
 type OrganizationProviderProps = {
   userId: string;
@@ -187,7 +193,9 @@ export function OrganizationProvider({
 
         const nextProfile = context?.profile ?? null;
         const rawOrganizations = Array.isArray(context?.organizations)
-          ? context.organizations
+          ? context.organizations.filter(
+              (org) => !fixedOrganizationId || org.id === fixedOrganizationId
+            )
           : [];
         const nextOrganizations = mergeBranding(
           rawOrganizations,
@@ -286,6 +294,9 @@ export function OrganizationProvider({
 
   const selectOrganization = useCallback(
     async (organizationId: string) => {
+      if (fixedOrganizationId && fixedOrganizationId !== organizationId) {
+        throw new Error("Este aplicativo é exclusivo de outra igreja.");
+      }
       const organization = organizations.find(
         (item) => item.id === organizationId
       );
