@@ -6,6 +6,7 @@ import {
 } from "react-native";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
+import { useChurchStructure } from "../organization/useChurchStructure";
 import { CareScreen } from "../care/CareScreen";
 import { ContributionSettingsScreen } from "../finance/ContributionSettingsScreen";
 import { ChurchManagementScreen } from "../management/ChurchManagementScreen";
@@ -55,6 +56,11 @@ export function EloHubScreen({ route }: EloHubProps) {
 
   const [activeModule, setActiveModule] =
     useState<EloModuleKey | null>(null);
+
+  const { structure } = useChurchStructure(activeModule);
+  const structureReady = structure?.configured === true;
+  const hasKids = !structureReady || structure.departments.some((item) => item.key === "infantil");
+  const hasDepartments = !structureReady || structure.departments.length > 0;
 
   const brandColor =
     activeOrganization?.primary_color ?? eloColors.green;
@@ -121,7 +127,7 @@ export function EloHubScreen({ route }: EloHubProps) {
     return <EventsScreen onBack={() => setActiveModule(null)} />;
   }
 
-  if (activeModule === "kids") {
+  if (activeModule === "kids" && hasKids) {
     return <KidsScreen onBack={() => setActiveModule(null)} />;
   }
 
@@ -171,6 +177,12 @@ export function EloHubScreen({ route }: EloHubProps) {
         </View>
       </View>
 
+      {structureReady ? (
+        <Text style={styles.structureNote}>
+          {structure.departments.length} departamento(s) ativo(s) • {structure.ministries.length} cargo(s) ministerial(is)
+        </Text>
+      ) : null}
+
       <Text style={eloSharedStyles.sectionTitle}>Minha rotina</Text>
 
       <EloModuleCard
@@ -189,7 +201,7 @@ export function EloHubScreen({ route }: EloHubProps) {
         onPress={() => setActiveModule("events")}
       />
 
-      {permissions.kids ? (
+      {permissions.kids && hasKids ? (
         <EloModuleCard
           icon="BabyIcon"
           title="Elo Kids"
@@ -201,7 +213,7 @@ export function EloHubScreen({ route }: EloHubProps) {
 
       <Text style={eloSharedStyles.sectionTitle}>Igreja e equipes</Text>
 
-      {permissions.schedulesManage ? (
+      {permissions.schedulesManage && (hasDepartments || permissions.management) ? (
         <EloModuleCard
           icon="CalendarCheckIcon"
           title="Equipes para escala"
@@ -211,7 +223,7 @@ export function EloHubScreen({ route }: EloHubProps) {
         />
       ) : null}
 
-      {permissions.departments ? (
+      {permissions.departments && (hasDepartments || permissions.management) ? (
         <EloModuleCard
           icon="UsersThreeIcon"
           title="Departamentos"
@@ -288,7 +300,7 @@ export function EloHubScreen({ route }: EloHubProps) {
       ) : null}
 
       {!permissions.departments &&
-      !permissions.kids &&
+      !(permissions.kids && hasKids) &&
       !permissions.communication &&
       !permissions.care &&
       !permissions.scanner &&
@@ -335,6 +347,11 @@ const styles = StyleSheet.create({
   contextUnit: {
     marginTop: 2,
     fontSize: 11,
+    color: eloColors.muted,
+  },
+  structureNote: {
+    marginTop: 10,
+    fontSize: 12,
     color: eloColors.muted,
   },
   stateWrap: {
