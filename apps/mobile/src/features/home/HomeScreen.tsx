@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { EloLogo } from "../../branding/EloBrand";
 import { useOrganization } from "../../contexts/OrganizationContext";
+import { useChurchStructure } from "../organization/useChurchStructure";
 import { supabase } from "../../lib/supabase";
 import type { MainTabParamList } from "../../navigation/MainTabs";
 import { useUnreadNotifications } from "../notifications/useUnreadNotifications";
@@ -53,12 +54,16 @@ export function HomeScreen() {
     profile,
     activeOrganization,
     activeUnit,
+    canAtOrganization,
   } = useOrganization();
 
   const navigation =
     useNavigation<BottomTabNavigationProp<MainTabParamList>>();
 
   const { unreadCount } = useUnreadNotifications(activeOrganization?.id);
+  const { structure } = useChurchStructure();
+  const canConfigureStructure = canAtOrganization("organization.manage") ||
+    canAtOrganization("departments.manage");
 
   const [schedule, setSchedule] = useState<ScheduleSummary | null>(null);
   const [nextEvent, setNextEvent] = useState<EventSummary | null>(null);
@@ -234,6 +239,24 @@ export function HomeScreen() {
           Aqui está o que merece sua atenção agora.
         </Text>
 
+        {canConfigureStructure && structure && !structure.configured ? (
+          <Pressable
+            onPress={() => navigation.navigate("Elo", {
+              module: "structure", nonce: Date.now(),
+            })}
+            style={styles.structureCallout}
+          >
+            <P.TreeStructureIcon size={25} color={eloColors.blue} weight="duotone" />
+            <View style={styles.structureCopy}>
+              <Text style={styles.structureTitle}>Personalize a estrutura da igreja</Text>
+              <Text style={styles.structureHint}>
+                Em 3 etapas, ative departamentos, ministérios e escalas.
+              </Text>
+            </View>
+            <P.CaretRightIcon size={18} color={eloColors.blue} />
+          </Pressable>
+        ) : null}
+
         {loading ? (
           <View style={styles.loading}>
             <ActivityIndicator />
@@ -401,6 +424,14 @@ function QuickAction({
 }
 
 const styles = StyleSheet.create({
+  structureCallout: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    borderWidth: 1, borderColor: "#C7E5F7", borderRadius: 16,
+    backgroundColor: "#EEF7FD", padding: 15, marginTop: 16,
+  },
+  structureCopy: { flex: 1 },
+  structureTitle: { fontWeight: "800", fontSize: 14, color: eloColors.ink },
+  structureHint: { fontSize: 12, color: eloColors.muted, marginTop: 5, lineHeight: 18 },
   safeArea: {
     flex: 1,
     backgroundColor: eloColors.background,
