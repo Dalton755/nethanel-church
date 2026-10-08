@@ -185,12 +185,12 @@ export default function ChurchStudioPage() {
   const departments = useMemo(() => [...DEPARTMENT_PRESETS, ...customDepartments], [customDepartments]);
   const activeDepts = departments.filter(d => chosenDepartments[d.key] !== undefined);
   const showKids = activeDepts.some(d => d.key === "infantil");
-  const previewLogo = logoFile ? URL.createObjectURL(logoFile) : logoUrl; // revogado no efeito abaixo
+  const previewLogo = useMemo(() => logoFile && typeof window !== "undefined"
+    ? URL.createObjectURL(logoFile) : logoUrl, [logoFile, logoUrl]);
   useEffect(() => {
-    if (!logoFile) return;
     const u = previewLogo;
     return () => { if (u?.startsWith("blob:")) URL.revokeObjectURL(u); };
-  }, [logoFile, previewLogo]);
+  }, [previewLogo]);
   const show = (text: string) => { setMessage(text); setError(""); };
   const fail = (err: unknown) => { setError(readableError(err)); setMessage(""); };
 
