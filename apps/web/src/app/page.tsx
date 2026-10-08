@@ -17,6 +17,12 @@ export default function Home() {
 
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
+            href="/painel"
+            className="rounded-xl bg-zinc-950 px-5 py-3 text-sm font-bold text-white"
+          >
+            Cadastrar e personalizar minha igreja
+          </Link>
+          <Link
             href="/privacidade"
             className="rounded-xl bg-zinc-950 px-5 py-3 text-sm font-bold text-white"
           >
