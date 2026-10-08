@@ -65,6 +65,32 @@ def make_assets(
     place_center(splash, splash_art)
     splash.save(output / "splash-icon.png", optimize=True)
 
+    # Ícone do push Android: branco e transparente.
+    # Remove fundos de cor uniforme, mantendo o desenho da marca.
+    foreground = contain(icon_source, 82)
+    rgba = foreground.convert("RGBA")
+    corners = [
+        rgba.getpixel((0, 0)), rgba.getpixel((rgba.width - 1, 0)),
+        rgba.getpixel((0, rgba.height - 1)),
+        rgba.getpixel((rgba.width - 1, rgba.height - 1)),
+    ]
+    opaque_background = all(pixel[3] > 250 for pixel in corners)
+    corner = corners[0]
+    alpha = Image.new("L", rgba.size, 0)
+    for y in range(rgba.height):
+        for x in range(rgba.width):
+            red, green, blue, opacity = rgba.getpixel((x, y))
+            if opaque_background:
+                distance = max(abs(red - corner[0]), abs(green - corner[1]), abs(blue - corner[2]))
+                opacity = int(opacity * min(1, max(0, (distance - 20) / 65)))
+            alpha.putpixel((x, y), opacity)
+
+    notification = Image.new("RGBA", (96, 96), (0, 0, 0, 0))
+    monochrome = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+    monochrome.putalpha(alpha)
+    place_center(notification, monochrome)
+    notification.save(output / "notification-icon.png", optimize=True)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
