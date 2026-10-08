@@ -10,6 +10,7 @@ import { useChurchStructure } from "../organization/useChurchStructure";
 import { CareScreen } from "../care/CareScreen";
 import { ContributionSettingsScreen } from "../finance/ContributionSettingsScreen";
 import { ChurchManagementScreen } from "../management/ChurchManagementScreen";
+import { ChurchStructureScreen } from "../management/ChurchStructureScreen";
 import { CommunicationScreen } from "./CommunicationScreen";
 import { DepartmentsScreen } from "./DepartmentsScreen";
 import { EventsScreen } from "./EventsScreen";
@@ -35,7 +36,8 @@ export type EloModuleKey =
   | "finance"
   | "care"
   | "contribution-settings"
-  | "management";
+  | "management"
+  | "structure";
 
 type EloHubProps = {
   route?: {
@@ -153,6 +155,15 @@ export function EloHubScreen({ route }: EloHubProps) {
 
   if (activeModule === "contribution-settings") {
     return <ContributionSettingsScreen onBack={() => setActiveModule(null)} />;
+  }
+
+  if (activeModule === "structure" && permissions.management && activeOrganization && activeUnit) {
+    return <ChurchStructureScreen
+      organizationId={activeOrganization.id}
+      unitId={activeUnit.id}
+      onBack={() => setActiveModule(null)}
+      onCompleted={() => setActiveModule(null)}
+    />;
   }
 
   if (activeModule === "management") {
