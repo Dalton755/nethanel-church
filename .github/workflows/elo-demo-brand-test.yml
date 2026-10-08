@@ -1,0 +1,81 @@
+name: Elo Demo Adoradores - instalar branding
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/elo-demo-brand-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  brand-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Preparar Pillow
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Preparar arte sem acesso aos segredos
+        env:
+          LOGO_SOURCE: "https://media.canva.com/v2/image-resize/format:PNG/height:150/quality:100/uri:ifs%3A%2F%2FM%2F45c243c0-1c4c-4d58-a68f-9ef3b1370711/watermark:F/width:200?csig=AAAAAAAAAAAAAAAAAAAAAC-bJ4vD0zYs27F671v3oxT3-DqGOw-mgIe7bXMzB2YJ&exp=1791520994&osig=AAAAAAAAAAAAAAAAAAAAALAvV0-GO2kxzGqCRgP9zufBU3Fr42-xxKt3GbBJmOJd&signer=media-rpc&token=AAIAAU0AJDQ1YzI0M2MwLTFjNGMtNGQ1OC1hNjhmLTllZjNiMTM3MDcxMQAAAAABoR748tDTsok8xcKX_Nc5kcf0SQXPri4mOyP9TRB-BJ3Ap0pUYg&x-canva-quality=thumbnail"
+        run: |
+          python - <<'PY'
+          import io, os, urllib.request
+          from pathlib import Path
+          from PIL import Image,ImageOps
+          src=os.environ["LOGO_SOURCE"]
+          if not src.startswith("https://media.canva.com/"):
+              raise SystemExit("Fonte inválida")
+          request=urllib.request.Request(src,headers={"User-Agent":"Mozilla/5.0"})
+          with urllib.request.urlopen(request,timeout=30) as response:
+              data=response.read(5000000)
+          img=Image.open(io.BytesIO(data)).convert("RGB")
+          if img.width<180 or img.height<125:
+              raise SystemExit("Imagem inválida")
+          folder=Path("/tmp/elo-brand")
+          folder.mkdir(parents=True,exist_ok=True)
+          img.resize((1000,750),Image.Resampling.LANCZOS).save(folder/"logo.png",optimize=True)
+          part=img.crop((int(img.width*.22),int(img.height*.02),
+                         int(img.width*.78),int(img.height*.58)))
+          ImageOps.pad(part,(1024,1024),color=(11,21,40)).save(folder/"app-icon.png",optimize=True)
+          img.resize((1000,750),Image.Resampling.LANCZOS).save(folder/"splash.png",optimize=True)
+          print("Marca de teste preparada.")
+          PY
+
+      - name: Aplicar marca a Adoradores Church no Supabase
+        env:
+          ELO_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          from pathlib import Path
+          base="https://esukjhuyooppxgfmltkb.supabase.co"
+          org="dfe3dfb7-37be-4120-a46a-8f010beaabc3"
+          secret=os.environ.get("ELO_SUPABASE_SERVICE_ROLE_KEY")
+          if not secret: raise SystemExit("Credencial não configurada.")
+          for kind in ["logo","app-icon","splash"]:
+              file=Path("/tmp/elo-brand")/(kind+".png")
+              req=urllib.request.Request(
+                  base+"/storage/v1/object/church-branding/"+org+"/"+kind+".png",
+                  data=file.read_bytes(),method="POST",
+                  headers={"apikey":secret,"Authorization":"Bearer "+secret,
+                           "Content-Type":"image/png","x-upsert":"true"})
+              with urllib.request.urlopen(req,timeout=30) as resp:
+                  if resp.status not in (200,201):
+                      raise SystemExit("Falha no upload da marca")
+              print("Imagem salva:",kind)
+          obj={name+"_url":base+"/storage/v1/object/public/church-branding/"+org+"/"+path+".png"
+             for name,path in [("logo","logo"),("app_icon","app-icon"),("splash","splash")]}
+          req=urllib.request.Request(
+              base+"/rest/v1/organizations?id=eq."+org,
+              data=json.dumps(obj).encode(),method="PATCH",
+              headers={"apikey":secret,"Authorization":"Bearer "+secret,
+                       "Content-Type":"application/json","Prefer":"return=representation"})
+          with urllib.request.urlopen(req,timeout=30) as resp:
+              results=json.load(resp)
+              if len(results)!=1: raise SystemExit("Igreja não atualizada")
+          print("Logo e ícones aplicados à Adoradores Church.")
+          PY
