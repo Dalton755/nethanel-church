@@ -11,6 +11,7 @@ import * as Phosphor from "phosphor-react-native";
 import * as Clipboard from "expo-clipboard";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
+import { useChurchStructure } from "../organization/useChurchStructure";
 import { supabase } from "../../lib/supabase";
 import { EventsScreen } from "../elo/EventsScreen";
 import { KidsScreen } from "../elo/KidsScreen";
@@ -122,6 +123,9 @@ export function MemberHubScreen({ route }: MemberHubProps) {
 
   const [activeModule, setActiveModule] =
     useState<MemberModuleKey | null>(null);
+  const { structure } = useChurchStructure(activeModule);
+  const kidsEnabled = structure?.configured !== true ||
+    structure.departments.some((item) => item.key === "infantil");
 
   const [prayers, setPrayers] = useState<PrayerRequest[]>([]);
   const [pastoral, setPastoral] = useState<PastoralRequest[]>([]);
@@ -198,7 +202,7 @@ export function MemberHubScreen({ route }: MemberHubProps) {
     return <EventsScreen onBack={() => setActiveModule(null)} />;
   }
 
-  if (activeModule === "kids") {
+  if (activeModule === "kids" && kidsEnabled) {
     return <KidsScreen onBack={() => setActiveModule(null)} />;
   }
 
@@ -299,7 +303,7 @@ export function MemberHubScreen({ route }: MemberHubProps) {
             onPress={() => setActiveModule("events")}
           />
 
-          {canUseKids ? (
+          {canUseKids && kidsEnabled ? (
             <EloModuleCard
               icon="BabyIcon"
               title="Elo Kids"
