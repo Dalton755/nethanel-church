@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { EloLogo } from "../../branding/EloBrand";
 import { supabase } from "../../lib/supabase";
+import { ChurchStructureScreen } from "../management/ChurchStructureScreen";
 
 type OrganizationSetupScreenProps = {
   displayName?: string | null;
@@ -32,6 +33,9 @@ export function OrganizationSetupScreen({
     useState<string | null>(null);
   const [createdChurchName, setCreatedChurchName] =
     useState<string | null>(null);
+  const [createdOrganizationId, setCreatedOrganizationId] = useState<string | null>(null);
+  const [createdUnitId, setCreatedUnitId] = useState<string | null>(null);
+  const [showStructure, setShowStructure] = useState(false);
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
 
@@ -72,15 +76,19 @@ export function OrganizationSetupScreen({
         data as
           | {
               join_code?: string;
+              organization_id?: string;
+              unit_id?: string;
             }
           | null;
 
-      if (!result?.join_code) {
+      if (!result?.join_code || !result.organization_id || !result.unit_id) {
         throw new Error(
           "A igreja foi criada, mas o código de entrada não foi retornado."
         );
       }
 
+      setCreatedOrganizationId(result.organization_id);
+      setCreatedUnitId(result.unit_id);
       setCreatedChurchName(
         normalizedChurchName
       );
@@ -98,6 +106,18 @@ export function OrganizationSetupScreen({
     } finally {
       setLoading(false);
     }
+  }
+
+  if (showStructure && createdOrganizationId && createdUnitId) {
+    return (
+      <ChurchStructureScreen
+        organizationId={createdOrganizationId}
+        unitId={createdUnitId}
+        initialSetup
+        onBack={() => setShowStructure(false)}
+        onCompleted={onCreated}
+      />
+    );
   }
 
   if (createdJoinCode) {
@@ -144,41 +164,35 @@ export function OrganizationSetupScreen({
           )}
 
           <Pressable
+            onPress={() => setShowStructure(true)}
+            style={styles.primaryButton}
+          >
+            <Text style={styles.primaryButtonText}>
+              Personalizar a estrutura da igreja
+            </Text>
+          </Pressable>
+
+          <Pressable
             disabled={loading}
             onPress={() => {
               void (async () => {
                 setErrorMessage(null);
                 setLoading(true);
-
                 try {
                   await onCreated();
                 } catch (error) {
-                  setErrorMessage(
-                    error instanceof Error
-                      ? error.message
-                      : "Não foi possível abrir a igreja."
-                  );
+                  setErrorMessage(error instanceof Error
+                    ? error.message : "Não foi possível abrir a igreja.");
                 } finally {
                   setLoading(false);
                 }
               })();
             }}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              pressed &&
-                !loading &&
-                styles.buttonPressed,
-              loading &&
-                styles.buttonDisabled,
-            ]}
+            style={styles.secondaryButton}
           >
-            {loading ? (
-              <ActivityIndicator />
-            ) : (
-              <Text style={styles.primaryButtonText}>
-                Entrar no Elo
-              </Text>
-            )}
+            <Text style={styles.secondaryButtonText}>
+              Configurar depois
+            </Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -466,6 +480,17 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
 
+  secondaryButton: {
+    marginTop: 10,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryButtonText: {
+    color: "#596673",
+    fontSize: 14,
+    fontWeight: "700",
+  },
   buttonPressed: {
     opacity: 0.82,
   },
