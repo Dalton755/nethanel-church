@@ -1,0 +1,115 @@
+name: Elo App Factory - APK exclusivo da igreja
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: elo-app-factory
+  cancel-in-progress: false
+
+jobs:
+  build-church-apk:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+    steps:
+      - name: Checkout de código revisado
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Busca solicitação autorizada e inicia compilação
+        id: claim
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          python scripts/elo_app_factory.py claim
+          if test -f /tmp/elo-app-factory-claim.json; then
+            echo "pending=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pending=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Java 17
+        if: steps.claim.outputs.pending == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Node.js 24
+        if: steps.claim.outputs.pending == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Expo e EAS
+        if: steps.claim.outputs.pending == 'true'
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Instalar dependências
+        if: steps.claim.outputs.pending == 'true'
+        run: |
+          npm ci
+          npm install --no-save --workspace=mobile expo-splash-screen expo@57.0.27 expo-constants@57.0.21 expo-linking@57.0.12 expo-notifications@57.0.22
+
+      - name: Validar configuração e Firebase da igreja
+        if: steps.claim.outputs.pending == 'true'
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+          ELO_FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.ELO_FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
+        run: python scripts/elo_app_factory.py prepare
+
+      - name: Gerar arte nativa com ícone de push
+        if: steps.claim.outputs.pending == 'true'
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python apps/mobile/scripts/prepare_white_label_assets.py \
+            --icon-url "$ELO_ICON_URL" \
+            --splash-url "$ELO_SPLASH_URL" \
+            --background-color "$ELO_BACKGROUND_COLOR"
+
+      - name: Validar código e identificação do app
+        if: steps.claim.outputs.pending == 'true'
+        run: |
+          npm run typecheck --workspace=mobile
+          cd apps/mobile
+          npx expo config --type public --json > /tmp/elo-tenant-expo.json
+          python - <<'PY'
+          import json, os
+          with open('/tmp/elo-tenant-expo.json',encoding='utf-8') as f: c=json.load(f)
+          assert c['android']['package']==os.environ['ELO_ANDROID_PACKAGE']
+          assert c['extra']['eloOrganizationId']==os.environ['ELO_ORGANIZATION_ID']
+          assert c['name']==os.environ['ELO_APP_NAME']
+          assert bool(c['extra']['eloBrandedPush'])==(os.environ['ELO_BRANDED_PUSH']=='true')
+          print('Identidade de pacote, igreja e push validados.')
+          PY
+
+      - name: Compilar APK exclusivo
+        if: steps.claim.outputs.pending == 'true'
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://esukjhuyooppxgfmltkb.supabase.co
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.ELO_SUPABASE_PUBLISHABLE_KEY }}
+        run: eas build --platform android --profile preview --local --non-interactive --output ./elo-church-app.apk
+
+      - name: Publicar APK em bucket privado da igreja
+        if: steps.claim.outputs.pending == 'true'
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/elo_app_factory.py complete
+
+      - name: Registrar falha (sem expor credenciais)
+        if: failure() && steps.claim.outputs.pending == 'true'
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/elo_app_factory.py fail
