@@ -109,20 +109,23 @@ jobs:
         working-directory: apps/mobile
         run: eas build --platform android --profile preview --local --non-interactive --output ./elo-church-app.apk
 
-      - name: Publicar APK em bucket privado da igreja
-        if: steps.claim.outputs.pending == 'true'
-        env:
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
-        run: python scripts/elo_app_factory.py complete
-
+      # Save the successfully compiled APK before any remote storage upload.
+      # If Supabase rejects the size, the customer test APK still survives.
       - name: Disponibilizar APK de testes por 14 dias no GitHub
         if: success() && steps.claim.outputs.pending == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: elo-adoradores-test-${{ github.run_id }}
+          name: elo-igreja-teste-${{ github.run_id }}
           path: apps/mobile/elo-church-app.apk
           retention-days: 14
           if-no-files-found: error
+          compression-level: 0
+
+      - name: Publicar APK em bucket privado da igreja
+        if: success() && steps.claim.outputs.pending == 'true'
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/elo_app_factory.py complete
 
       - name: Registrar falha (sem expor credenciais)
         if: failure() && steps.claim.outputs.pending == 'true'
