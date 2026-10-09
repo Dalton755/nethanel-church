@@ -69,8 +69,9 @@ jobs:
           # As dependências nativas DEVEM constar do package.json e package-lock
           # gerados no runner (não apenas de node_modules).
           npm install --workspace=mobile expo@57.0.27 expo-constants@57.0.21 expo-linking@57.0.12 expo-notifications@57.0.22
-          cd apps/mobile
-          npx expo install --npm expo-splash-screen
+          # Expo dynamic app.config.ts ja registra o plugin; npm grava a
+          # dependencia e o lock para a reinstalacao interna do EAS.
+          npm install --workspace=mobile expo-splash-screen
 
       - name: Validar configuração e Firebase da igreja
         if: steps.claim.outputs.pending == 'true'
