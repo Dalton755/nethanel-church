@@ -30,6 +30,15 @@ type Build = {
   artifact_path: string | null; created_at: string;
   failure_reason: string | null; android_package: string; branded_push: boolean;
 };
+type SetupStatus = {
+  android_package: string;
+  standalone_apk: boolean;
+  branded_push: boolean;
+  firebase_registered: boolean;
+  expo_fcm_verified: boolean;
+  firebase_project_id: string | null;
+  firebase_registration_source: string | null;
+};
 
 const COLORS = ["#2387C9", "#406A85", "#556CCF", "#8064C4", "#3B8F75", "#D0A53A", "#AF5B6D", "#202B39"];
 const STEPS = ["Sua marca", "Departamentos", "Ministérios", "Meu aplicativo"];
@@ -86,6 +95,7 @@ export default function ChurchStudioPage() {
   const [customMinistries, setCustomMinistries] = useState<Ministry[]>([]);
   const [newMinistryName, setNewMinistryName] = useState("");
   const [builds, setBuilds] = useState<Build[]>([]);
+  const [setup, setSetup] = useState<SetupStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -124,17 +134,20 @@ export default function ChurchStudioPage() {
 
   const loadBuilds = useCallback(async (orgId: string) => {
     if (!client) return;
-    const { data, error: loadError } = await client.from("church_apk_builds")
-      .select("id,status,artifact_path,created_at,failure_reason,android_package,branded_push")
-      .eq("organization_id", orgId).order("created_at", { ascending: false }).limit(5);
-    if (loadError) return;
-    setBuilds((data ?? []) as Build[]);
+    const [buildResult, setupResult] = await Promise.all([
+      client.from("church_apk_builds")
+        .select("id,status,artifact_path,created_at,failure_reason,android_package,branded_push")
+        .eq("organization_id", orgId).order("created_at", { ascending: false }).limit(5),
+      client.rpc("get_church_apk_setup_status", { p_organization_id: orgId }),
+    ]);
+    if (!buildResult.error) setBuilds((buildResult.data ?? []) as Build[]);
+    if (!setupResult.error && setupResult.data) setSetup(setupResult.data as SetupStatus);
   }, [client]);
 
   const selectChurch = useCallback(async (next: Church) => {
     if (!client) return;
     setError(""); setMessage(""); setChurch(next); setChurchName(next.name);
-    setStep(0); setBuilds([]);
+    setStep(0); setBuilds([]); setSetup(null);
     try {
       const unit = next.units.find((u) => u.is_headquarters) ?? next.units[0];
       if (!unit) throw new Error("A igreja ainda não possui uma unidade.");
@@ -589,9 +602,23 @@ export default function ChurchStudioPage() {
                   <section className={cardClass}>
                     <h3 className="text-xl font-black">Aplicativo exclusivo da igreja</h3>
                     <p className="mt-2 text-sm leading-7 text-slate-500">Ícone e nome próprios no celular, estrutura carregada ao entrar e identidade da igreja em todo o painel.</p>
-                    <div className="my-5 grid gap-2 text-sm">
-                      <div className="flex justify-between"><span>APK próprio</span><b>{canApk ? "Disponível" : "Elo Rede / White Label"}</b></div>
-                      <div className="flex justify-between"><span>Push com identidade da igreja</span><b>{brandedPush ? "Incluído no plano*" : "Não incluído"}</b></div>
+                    <div className="my-5 grid gap-3 text-sm">
+                      <div className="flex justify-between gap-2"><span>APK próprio</span><b>{canApk ? "Disponível" : "Elo Rede / White Label"}</b></div>
+                      <div className="flex justify-between gap-2"><span>Push no plano</span><b>{brandedPush ? "Incluído*" : "Não incluído"}</b></div>
+                      {setup && canApk && brandedPush && (
+                        <div className="grid gap-2 rounded-2xl bg-slate-50 p-4">
+                          <p className="text-xs font-black uppercase tracking-wide text-slate-500">Preparação das notificações</p>
+                          <p className={setup.firebase_registered ? "text-emerald-700" : "text-amber-700"}>
+                            {setup.firebase_registered ? "✓ Cadastro Android Firebase concluído" : "◷ Cadastro Android Firebase pendente"}
+                          </p>
+                          <p className={setup.expo_fcm_verified ? "text-emerald-700" : "text-amber-700"}>
+                            {setup.expo_fcm_verified ? "✓ Push Android validado no aparelho" : "◷ Associação FCM V1 no Expo pendente de validação"}
+                          </p>
+                          {!setup.expo_fcm_verified && (
+                            <p className="text-xs leading-5 text-slate-500">O APK pode ser preparado, mas as notificações na barra do celular só estarão disponíveis após a credencial FCM V1 ser associada ao identificador Android e validada.</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <button disabled={!canApk || busy} className={primaryButton + " w-full"} onClick={() => void requestApk()}>
                       {busy ? "Solicitando..." : canApk ? "Solicitar meu APK personalizado" : "APK exclusivo indisponível neste plano"}
@@ -604,10 +631,13 @@ export default function ChurchStudioPage() {
                     {builds.length === 0 ? <p className="mt-4 text-sm text-slate-500">Nenhuma compilação solicitada.</p> : <div className="mt-4 grid gap-3">{builds.map(b =>
                       <div key={b.id} className="rounded-2xl border border-slate-200 p-4">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div><p className="font-bold">{b.status === "queued" ? "Solicitação recebida" : b.status === "building" ? "Gerando APK..." : b.status === "ready" ? "Aplicativo pronto" : "Falha na compilação"}</p>
+                          <div><p className="font-bold">{b.status === "queued" && b.branded_push && setup && !setup.firebase_registered ? "Aguardando registro Firebase" : b.status === "queued" ? "Solicitação na fila" : b.status === "building" ? "Gerando APK..." : b.status === "ready" ? "Aplicativo pronto" : "Falha na compilação"}</p>
                             <p className="mt-1 text-xs text-slate-500">{new Date(b.created_at).toLocaleString("pt-BR")} • {b.android_package}</p></div>
                           {b.status === "ready" && <button className={primaryButton} onClick={() => void downloadApk(b)}>Baixar APK ↓</button>}
                         </div>
+                        {b.branded_push && b.status === "ready" && setup && !setup.expo_fcm_verified && (
+                          <p className="mt-2 text-xs text-amber-700">APK disponível, mas o Push externo ainda aguarda configuração/validação FCM no Expo.</p>
+                        )}
                         {b.failure_reason && <p className="mt-2 text-xs text-red-700">{b.failure_reason}</p>}
                       </div>
                     )}</div>}
