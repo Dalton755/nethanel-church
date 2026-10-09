@@ -1,0 +1,30 @@
+name: Elo App Factory - testes de provisionamento
+
+on:
+  pull_request:
+    paths:
+      - "scripts/elo_firebase_provision.py"
+      - "scripts/elo_app_factory.py"
+      - "scripts/test_elo_firebase_provision.py"
+      - ".github/workflows/elo-factory-unit-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/elo_firebase_provision.py"
+      - "scripts/elo_app_factory.py"
+      - "scripts/test_elo_firebase_provision.py"
+      - ".github/workflows/elo-factory-unit-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  factory-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validar Python sem segredos
+        run: |
+          python -m py_compile scripts/elo_firebase_provision.py scripts/elo_app_factory.py
+          PYTHONPATH=scripts python -m unittest -v test_elo_firebase_provision
