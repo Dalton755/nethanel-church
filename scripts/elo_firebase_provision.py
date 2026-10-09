@@ -2,7 +2,7 @@
 """Cria automaticamente o cadastro ANDROID Firebase para APKs Elo White Label.
 
 Somente GitHub Actions protegido executa isto. Credencial de gerenciamento:
-GitHub Secret ELO_FIREBASE_MANAGEMENT_SA_JSON_B64. Não usar chave FCM Expo
+GitHub Secret ELO_FIREBASE_MANAGEMENT_SA_JSON (ou versão Base64). Não usar chave FCM Expo
 para gerenciar aplicativos sem permissão explícita de Firebase Management.
 Nunca publica chave nem JSON administrativo nos aplicativos.
 """
@@ -24,13 +24,16 @@ BASE = "https://firebase.googleapis.com/v1beta1"
 
 
 def access_token():
+    raw = os.environ.get("ELO_FIREBASE_MANAGEMENT_SA_JSON", "").strip()
     encoded = os.environ.get("ELO_FIREBASE_MANAGEMENT_SA_JSON_B64", "").strip()
-    if not encoded:
+    if not raw and not encoded:
         return None
-    # A chave privada existe somente em memória do job.
+    # A chave privada existe somente em memória do job. Prefira JSON bruto
+    # no GitHub Secret para facilitar a configuração pelo celular.
     from google.oauth2 import service_account
     from google.auth.transport.requests import Request
-    info = json.loads(base64.b64decode(encoded, validate=True).decode("utf-8"))
+    info = json.loads(raw) if raw else json.loads(
+        base64.b64decode(encoded, validate=True).decode("utf-8"))
     if info.get("type") != "service_account":
         raise ValueError("A credencial precisa ser uma conta de serviço Google.")
     credentials = service_account.Credentials.from_service_account_info(
@@ -162,7 +165,7 @@ def main():
         return
     bearer = access_token()
     if not bearer:
-        print("Pendente: configurar Secret ELO_FIREBASE_MANAGEMENT_SA_JSON_B64.")
+        print("Pendente: configurar Secret ELO_FIREBASE_MANAGEMENT_SA_JSON.")
         print("Nenhum aplicativo foi criado; a fila continuará aguardando.")
         return
     # Trabalhar com uma solicitação por execução para limitar quotas e custos.
