@@ -3,7 +3,6 @@
 A chave de service_role nunca deve ir para apps/web ou APK.
 Uso: python scripts/elo_app_factory.py claim|prepare|complete|fail
 """
-import base64
 import json
 import os
 import re
@@ -130,25 +129,55 @@ def prepare():
         "ELO_BRANDED_PUSH": "true" if record["branded_push"] else "false",
     }
     if record["branded_push"]:
-        encoded = os.environ.get("ELO_FIREBASE_GOOGLE_SERVICES_JSON_B64")
-        if not encoded:
+        # Busca apenas identificadores públicos, associados ao tenant, via service_role.
+        # Nunca colocar credenciais privadas do Firebase no banco ou no APK.
+        org = urllib.parse.quote(record["organization_id"], safe="")
+        rows = request(
+            "GET",
+            f"/rest/v1/church_firebase_android_apps?organization_id=eq.{org}"
+            "&select=firebase_project_id,firebase_app_id,android_package",
+        )
+        if not rows or len(rows) != 1:
             raise RuntimeError(
-                "O push exclusivo necessita ELO_FIREBASE_GOOGLE_SERVICES_JSON_B64 "
-                "com o app Android registrado no Firebase."
+                "Registre o pacote Android da igreja no Firebase antes do build."
             )
-        google_services = base64.b64decode(encoded, validate=True)
-        parsed = json.loads(google_services)
-        registered = [
-            client.get("client_info", {}).get("android_client_info", {}).get("package_name")
-            for client in parsed.get("client", [])
+
+        firebase = rows[0]
+        if firebase["android_package"] != record["android_package"]:
+            raise RuntimeError("Identificador Android divergente do registro Firebase.")
+
+        # O google-services.json do Elo base é a fonte dos identificadores
+        # públicos de projeto e API. Geramos um arquivo somente com o client
+        # da igreja que será incluído no APK personalizado.
+        template_path = Path("apps/mobile/google-services.json")
+        parsed = json.loads(template_path.read_text(encoding="utf-8"))
+        project = parsed.get("project_info", {})
+        if project.get("project_id") != firebase["firebase_project_id"]:
+            raise RuntimeError("Projeto Firebase do APK não coincide com o Elo.")
+
+        app_id = firebase["firebase_app_id"]
+        expected_prefix = f"1:{project.get('project_number')}:android:"
+        if not isinstance(app_id, str) or not app_id.startswith(expected_prefix):
+            raise RuntimeError("Firebase App ID inválido para o projeto.")
+
+        base_clients = parsed.get("client", [])
+        if not base_clients:
+            raise RuntimeError("Configuração base do Firebase não tem cliente Android.")
+
+        # Usa cliente já configurado do mesmo projeto, inclusive API key
+        # client-side, sem copiá-la para variáveis ou logs.
+        from copy import deepcopy
+        app_client = deepcopy(base_clients[0])
+        app_client["client_info"]["mobilesdk_app_id"] = app_id
+        app_client["client_info"]["android_client_info"]["package_name"] = record[
+            "android_package"
         ]
-        if record["android_package"] not in registered:
-            raise RuntimeError(
-                "Package Android da igreja não foi registrado no Firebase; "
-                "adicione-o e atualize a credencial de push."
-            )
-        Path("apps/mobile/google-services-white-label.json").write_bytes(google_services)
+        app_client["oauth_client"] = []  # OAuth Android depende de SHA-1/256 exclusivos.
+        parsed["client"] = [app_client]
+        target = Path("apps/mobile/google-services-white-label.json")
+        target.write_text(json.dumps(parsed, indent=2), encoding="utf-8")
         values["ELO_GOOGLE_SERVICES_FILE"] = "./google-services-white-label.json"
+        print("Configuração Firebase específica da igreja validada.")
 
     # O arquivo GITHUB_ENV será interpretado pelo runner, nunca por um shell eval.
     environment = Path(os.environ["GITHUB_ENV"])

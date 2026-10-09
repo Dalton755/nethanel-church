@@ -67,7 +67,6 @@ jobs:
         if: steps.claim.outputs.pending == 'true'
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
-          ELO_FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.ELO_FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
         run: python scripts/elo_app_factory.py prepare
 
       - name: Gerar arte nativa com ícone de push
