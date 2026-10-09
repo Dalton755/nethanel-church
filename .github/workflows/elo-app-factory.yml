@@ -2,6 +2,10 @@ name: Elo App Factory - APK exclusivo da igreja
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/elo-app-factory.yml"
   schedule:
     - cron: "*/30 * * * *"
 
@@ -14,7 +18,7 @@ concurrency:
 
 jobs:
   build-church-apk:
-    if: github.event_name == 'workflow_dispatch' || vars.ELO_FACTORY_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || vars.ELO_FACTORY_ENABLED == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 100
     steps:
