@@ -65,7 +65,12 @@ jobs:
         if: steps.claim.outputs.pending == 'true'
         run: |
           npm ci
-          npm install --no-save --workspace=mobile expo-splash-screen expo@57.0.27 expo-constants@57.0.21 expo-linking@57.0.12 expo-notifications@57.0.22
+          # A build local empacota uma cópia limpa e roda npm ci novamente.
+          # As dependências nativas DEVEM constar do package.json e package-lock
+          # gerados no runner (não apenas de node_modules).
+          npm install --workspace=mobile expo@57.0.27 expo-constants@57.0.21 expo-linking@57.0.12 expo-notifications@57.0.22
+          cd apps/mobile
+          npx expo install --npm expo-splash-screen
 
       - name: Validar configuração e Firebase da igreja
         if: steps.claim.outputs.pending == 'true'
@@ -108,6 +113,15 @@ jobs:
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
         run: python scripts/elo_app_factory.py complete
+
+      - name: Disponibilizar APK de testes por 14 dias no GitHub
+        if: success() && steps.claim.outputs.pending == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: elo-adoradores-test-${{ github.run_id }}
+          path: apps/mobile/elo-church-app.apk
+          retention-days: 14
+          if-no-files-found: error
 
       - name: Registrar falha (sem expor credenciais)
         if: failure() && steps.claim.outputs.pending == 'true'
