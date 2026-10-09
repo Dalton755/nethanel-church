@@ -27,6 +27,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Registrar automaticamente o Android no Firebase
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+          ELO_FIREBASE_MANAGEMENT_SA_JSON_B64: ${{ secrets.ELO_FIREBASE_MANAGEMENT_SA_JSON_B64 }}
+          ELO_FIREBASE_PROJECT_ID: nethanel-elo
+        run: |
+          python -m pip install --disable-pip-version-check google-auth==2.39.0 requests==2.32.3
+          python scripts/elo_firebase_provision.py
+
       - name: Busca solicitação autorizada e inicia compilação
         id: claim
         env:
