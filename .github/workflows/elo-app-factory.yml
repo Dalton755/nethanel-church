@@ -30,6 +30,7 @@ jobs:
       - name: Registrar automaticamente o Android no Firebase
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+          ELO_FIREBASE_MANAGEMENT_SA_JSON: ${{ secrets.ELO_FIREBASE_MANAGEMENT_SA_JSON }}
           ELO_FIREBASE_MANAGEMENT_SA_JSON_B64: ${{ secrets.ELO_FIREBASE_MANAGEMENT_SA_JSON_B64 }}
           ELO_FIREBASE_PROJECT_ID: nethanel-elo
         run: |
