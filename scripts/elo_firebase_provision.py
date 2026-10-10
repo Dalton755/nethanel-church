@@ -79,7 +79,13 @@ def wait_for_app(operation, bearer):
             raise RuntimeError("Cadastro Firebase falhou.")
         return operation.get("response", {})
     name = operation.get("name", "")
-    if not re.fullmatch(r"projects/[a-z0-9-]+/operations/[a-zA-Z0-9_-]+", name):
+    # Firebase Management Operations v1beta1 returns names as
+    # "operations/<id>" (and some Google APIs use
+    # "projects/<project>/operations/<id>"). Both are documented LRO forms.
+    if not isinstance(name, str) or not re.fullmatch(
+        r"(?:operations|projects/[a-z0-9-]+/operations)/[a-zA-Z0-9_-]+",
+        name,
+    ):
         raise RuntimeError("Firebase retornou operação não reconhecida.")
     for _ in range(30):
         time.sleep(3)
