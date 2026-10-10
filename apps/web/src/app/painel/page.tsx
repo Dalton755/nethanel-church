@@ -633,6 +633,57 @@ export default function ChurchStudioPage() {
 
               {step === 3 ? (
                 <div className="grid gap-4">
+                  {latestBuild && (
+                    <section id="acompanhamento-apk" className={cardClass + " scroll-mt-5"} aria-label="Acompanhar geração do aplicativo">
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.14em] text-sky-700">Meu aplicativo • Acompanhamento</p>
+                          <h2 className="mt-2 text-2xl font-black tracking-tight">
+                            {latestBuild.status === "ready" ? "Seu aplicativo está pronto!" :
+                              latestBuild.status === "building" ? "Estamos gerando seu APK" :
+                              latestBuild.status === "queued" ? "Solicitação recebida" : "Não foi possível gerar o APK"}
+                          </h2>
+                          <p className="mt-2 text-sm leading-6 text-slate-500">
+                            {latestBuild.status === "ready" ? "A instalação já está disponível. Baixe o APK para distribuir à sua comunidade." :
+                              latestBuild.status === "building" ? "Sua igreja está na etapa de compilação. Você pode sair e voltar mais tarde." :
+                              latestBuild.status === "queued" ? "Seu pedido está na fila. O cadastro Firebase e a compilação serão processados pela fábrica." :
+                              "A tentativa anterior não foi concluída. Confira o motivo e solicite uma nova geração."}
+                          </p>
+                        </div>
+                        <span role="status" className={"inline-flex shrink-0 rounded-full px-3 py-1.5 text-xs font-extrabold " +
+                          (latestBuild.status === "ready" ? "bg-emerald-100 text-emerald-800" :
+                            latestBuild.status === "failed" ? "bg-red-100 text-red-800" :
+                              "bg-amber-100 text-amber-800")}>
+                          {latestBuild.status === "ready" ? "✓ Pronto" : latestBuild.status === "failed" ? "Falhou" :
+                            latestBuild.status === "building" ? "● Em produção" : "◷ Na fila"}
+                        </span>
+                      </div>
+                      <div className="mt-6 grid grid-cols-3 gap-2" aria-label="Progresso da solicitação">
+                        {["Solicitado", "Em produção", "Disponível"].map((stage, index) => {
+                          const current = latestBuild.status === "ready" ? 3 :
+                            latestBuild.status === "building" ? 2 : latestBuild.status === "queued" ? 1 : 0;
+                          return <div key={stage} className={"rounded-xl px-2 py-3 text-center text-[11px] font-bold sm:text-xs " +
+                            (index < current ? "bg-emerald-50 text-emerald-800" :
+                              "bg-slate-100 text-slate-500")}>{index < current ? "✓ " : ""}{stage}</div>;
+                        })}
+                      </div>
+                      <div className="mt-5 flex flex-wrap gap-3">
+                        {latestBuild.status === "ready" && (
+                          <button className={primaryButton} disabled={busy} onClick={() => void downloadApk(latestBuild)}>
+                            Baixar meu aplicativo ↓
+                          </button>
+                        )}
+                        <button className={secondaryButton} disabled={busy} onClick={() => void refreshApkStatus()}>
+                          {busy ? "Consultando..." : "↻ Atualizar situação"}
+                        </button>
+                      </div>
+                      {latestBuild.failure_reason && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{latestBuild.failure_reason}</p>}
+                      <p className="mt-4 text-xs leading-5 text-slate-500">
+                        Atualização automática a cada 20 segundos enquanto esta página estiver aberta.
+                        Você pode fechar e retornar depois: o andamento ficará salvo para sua igreja.
+                      </p>
+                    </section>
+                  )}
                   <section className={cardClass}>
                     <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">✓ Personalização concluída</span>
                     <h3 className="mt-4 text-2xl font-black">Tudo pronto para sua igreja.</h3>
@@ -659,14 +710,21 @@ export default function ChurchStudioPage() {
                         </div>
                       )}
                     </div>
-                    <button disabled={!canApk || busy} className={primaryButton + " w-full"} onClick={() => void requestApk()}>
-                      {busy ? "Solicitando..." : canApk ? "Solicitar meu APK personalizado" : "APK exclusivo indisponível neste plano"}
+                    <button disabled={!canApk || busy || buildRunning} className={primaryButton + " w-full"} onClick={() => void requestApk()}>
+                      {busy ? "Solicitando..." : buildRunning ? "APK já solicitado — acompanhe acima" :
+                        canApk ? latestBuild?.status === "ready" ? "Solicitar nova versão do APK" :
+                          latestBuild?.status === "failed" ? "Tentar gerar novamente" :
+                          "Solicitar meu APK personalizado" : "APK exclusivo indisponível neste plano"}
                     </button>
                     <p className="mt-3 text-xs leading-5 text-slate-500">*Para push Android funcionar, o aplicativo exige credenciais FCM específicas e permissão do usuário. O ícone de push é incorporado na compilação.</p>
                     {!canApk && <p className="mt-3 text-sm text-sky-800">A identidade e estrutura continuam funcionando no aplicativo Elo compartilhado, conforme os recursos do plano.</p>}
                   </section>
                   <section className={cardClass}>
-                    <div className="flex items-center justify-between gap-3"><h3 className="text-lg font-extrabold">Minhas compilações</h3><button className="text-xs font-bold text-sky-700" onClick={() => void loadBuilds(church.id)}>Atualizar</button></div>
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-lg font-extrabold">Histórico de versões</h3>
+                      <button disabled={busy} className="text-xs font-bold text-sky-700 disabled:opacity-50"
+                        onClick={() => void refreshApkStatus()}>↻ Atualizar</button>
+                    </div>
                     {builds.length === 0 ? <p className="mt-4 text-sm text-slate-500">Nenhuma compilação solicitada.</p> : <div className="mt-4 grid gap-3">{builds.map(b =>
                       <div key={b.id} className="rounded-2xl border border-slate-200 p-4">
                         <div className="flex flex-wrap items-center justify-between gap-2">
