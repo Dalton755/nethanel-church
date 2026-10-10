@@ -40,10 +40,17 @@ jobs:
           python -m pip install --disable-pip-version-check google-auth==2.39.0 requests==2.32.3
           python scripts/elo_firebase_provision.py
 
+      - name: Autorizar links exclusivos do Google no Supabase
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+          ELO_SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.ELO_SUPABASE_MANAGEMENT_TOKEN }}
+        run: python scripts/elo_auth_redirects.py
+
       - name: Busca solicitação autorizada e inicia compilação
         id: claim
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+          ELO_REQUIRE_OAUTH_URLS: "true"
         run: |
           set -euo pipefail
           python scripts/elo_app_factory.py claim
