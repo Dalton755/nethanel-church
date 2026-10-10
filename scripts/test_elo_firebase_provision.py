@@ -50,6 +50,30 @@ class FactoryTests(unittest.TestCase):
                         factory.register(ORG, PACKAGE, "Adoradores Church", "oauth-fake")
                         google.assert_not_called()
 
+    def test_firebase_operation_name_from_documentation(self):
+        response = {"appId": FIREBASE_APP_ID, "packageName": PACKAGE}
+        # Firebase Management docs: operations/<operation_id>
+        for operation_name in ("operations/test_123",
+                               "projects/nethanel-elo/operations/test_123"):
+            with self.subTest(name=operation_name):
+                with patch.object(factory, "google", return_value={
+                    "done": True, "response": response
+                }) as google:
+                    with patch.object(factory.time, "sleep"):
+                        result = factory.wait_for_app(
+                            {"name": operation_name, "done": False}, "oauth-fake"
+                        )
+                        self.assertEqual(result["appId"], FIREBASE_APP_ID)
+                        google.assert_called_once_with(
+                            "GET", "/" + operation_name, "oauth-fake"
+                        )
+
+    def test_firebase_operation_rejects_untrusted_name(self):
+        with self.assertRaisesRegex(RuntimeError, "não reconhecida"):
+            factory.wait_for_app(
+                {"name": "https://attacker.example.com/operations/key"}, "oauth-fake"
+            )
+
     def test_reject_wrong_tenant_package(self):
         with self.assertRaisesRegex(ValueError, "não pertence"):
             factory.register(ORG, "br.com.nethanel.elo.cwrong", "Teste", "oauth-fake")
