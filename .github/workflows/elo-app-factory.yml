@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/elo-app-factory.yml"
+      # Uma atualização controlada em main pode solicitar novo processamento,
+      # sem precisar editar este workflow em cada APK de teste.
+      - "scripts/elo_factory_build_requests/*.txt"
   schedule:
     - cron: "*/30 * * * *"
 
