@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { createClient } from "../../lib/supabase/client";
@@ -69,6 +69,8 @@ export default function ChurchStudioPage() {
   const [password, setPassword] = useState("");
   const [churches, setChurches] = useState<Church[]>([]);
   const [church, setChurch] = useState<Church | null>(null);
+  const activeChurchIdRef = useRef<string | null>(null);
+  const [loadingChurch, setLoadingChurch] = useState(false);
   const [newChurchName, setNewChurchName] = useState("");
   const [unitName, setUnitName] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -136,6 +138,8 @@ export default function ChurchStudioPage() {
       client.rpc("get_church_apk_setup_status", { p_organization_id: orgId }),
     ]);
     if (buildResult.error) throw buildResult.error;
+    // Respostas atrasadas de outra igreja nunca sobrescrevem a seleção atual.
+    if (activeChurchIdRef.current !== orgId) return [];
     const currentBuilds = (buildResult.data ?? []) as Build[];
     setBuilds(currentBuilds);
     if (!setupResult.error && setupResult.data) setSetup(setupResult.data as SetupStatus);
@@ -144,6 +148,8 @@ export default function ChurchStudioPage() {
 
   const selectChurch = useCallback(async (next: Church) => {
     if (!client) return;
+    activeChurchIdRef.current = next.id;
+    setLoadingChurch(true);
     setError(""); setMessage(""); setChurch(next); setChurchName(next.name);
     setBuilds([]); setSetup(null);
     try {
@@ -180,11 +186,16 @@ export default function ChurchStudioPage() {
       setStep(settings.configured || (existingBuilds?.length ?? 0) > 0 ? 3 : 0);
     } catch (err) {
       setError(readableError(err));
+    } finally {
+      if (activeChurchIdRef.current === next.id) setLoadingChurch(false);
     }
   }, [client, loadBuilds]);
 
   useEffect(() => {
-    if (!client || !user?.id) { setChurches([]); setChurch(null); return; }
+    if (!client || !user?.id) {
+      setChurches([]); setChurch(null); activeChurchIdRef.current = null;
+      return;
+    }
     let cancelled = false;
     void loadChurches().then((list) => {
       if (cancelled || !list?.length) return;
@@ -420,8 +431,8 @@ export default function ChurchStudioPage() {
           </Link>
           <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
             <span className="hidden sm:block">Estúdio da igreja</span>
-            {user && <button onClick={() => { setChurch(null); setMessage(""); }} className="rounded-xl border border-slate-200 px-3 py-2 hover:bg-slate-50">Trocar igreja</button>}
-            {user && <button onClick={() => { void client?.auth.signOut(); setChurch(null); }} className="rounded-xl px-2 py-2 text-red-600">Sair</button>}
+            {user && <button onClick={() => { activeChurchIdRef.current = null; setChurch(null); setMessage(""); }} className="rounded-xl border border-slate-200 px-3 py-2 hover:bg-slate-50">Trocar igreja</button>}
+            {user && <button onClick={() => { activeChurchIdRef.current = null; void client?.auth.signOut(); setChurch(null); }} className="rounded-xl px-2 py-2 text-red-600">Sair</button>}
           </div>
         </div>
       </header>
@@ -483,7 +494,13 @@ export default function ChurchStudioPage() {
           </div>
         ) : null}
 
-        {!booting && page === "studio" && church ? (
+        {!booting && page === "studio" && church && loadingChurch && (
+          <section className={cardClass + " mx-auto max-w-3xl"} role="status" aria-live="polite">
+            <div className="text-lg font-extrabold">Carregando {church.name}...</div>
+            <p className="mt-2 text-sm text-slate-500">Recuperando sua personalização e o andamento do aplicativo.</p>
+          </section>
+        )}
+        {!booting && page === "studio" && church && !loadingChurch ? (
           <div className="grid gap-7 lg:grid-cols-[240px_minmax(0,1fr)_280px]">
             <aside className="h-fit lg:sticky lg:top-6">
               <div className="rounded-3xl border border-slate-200 bg-white p-4">
