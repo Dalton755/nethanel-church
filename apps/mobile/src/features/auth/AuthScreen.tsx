@@ -57,149 +57,11 @@ type EmailMode =
   | "login"
   | "signup";
 
-function getUrlParameters(
-  url: string
-) {
-  const result =
-    new URLSearchParams();
+type AuthScreenProps = {
+  onAuthCallback: (url: string) => Promise<void>;
+};
 
-  const queryIndex =
-    url.indexOf("?");
-
-  const hashIndex =
-    url.indexOf("#");
-
-  if (
-    queryIndex >= 0
-  ) {
-    const queryEnd =
-      hashIndex >= 0
-        ? hashIndex
-        : url.length;
-
-    const queryParams =
-      new URLSearchParams(
-        url.slice(
-          queryIndex + 1,
-          queryEnd
-        )
-      );
-
-    queryParams.forEach(
-      (value, key) => {
-        result.set(
-          key,
-          value
-        );
-      }
-    );
-  }
-
-  if (
-    hashIndex >= 0
-  ) {
-    const hashParams =
-      new URLSearchParams(
-        url.slice(
-          hashIndex + 1
-        )
-      );
-
-    hashParams.forEach(
-      (value, key) => {
-        result.set(
-          key,
-          value
-        );
-      }
-    );
-  }
-
-  return result;
-}
-
-async function completeOAuthUrl(
-  url: string
-) {
-  const params =
-    getUrlParameters(
-      url
-    );
-
-  const errorDescription =
-    params.get(
-      "error_description"
-    );
-
-  if (
-    errorDescription
-  ) {
-    throw new Error(
-      decodeURIComponent(
-        errorDescription
-      )
-    );
-  }
-
-  const accessToken =
-    params.get(
-      "access_token"
-    );
-
-  const refreshToken =
-    params.get(
-      "refresh_token"
-    );
-
-  if (
-    accessToken &&
-    refreshToken
-  ) {
-    const {
-      error,
-    } =
-      await supabase.auth.setSession({
-        access_token:
-          accessToken,
-
-        refresh_token:
-          refreshToken,
-      });
-
-    if (error) {
-      throw error;
-    }
-
-    return;
-  }
-
-  const code =
-    params.get(
-      "code"
-    );
-
-  if (code) {
-    const {
-      error,
-    } =
-      await supabase.auth
-        .exchangeCodeForSession(
-          code
-        );
-
-    if (error) {
-      throw error;
-    }
-
-    return;
-  }
-
-  throw new Error(
-    "O Google não retornou uma sessão válida."
-  );
-}
-
-export function AuthScreen() {
+export function AuthScreen({ onAuthCallback }: AuthScreenProps) {
   const [
     screen,
     setScreen,
@@ -393,9 +255,9 @@ export function AuthScreen() {
           result.type ===
           "success"
         ) {
-          await completeOAuthUrl(
-            result.url
-          );
+          // O App centraliza o callback vindo por Linking e pelo browser.
+          // Evita consumir duas vezes o refresh_token retornado pelo Google.
+          await onAuthCallback(result.url);
         }
       } catch (error) {
         const message =

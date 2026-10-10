@@ -3,6 +3,7 @@ import { EloLogo } from "./src/branding/EloBrand";
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -25,6 +26,7 @@ import type {
 } from "@supabase/supabase-js";
 
 import * as Linking from "expo-linking";
+import Constants from "expo-constants";
 
 import {
   AuthScreen,
@@ -49,10 +51,22 @@ import {
 const INVITE_PENDING_PREFIX =
   "@nethanel/invite-pending/";
 
-const AUTH_SCHEMES = [
-  "nethanelelo",
-  "nethanelchurch",
-] as const;
+// Cada APK white-label deve aceitar APENAS seu proprio link de autenticacao.
+const churchScheme = Constants.expoConfig?.extra?.whiteLabelScheme as string | undefined;
+const AUTH_SCHEMES = churchScheme
+  ? [churchScheme]
+  : ["nethanelelo", "nethanelchurch"];
+
+// O mesmo redirect OAuth pode chegar tanto pelo Android Linking quanto pelo
+// resultado do navegador. Impedir o reuso de refresh tokens de uso unico.
+function callbackFingerprint(url: string) {
+  let hash = 2166136261;
+  for (let i = 0; i < url.length; i += 1) {
+    hash ^= url.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${url.length}:${hash >>> 0}`;
+}
 
 function matchesAuthUrl(
   url: string,
@@ -155,7 +169,9 @@ function getUrlParameters(
 
 
 export default function App() {
+  const handledAuthUrlsRef = useRef(new Set<string>());
   const [
+
     session,
     setSession,
   ] =
@@ -220,6 +236,14 @@ export default function App() {
           return;
         }
 
+        // Callback unico: previne uma segunda chamada a setSession() usando
+        // o mesmo refresh_token que ja foi consumido pelo primeiro handler.
+        const fingerprint = callbackFingerprint(url);
+        if (handledAuthUrlsRef.current.has(fingerprint)) return;
+        handledAuthUrlsRef.current.add(fingerprint);
+        setTimeout(() => {
+          handledAuthUrlsRef.current.delete(fingerprint);
+        }, 60000);
 
         setLoading(
           true
@@ -392,9 +416,12 @@ export default function App() {
               : "Não foi possível abrir o convite.";
 
 
+          const isExpiredAuthLink = /invalid refresh token|refresh token not found|invalid grant|code verifier|otp expired/i.test(message);
           Alert.alert(
-            "Convite inválido",
-            message
+            isInvite ? "Convite inválido" : "Não foi possível entrar",
+            isExpiredAuthLink
+              ? "Esse link de acesso já foi utilizado ou expirou. Volte à tela inicial e entre com Google novamente."
+              : message
           );
         } finally {
           setLoading(
@@ -582,7 +609,7 @@ export default function App() {
           <AuthenticatedScreen />
         </OrganizationProvider>
       ) : (
-        <AuthScreen />
+        <AuthScreen onAuthCallback={handleAuthUrl} />
       )}
     </SafeAreaProvider>
   );
