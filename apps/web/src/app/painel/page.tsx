@@ -127,11 +127,6 @@ export default function ChurchStudioPage() {
     return next;
   }, [client]);
 
-  useEffect(() => {
-    if (!client || !user) { setChurches([]); setChurch(null); return; }
-    void loadChurches().catch((err) => setError(readableError(err)));
-  }, [client, user, loadChurches]);
-
   const loadBuilds = useCallback(async (orgId: string) => {
     if (!client) return;
     const [buildResult, setupResult] = await Promise.all([
@@ -140,14 +135,17 @@ export default function ChurchStudioPage() {
         .eq("organization_id", orgId).order("created_at", { ascending: false }).limit(5),
       client.rpc("get_church_apk_setup_status", { p_organization_id: orgId }),
     ]);
-    if (!buildResult.error) setBuilds((buildResult.data ?? []) as Build[]);
+    if (buildResult.error) throw buildResult.error;
+    const currentBuilds = (buildResult.data ?? []) as Build[];
+    setBuilds(currentBuilds);
     if (!setupResult.error && setupResult.data) setSetup(setupResult.data as SetupStatus);
+    return currentBuilds;
   }, [client]);
 
   const selectChurch = useCallback(async (next: Church) => {
     if (!client) return;
     setError(""); setMessage(""); setChurch(next); setChurchName(next.name);
-    setStep(0); setBuilds([]); setSetup(null);
+    setBuilds([]); setSetup(null);
     try {
       const unit = next.units.find((u) => u.is_headquarters) ?? next.units[0];
       if (!unit) throw new Error("A igreja ainda não possui uma unidade.");
@@ -176,15 +174,42 @@ export default function ChurchStudioPage() {
         .map(d => ({ key: d.key, name: d.name, category: "Personalizados", functions: d.functions?.length ? d.functions : [{ name: "Voluntário", required_count: 1 }] })));
       setChosenMinistries(Object.fromEntries(settings.ministries.map(m => [m.key, m])));
       setCustomMinistries(settings.ministries.filter(m => !MINISTRY_PRESETS.some(p => p.key === m.key)));
-      await loadBuilds(next.id);
+      const existingBuilds = await loadBuilds(next.id);
+      // A personalização já concluída deve retomar na tela de acompanhamento,
+      // inclusive após atualizar a página ou fechar e abrir o navegador.
+      setStep(settings.configured || (existingBuilds?.length ?? 0) > 0 ? 3 : 0);
     } catch (err) {
       setError(readableError(err));
     }
   }, [client, loadBuilds]);
 
   useEffect(() => {
+    if (!client || !user?.id) { setChurches([]); setChurch(null); return; }
+    let cancelled = false;
+    void loadChurches().then((list) => {
+      if (cancelled || !list?.length) return;
+      try {
+        const rememberedId = window.localStorage.getItem("elo:studio:church:" + user.id);
+        const remembered = list.find(item => item.id === rememberedId);
+        if (remembered) void selectChurch(remembered);
+      } catch { /* Armazenamento do navegador pode estar indisponível. */ }
+    }).catch((err) => { if (!cancelled) setError(readableError(err)); });
+    return () => { cancelled = true; };
+  }, [client, user?.id, loadChurches, selectChurch]);
+
+  useEffect(() => {
+    if (!church || !user?.id) return;
+    try { window.localStorage.setItem("elo:studio:church:" + user.id, church.id); }
+    catch { /* A retomada ainda funciona pela seleção manual da igreja. */ }
+  }, [church, user?.id]);
+
+  useEffect(() => {
     if (!church || !client) return;
-    const timer = window.setInterval(() => { void loadBuilds(church.id); }, 20000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "hidden") {
+        void loadBuilds(church.id).catch(() => undefined);
+      }
+    }, 20000);
     return () => window.clearInterval(timer);
   }, [church, client, loadBuilds]);
 
@@ -194,6 +219,8 @@ export default function ChurchStudioPage() {
   const canIcon = features.custom_launcher_icon === true;
   const canSplash = features.custom_splash === true;
   const canApk = features.standalone_apk === true;
+  const latestBuild = builds[0];
+  const buildRunning = latestBuild?.status === "queued" || latestBuild?.status === "building";
   const brandedPush = features.branded_push === true;
   const departments = useMemo(() => [...DEPARTMENT_PRESETS, ...customDepartments], [customDepartments]);
   const activeDepts = departments.filter(d => chosenDepartments[d.key] !== undefined);
@@ -353,9 +380,21 @@ export default function ChurchStudioPage() {
         p_organization_id: church.id, p_unit_id: unit.id,
       });
       if (apiError) throw apiError;
+      setStep(3);
       await loadBuilds(church.id);
-      show("Solicitação registrada. A fábrica de aplicativos exibirá aqui o resultado da compilação.");
+      show("APK solicitado! Acompanhe o andamento abaixo. O status é atualizado automaticamente.");
+      window.setTimeout(() => {
+        document.getElementById("acompanhamento-apk")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
     } catch (err) { fail(err); } finally { setBusy(false); }
+  }
+
+  async function refreshApkStatus() {
+    if (!church) return;
+    setBusy(true); setError("");
+    try { await loadBuilds(church.id); }
+    catch (err) { fail(err); }
+    finally { setBusy(false); }
   }
 
   async function downloadApk(build: Build) {
