@@ -1,0 +1,61 @@
+name: Elo Factory - verificar acesso Supabase (somente leitura)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/elo-auth-token-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-management-token:
+    # Teste estritamente desta PR interna; nao autoriza execucao para forks.
+    if: github.event.pull_request.number == 43 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Validar token e ler somente a configuracao de Auth
+        env:
+          ELO_SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.ELO_SUPABASE_MANAGEMENT_TOKEN }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          token=os.environ.get("ELO_SUPABASE_MANAGEMENT_TOKEN", "").strip()
+          if not token:
+              sys.exit("FALHA: GitHub Secret ELO_SUPABASE_MANAGEMENT_TOKEN nao encontrado.")
+          if not token.startswith("sbp_"):
+              sys.exit("FALHA: valor nao parece um Supabase Personal Access Token.")
+          url="https://api.supabase.com/v1/projects/esukjhuyooppxgfmltkb/config/auth"
+          request=urllib.request.Request(url, method="GET", headers={
+              "Authorization": "Bearer " + token,
+              "Accept": "application/json",
+          })
+          try:
+              with urllib.request.urlopen(request,timeout=25) as response:
+                  data=json.load(response)
+          except urllib.error.HTTPError as exc:
+              sys.exit(f"FALHA: Supabase Management API HTTP {exc.code}; verifique token e escopo.")
+          except Exception:
+              sys.exit("FALHA: acesso de leitura a configuracao Auth indisponivel.")
+
+          if not isinstance(data,dict) or "uri_allow_list" not in data:
+              sys.exit("FALHA: resposta da API sem lista de redirecionamentos.")
+          raw=data.get("uri_allow_list")
+          urls=[x.strip() for x in raw.split(",") if x.strip()] if isinstance(raw,str) else raw
+          if not isinstance(urls,list):
+              sys.exit("FALHA: formato da lista de URLs nao esperado.")
+          expected="elo101212c56e814915ae9a://auth/callback"
+          print("OK: Supabase Management API aceita o token e permite ler configuracao Auth.")
+          print(f"OK: {len(urls)} URLs de redirecionamento cadastradas (valores omitidos).")
+          if expected in urls:
+              print("OK: callback de Elo Church Demo esta autorizado.")
+          else:
+              print("ATENCAO: callback de Elo Church Demo nao encontrado.")
+          print("Somente GET foi realizado; nenhuma configuracao foi modificada.")
+          PY
