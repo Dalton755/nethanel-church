@@ -86,11 +86,27 @@ def validate_claim(data):
 
 
 def claim():
-    rows = request("GET", "/rest/v1/church_apk_builds?status=eq.queued&order=created_at.asc&limit=1&select=*")
+    rows = request("GET", "/rest/v1/church_apk_builds?status=eq.queued&order=created_at.asc&limit=25&select=*")
     if not rows:
         print("Sem aplicativos pendentes.")
         return
-    record = rows[0]
+
+    firebase = request("GET", "/rest/v1/church_firebase_android_apps"
+                       "?select=organization_id,android_package")
+    registered = {row["organization_id"]: row["android_package"] for row in firebase}
+
+    record = None
+    for candidate in rows:
+        if candidate.get("branded_push") and registered.get(
+                candidate["organization_id"]) != candidate["android_package"]:
+            # Espera provisionamento oficial do Firebase. Não queima tentativas
+            # e não afeta o atendimento de outras igrejas da fila.
+            continue
+        record = candidate
+        break
+    if record is None:
+        print("Solicitações em espera: registro Firebase Android pendente.")
+        return
     try:
         validate_claim(record)
     except Exception as error:
