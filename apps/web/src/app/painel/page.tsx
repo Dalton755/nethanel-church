@@ -41,6 +41,7 @@ type SetupStatus = {
 };
 
 const COLORS = ["#2387C9", "#406A85", "#556CCF", "#8064C4", "#3B8F75", "#D0A53A", "#AF5B6D", "#202B39"];
+const SOFT_COLORS = ["#FFFFFF", "#F6F8FB", "#DCE9F3", "#E9E6FB", "#DEF1E8", "#FFF2D5", "#EEDFE3", "#202B39"];
 const STEPS = ["Sua marca", "Departamentos", "Ministérios", "Meu aplicativo"];
 const SCOPES: Array<{ key: Structure["ministry_scope"]; title: string; description: string }> = [
   { key: "local", title: "Igreja local", description: "Uma comunidade e uma sede" },
@@ -88,6 +89,7 @@ export default function ChurchStudioPage() {
   const [primary, setPrimary] = useState(defaultBrand.primary);
   const [secondary, setSecondary] = useState(defaultBrand.secondary);
   const [background, setBackground] = useState(defaultBrand.background);
+  const [advancedBrandOpen, setAdvancedBrandOpen] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [iconUrl, setIconUrl] = useState<string | null>(null);
   const [splashUrl, setSplashUrl] = useState<string | null>(null);
@@ -156,7 +158,7 @@ export default function ChurchStudioPage() {
   const selectChurch = useCallback(async (next: Church) => {
     if (!client) return;
     setError(""); setMessage(""); setChurch(next); setChurchName(next.name);
-    setStep(0); setBuilds([]); setSetup(null);
+    setStep(0); setBuilds([]); setSetup(null); setAdvancedBrandOpen(false);
     try {
       const unit = next.units.find((u) => u.is_headquarters) ?? next.units[0];
       if (!unit) throw new Error("A igreja ainda não possui uma unidade.");
@@ -506,24 +508,96 @@ export default function ChurchStudioPage() {
                       <input disabled={!canAppName} className={inputClass + " mt-2 disabled:bg-slate-100"} value={canAppName ? appName : churchName} onChange={e => setAppName(e.target.value)} maxLength={40} />
                     </label>
                   </div>
-                  <div>
-                    <p className="mb-3 text-xs font-bold">Cor principal {canColors ? "" : "• acompanhe a identidade Elo no seu plano"}</p>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-bold">Cor principal {canColors ? "" : "• acompanhe a identidade Elo no seu plano"}</p>
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                        HEX
+                        <input aria-label="Código hexadecimal da cor principal" disabled={!canColors}
+                          className="w-24 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center font-mono text-xs font-bold text-slate-800 disabled:bg-slate-100"
+                          value={primary} maxLength={7} onChange={e => setPrimary(e.target.value)} />
+                      </label>
+                    </div>
                     <div className="flex flex-wrap gap-2">{COLORS.map(c =>
-                      <button disabled={!canColors} title={c} key={c} className={"h-9 w-9 rounded-xl border-2 disabled:opacity-35 " + (primary === c ? "border-slate-900" : "border-white")} style={{ backgroundColor: c }} onClick={() => setPrimary(c)} />
+                      <button type="button" disabled={!canColors} title={c} aria-label={"Usar cor principal " + c}
+                        aria-pressed={primary.toUpperCase() === c}
+                        key={c}
+                        className={"h-10 w-10 rounded-xl border-2 transition disabled:opacity-35 " + (primary.toUpperCase() === c ? "border-slate-900 ring-2 ring-slate-200" : "border-slate-200")}
+                        style={{ backgroundColor: c }} onClick={() => setPrimary(c)} />
                     )}</div>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {([{ label: "Principal", value: primary, set: setPrimary }, { label: "Secundária", value: secondary, set: setSecondary }, { label: "Fundo", value: background, set: setBackground }]).map(field =>
-                      <label className="text-xs font-bold" key={field.label}>{field.label}
-                        <input disabled={!canColors} className={inputClass + " mt-2 disabled:bg-slate-100"} value={field.value} maxLength={7} onChange={e => field.set(e.target.value)} />
-                      </label>)}
-                  </div>
-                  {(canIcon || canSplash) ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {canIcon && <label className="text-xs font-bold">Ícone exclusivo (opcional)<input className={inputClass + " mt-2"} type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setIconFile(e.target.files?.[0] ?? null)} /></label>}
-                      {canSplash && <label className="text-xs font-bold">Imagem de abertura (opcional)<input className={inputClass + " mt-2"} type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setSplashFile(e.target.files?.[0] ?? null)} /></label>}
+                  {(canColors || canIcon || canSplash) && (
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70">
+                      <button type="button" aria-controls="elo-brand-advanced" aria-expanded={advancedBrandOpen}
+                        className="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                        onClick={() => setAdvancedBrandOpen(value => !value)}>
+                        <span>
+                          <span className="block text-sm font-bold text-slate-800">Personalização avançada</span>
+                          <span className="mt-1 block text-xs text-slate-500">Cores secundária e de fundo • ícone • abertura</span>
+                        </span>
+                        <span aria-hidden="true" className="shrink-0 text-xl font-bold text-slate-600">{advancedBrandOpen ? "−" : "+"}</span>
+                      </button>
+                      {advancedBrandOpen && (
+                        <div id="elo-brand-advanced" className="space-y-5 border-t border-slate-200 bg-white p-4">
+                          {canColors && ([
+                            { label: "Cor secundária", value: secondary, update: setSecondary },
+                            { label: "Cor de fundo", value: background, update: setBackground },
+                          ]).map(field => (
+                            <div className="space-y-3" key={field.label}>
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-sm font-bold text-slate-800">{field.label}</p>
+                                <div className="flex items-center gap-2">
+                                  <label className="relative flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-slate-200" title={"Abrir paleta para " + field.label}>
+                                    <input type="color" aria-label={"Escolher " + field.label.toLowerCase() + " na paleta"}
+                                      className="h-12 w-14 cursor-pointer border-0 bg-transparent p-0"
+                                      value={isHex(field.value) ? field.value : "#FFFFFF"}
+                                      onChange={e => field.update(e.target.value.toUpperCase())} />
+                                  </label>
+                                  <input aria-label={"Código hexadecimal da " + field.label.toLowerCase()}
+                                    className="w-24 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center font-mono text-xs font-bold text-slate-800"
+                                    maxLength={7} value={field.value} onChange={e => field.update(e.target.value)} />
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-2" aria-label={"Cores sugeridas para " + field.label.toLowerCase()}>
+                                {SOFT_COLORS.map(c => (
+                                  <button type="button" key={c} title={c} aria-label={field.label + " " + c}
+                                    aria-pressed={field.value.toUpperCase() === c}
+                                    className={"h-9 w-9 rounded-xl border-2 transition " + (field.value.toUpperCase() === c ? "border-slate-900 ring-2 ring-slate-200" : "border-slate-200")}
+                                    style={{ backgroundColor: c }} onClick={() => field.update(c)} />
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          {(canIcon || canSplash) && (
+                            <div className="space-y-3 border-t border-slate-100 pt-4">
+                              <p className="text-sm font-bold text-slate-800">Imagens opcionais do aplicativo</p>
+                              <p className="text-xs leading-5 text-slate-500">Sem enviar novas imagens, usamos a logo da igreja como ícone e imagem de abertura.</p>
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                {canIcon && (
+                                  <label className="flex min-h-24 cursor-pointer flex-col justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm transition hover:border-sky-400">
+                                    <span className="font-bold text-slate-800">Ícone na tela do celular</span>
+                                    <span className="text-xs text-sky-700">Escolher ou trocar imagem</span>
+                                    <span className="break-all text-xs text-slate-500">{iconFile ? iconFile.name : iconUrl ? "Imagem já salva" : "Usará a logo da igreja"}</span>
+                                    <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp"
+                                      aria-label="Enviar ícone exclusivo do aplicativo" onChange={e => setIconFile(e.target.files?.[0] ?? null)} />
+                                  </label>
+                                )}
+                                {canSplash && (
+                                  <label className="flex min-h-24 cursor-pointer flex-col justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm transition hover:border-sky-400">
+                                    <span className="font-bold text-slate-800">Imagem de abertura</span>
+                                    <span className="text-xs text-sky-700">Escolher ou trocar imagem</span>
+                                    <span className="break-all text-xs text-slate-500">{splashFile ? splashFile.name : splashUrl ? "Imagem já salva" : "Usará a logo da igreja"}</span>
+                                    <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp"
+                                      aria-label="Enviar imagem de abertura do aplicativo" onChange={e => setSplashFile(e.target.files?.[0] ?? null)} />
+                                  </label>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  ) : null}
+                  )}
                   <button className={primaryButton + " w-fit"} disabled={busy} onClick={() => void saveBrand()}>{busy ? "Salvando..." : "Salvar identidade e continuar →"}</button>
                 </div>
               ) : null}
