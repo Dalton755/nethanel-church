@@ -14,6 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Conferir autenticacao Expo via ferramenta oficial
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx --yes eas-cli@latest whoami
+
       - name: Consultar apenas metadados de credenciais Expo
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -66,7 +72,12 @@ jobs:
               with urllib.request.urlopen(req,timeout=25) as response:
                   data=json.load(response)
           except urllib.error.HTTPError as err:
-              sys.exit(f"FALHA: consulta do Expo retornou HTTP {err.code}.")
+              response=err.read(600).decode("utf-8","replace").lower()
+              # Nunca apresentar headers, valores sensíveis ou resposta completa.
+              reason=("autorizacao" if any(x in response for x in ("unauthorized","permission","forbidden","access denied"))
+                      else "bloqueio de rede" if "cloudflare" in response or "waf" in response
+                      else "resposta nao identificada")
+              sys.exit(f"FALHA: Expo GraphQL HTTP {err.code}; categoria: {reason}.")
           except Exception:
               sys.exit("FALHA: nao foi possivel consultar metadados do Expo.")
 
