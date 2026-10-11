@@ -50,9 +50,9 @@ jobs:
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          # Criacao automatica de novos identificadores fica sob controle
-          # ate validar separadamente um terceiro aplicativo de teste.
-          ELO_EXPO_ALLOW_CREATE_CREDENTIALS: ${{ vars.ELO_EXPO_ALLOW_CREATE_CREDENTIALS }}
+          # Criacao/reutilizacao testada sem afetar apps reais (canary do Expo).
+          # Somente pacotes derivados de uma igreja com APK solicitado chegam aqui.
+          ELO_EXPO_ALLOW_CREATE_CREDENTIALS: "true"
         run: python scripts/elo_expo_fcm.py
 
       - name: Busca solicitação autorizada e inicia compilação
