@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { createClient } from "../../lib/supabase/client";
@@ -79,6 +79,8 @@ export default function ChurchStudioPage() {
   const [password, setPassword] = useState("");
   const [churches, setChurches] = useState<Church[]>([]);
   const [church, setChurch] = useState<Church | null>(null);
+  const activeChurchIdRef = useRef<string | null>(null);
+  const [loadingChurch, setLoadingChurch] = useState(false);
   const [newChurchName, setNewChurchName] = useState("");
   const [unitName, setUnitName] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -141,11 +143,6 @@ export default function ChurchStudioPage() {
     return next;
   }, [client]);
 
-  useEffect(() => {
-    if (!client || !user) { setChurches([]); setChurch(null); return; }
-    void loadChurches().catch((err) => setError(readableError(err)));
-  }, [client, user, loadChurches]);
-
   const loadBuilds = useCallback(async (orgId: string) => {
     if (!client) throw new Error("A conexão com o estúdio ainda não está pronta.");
     const [buildResult, setupResult] = await Promise.all([
@@ -157,10 +154,14 @@ export default function ChurchStudioPage() {
     if (buildResult.error) throw buildResult.error;
     if (setupResult.error) throw setupResult.error;
     if (!setupResult.data) throw new Error("Não foi possível consultar a preparação do APK.");
-    setBuilds((buildResult.data ?? []) as Build[]);
+    const currentBuilds = (buildResult.data ?? []) as Build[];
+    // Evita resposta atrasada de outra igreja substituir a que está aberta.
+    if (activeChurchIdRef.current !== orgId) return [];
+    setBuilds(currentBuilds);
     setSetup(setupResult.data as SetupStatus);
     setLastBuildRefresh(new Date().toISOString());
     setBuildRefreshError("");
+    return currentBuilds;
   }, [client]);
 
   async function refreshBuilds() {
@@ -178,6 +179,8 @@ export default function ChurchStudioPage() {
 
   const selectChurch = useCallback(async (next: Church) => {
     if (!client) return;
+    activeChurchIdRef.current = next.id;
+    setLoadingChurch(true);
     setError(""); setMessage(""); setChurch(next); setChurchName(next.name);
     setStep(0); setBuilds([]); setSetup(null); setAdvancedBrandOpen(false);
     setBuildRefreshError(""); setLastBuildRefresh(null);
@@ -209,15 +212,44 @@ export default function ChurchStudioPage() {
         .map(d => ({ key: d.key, name: d.name, category: "Personalizados", functions: d.functions?.length ? d.functions : [{ name: "Voluntário", required_count: 1 }] })));
       setChosenMinistries(Object.fromEntries(settings.ministries.map(m => [m.key, m])));
       setCustomMinistries(settings.ministries.filter(m => !MINISTRY_PRESETS.some(p => p.key === m.key)));
-      await loadBuilds(next.id);
+      const existing = await loadBuilds(next.id);
+      if (activeChurchIdRef.current !== next.id) return;
+      // Mesmo depois de sair do navegador, solicitações existentes abrem no status.
+      if (existing?.length) setStep(3);
     } catch (err) {
-      setError(readableError(err));
+      if (activeChurchIdRef.current === next.id) setError(readableError(err));
+    } finally {
+      if (activeChurchIdRef.current === next.id) setLoadingChurch(false);
     }
   }, [client, loadBuilds]);
 
   useEffect(() => {
+    if (!client || !user?.id) {
+      setChurches([]); setChurch(null); activeChurchIdRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    void loadChurches().then(list => {
+      if (cancelled || !list?.length) return;
+      try {
+        const last = window.localStorage.getItem("elo:studio:church:" + user.id);
+        const remembered = list.find(item => item.id === last);
+        if (remembered) void selectChurch(remembered);
+      } catch { /* Armazenamento bloqueado: o usuário pode selecionar a igreja. */ }
+    }).catch(err => { if (!cancelled) setError(readableError(err)); });
+    return () => { cancelled = true; };
+  }, [client, user?.id, loadChurches, selectChurch]);
+
+  useEffect(() => {
+    if (!church || !user?.id) return;
+    try { window.localStorage.setItem("elo:studio:church:" + user.id, church.id); }
+    catch { /* A retomada ainda funciona ao selecionar a igreja manualmente. */ }
+  }, [church, user?.id]);
+
+  useEffect(() => {
     if (!church || !client) return;
     const timer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
       void loadBuilds(church.id).catch(err => setBuildRefreshError(readableError(err)));
     }, 20000);
     return () => window.clearInterval(timer);
@@ -396,7 +428,8 @@ export default function ChurchStudioPage() {
       });
       if (apiError) throw apiError;
       await loadBuilds(church.id);
-      show("Solicitação registrada. A fábrica de aplicativos exibirá aqui o resultado da compilação.");
+      setStep(3);
+      show("Solicitação registrada. Você já pode acompanhar o andamento do seu aplicativo.");
     } catch (err) { fail(err); } finally { setBusy(false); }
   }
 
