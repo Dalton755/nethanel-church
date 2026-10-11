@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { createClient } from "../../lib/supabase/client";
@@ -41,6 +41,7 @@ type SetupStatus = {
 };
 
 const COLORS = ["#2387C9", "#406A85", "#556CCF", "#8064C4", "#3B8F75", "#D0A53A", "#AF5B6D", "#202B39"];
+const SOFT_COLORS = ["#FFFFFF", "#F6F8FB", "#DCE9F3", "#E9E6FB", "#DEF1E8", "#FFF2D5", "#EEDFE3", "#202B39"];
 const STEPS = ["Sua marca", "Departamentos", "Ministérios", "Meu aplicativo"];
 const SCOPES: Array<{ key: Structure["ministry_scope"]; title: string; description: string }> = [
   { key: "local", title: "Igreja local", description: "Uma comunidade e uma sede" },
@@ -54,7 +55,16 @@ function cleanKey(name: string) {
     .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30);
 }
 function isHex(value: string) { return /^#[0-9a-fA-F]{6}$/.test(value); }
-function readableError(error: unknown) { return error instanceof Error ? error.message : "Não foi possível concluir. Tente novamente."; }
+function readableError(error: unknown) {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  // Erros das RPCs do Supabase são objetos PostgrestError e não Error.
+  // O painel deve apresentar a mensagem do servidor, não escondê-la.
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message.trim();
+  }
+  return "Não foi possível concluir. Tente novamente.";
+}
 const inputClass = "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100";
 const cardClass = "rounded-[1.5rem] border border-slate-200/90 bg-white p-5 shadow-[0_14px_60px_-48px_#1e293b] sm:p-7";
 const primaryButton = "inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#1a3044] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#2b4c68] disabled:cursor-not-allowed disabled:opacity-50";
@@ -69,6 +79,9 @@ export default function ChurchStudioPage() {
   const [password, setPassword] = useState("");
   const [churches, setChurches] = useState<Church[]>([]);
   const [church, setChurch] = useState<Church | null>(null);
+  const activeChurchIdRef = useRef<string | null>(null);
+  const [loadingChurch, setLoadingChurch] = useState(false);
+  const [editingAfterRequest, setEditingAfterRequest] = useState(false);
   const [newChurchName, setNewChurchName] = useState("");
   const [unitName, setUnitName] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -79,6 +92,7 @@ export default function ChurchStudioPage() {
   const [primary, setPrimary] = useState(defaultBrand.primary);
   const [secondary, setSecondary] = useState(defaultBrand.secondary);
   const [background, setBackground] = useState(defaultBrand.background);
+  const [advancedBrandOpen, setAdvancedBrandOpen] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [iconUrl, setIconUrl] = useState<string | null>(null);
   const [splashUrl, setSplashUrl] = useState<string | null>(null);
@@ -96,6 +110,9 @@ export default function ChurchStudioPage() {
   const [newMinistryName, setNewMinistryName] = useState("");
   const [builds, setBuilds] = useState<Build[]>([]);
   const [setup, setSetup] = useState<SetupStatus | null>(null);
+  const [refreshingBuilds, setRefreshingBuilds] = useState(false);
+  const [buildRefreshError, setBuildRefreshError] = useState("");
+  const [lastBuildRefresh, setLastBuildRefresh] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -127,27 +144,48 @@ export default function ChurchStudioPage() {
     return next;
   }, [client]);
 
-  useEffect(() => {
-    if (!client || !user) { setChurches([]); setChurch(null); return; }
-    void loadChurches().catch((err) => setError(readableError(err)));
-  }, [client, user, loadChurches]);
-
   const loadBuilds = useCallback(async (orgId: string) => {
-    if (!client) return;
+    if (!client) throw new Error("A conexão com o estúdio ainda não está pronta.");
     const [buildResult, setupResult] = await Promise.all([
       client.from("church_apk_builds")
         .select("id,status,artifact_path,created_at,failure_reason,android_package,branded_push")
         .eq("organization_id", orgId).order("created_at", { ascending: false }).limit(5),
       client.rpc("get_church_apk_setup_status", { p_organization_id: orgId }),
     ]);
-    if (!buildResult.error) setBuilds((buildResult.data ?? []) as Build[]);
-    if (!setupResult.error && setupResult.data) setSetup(setupResult.data as SetupStatus);
+    if (buildResult.error) throw buildResult.error;
+    if (setupResult.error) throw setupResult.error;
+    if (!setupResult.data) throw new Error("Não foi possível consultar a preparação do APK.");
+    const currentBuilds = (buildResult.data ?? []) as Build[];
+    // Evita resposta atrasada de outra igreja substituir a que está aberta.
+    if (activeChurchIdRef.current !== orgId) return [];
+    setBuilds(currentBuilds);
+    setSetup(setupResult.data as SetupStatus);
+    setLastBuildRefresh(new Date().toISOString());
+    setBuildRefreshError("");
+    return currentBuilds;
   }, [client]);
+
+  async function refreshBuilds() {
+    if (!church || !client || refreshingBuilds) return;
+    setRefreshingBuilds(true);
+    setBuildRefreshError("");
+    try {
+      await loadBuilds(church.id);
+    } catch (err) {
+      setBuildRefreshError(readableError(err));
+    } finally {
+      setRefreshingBuilds(false);
+    }
+  }
 
   const selectChurch = useCallback(async (next: Church) => {
     if (!client) return;
+    activeChurchIdRef.current = next.id;
+    setLoadingChurch(true);
     setError(""); setMessage(""); setChurch(next); setChurchName(next.name);
-    setStep(0); setBuilds([]); setSetup(null);
+    setStep(0); setBuilds([]); setSetup(null); setAdvancedBrandOpen(false);
+    setEditingAfterRequest(false);
+    setBuildRefreshError(""); setLastBuildRefresh(null);
     try {
       const unit = next.units.find((u) => u.is_headquarters) ?? next.units[0];
       if (!unit) throw new Error("A igreja ainda não possui uma unidade.");
@@ -176,15 +214,46 @@ export default function ChurchStudioPage() {
         .map(d => ({ key: d.key, name: d.name, category: "Personalizados", functions: d.functions?.length ? d.functions : [{ name: "Voluntário", required_count: 1 }] })));
       setChosenMinistries(Object.fromEntries(settings.ministries.map(m => [m.key, m])));
       setCustomMinistries(settings.ministries.filter(m => !MINISTRY_PRESETS.some(p => p.key === m.key)));
-      await loadBuilds(next.id);
+      const existing = await loadBuilds(next.id);
+      if (activeChurchIdRef.current !== next.id) return;
+      // Mesmo depois de sair do navegador, solicitações existentes abrem no status.
+      if (existing?.length) setStep(3);
     } catch (err) {
-      setError(readableError(err));
+      if (activeChurchIdRef.current === next.id) setError(readableError(err));
+    } finally {
+      if (activeChurchIdRef.current === next.id) setLoadingChurch(false);
     }
   }, [client, loadBuilds]);
 
   useEffect(() => {
+    if (!client || !user?.id) {
+      setChurches([]); setChurch(null); activeChurchIdRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    void loadChurches().then(list => {
+      if (cancelled || !list?.length) return;
+      try {
+        const last = window.localStorage.getItem("elo:studio:church:" + user.id);
+        const remembered = list.find(item => item.id === last);
+        if (remembered) void selectChurch(remembered);
+      } catch { /* Armazenamento bloqueado: o usuário pode selecionar a igreja. */ }
+    }).catch(err => { if (!cancelled) setError(readableError(err)); });
+    return () => { cancelled = true; };
+  }, [client, user?.id, loadChurches, selectChurch]);
+
+  useEffect(() => {
+    if (!church || !user?.id) return;
+    try { window.localStorage.setItem("elo:studio:church:" + user.id, church.id); }
+    catch { /* A retomada ainda funciona ao selecionar a igreja manualmente. */ }
+  }, [church, user?.id]);
+
+  useEffect(() => {
     if (!church || !client) return;
-    const timer = window.setInterval(() => { void loadBuilds(church.id); }, 20000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void loadBuilds(church.id).catch(err => setBuildRefreshError(readableError(err)));
+    }, 20000);
     return () => window.clearInterval(timer);
   }, [church, client, loadBuilds]);
 
@@ -194,6 +263,7 @@ export default function ChurchStudioPage() {
   const canIcon = features.custom_launcher_icon === true;
   const canSplash = features.custom_splash === true;
   const canApk = features.standalone_apk === true;
+  const logoSaved = typeof logoUrl === "string" && logoUrl.trim().length > 0;
   const brandedPush = features.branded_push === true;
   const departments = useMemo(() => [...DEPARTMENT_PRESETS, ...customDepartments], [customDepartments]);
   const activeDepts = departments.filter(d => chosenDepartments[d.key] !== undefined);
@@ -345,6 +415,12 @@ export default function ChurchStudioPage() {
 
   async function requestApk() {
     if (!client || !church || !canApk) return;
+    if (!logoSaved) {
+      setStep(0);
+      setError("Antes de gerar o APK, adicione a logo da igreja e toque em Salvar identidade e continuar.");
+      setMessage("");
+      return;
+    }
     const unit = church.units.find(u => u.is_headquarters) ?? church.units[0];
     if (!unit) return;
     setBusy(true); setError("");
@@ -354,7 +430,10 @@ export default function ChurchStudioPage() {
       });
       if (apiError) throw apiError;
       await loadBuilds(church.id);
-      show("Solicitação registrada. A fábrica de aplicativos exibirá aqui o resultado da compilação.");
+      setStep(3);
+      setEditingAfterRequest(false);
+      show("Solicitação registrada. Você já pode acompanhar o andamento do seu aplicativo.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) { fail(err); } finally { setBusy(false); }
   }
 
@@ -370,7 +449,22 @@ export default function ChurchStudioPage() {
     } catch (err) { fail(err); } finally { setBusy(false); }
   }
 
+  const latestBuild = builds[0];
+  const alreadyRequested = Boolean(latestBuild);
   const page = !user ? "auth" : !church ? "church" : "studio";
+  function leaveChurch() {
+    activeChurchIdRef.current = null;
+    setChurch(null);
+    setMessage("");
+    setError("");
+  }
+  function switchChurch() {
+    if (user?.id) {
+      try { window.localStorage.removeItem("elo:studio:church:" + user.id); }
+      catch { /* A troca manual continua funcionando sem armazenamento. */ }
+    }
+    leaveChurch();
+  }
   return (
     <main className="min-h-screen bg-[#f5f7f7] text-[#1e3040]">
       <header className="border-b border-slate-200/70 bg-white/95">
@@ -381,8 +475,8 @@ export default function ChurchStudioPage() {
           </Link>
           <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
             <span className="hidden sm:block">Estúdio da igreja</span>
-            {user && <button onClick={() => { setChurch(null); setMessage(""); }} className="rounded-xl border border-slate-200 px-3 py-2 hover:bg-slate-50">Trocar igreja</button>}
-            {user && <button onClick={() => { void client?.auth.signOut(); setChurch(null); }} className="rounded-xl px-2 py-2 text-red-600">Sair</button>}
+            {user && <button onClick={switchChurch} className="rounded-xl border border-slate-200 px-3 py-2 hover:bg-slate-50">Trocar igreja</button>}
+            {user && <button onClick={() => { leaveChurch(); void client?.auth.signOut(); }} className="rounded-xl px-2 py-2 text-red-600">Sair</button>}
           </div>
         </div>
       </header>
@@ -444,7 +538,13 @@ export default function ChurchStudioPage() {
           </div>
         ) : null}
 
-        {!booting && page === "studio" && church ? (
+        {!booting && page === "studio" && church && loadingChurch && (
+          <section className={cardClass + " mx-auto max-w-3xl"} role="status" aria-live="polite">
+            <p className="text-lg font-bold">Recuperando seu aplicativo...</p>
+            <p className="mt-2 text-sm text-slate-500">Consultando os dados e o andamento de {church.name}.</p>
+          </section>
+        )}
+        {!booting && page === "studio" && church && !loadingChurch && (!alreadyRequested || editingAfterRequest) ? (
           <div className="grid gap-7 lg:grid-cols-[240px_minmax(0,1fr)_280px]">
             <aside className="h-fit lg:sticky lg:top-6">
               <div className="rounded-3xl border border-slate-200 bg-white p-4">
@@ -466,6 +566,11 @@ export default function ChurchStudioPage() {
 
             <section className="min-w-0">
               <div className="mb-6">
+                {alreadyRequested && editingAfterRequest && (
+                  <button type="button" className={secondaryButton + " mb-4"} onClick={() => setEditingAfterRequest(false)}>
+                    ← Voltar ao acompanhamento do APK
+                  </button>
+                )}
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-600">Passo {step + 1} de 4</p>
                 <h1 className="mt-2 text-3xl font-black tracking-tight">{STEPS[step]}</h1>
                 <p className="mt-2 text-sm leading-7 text-slate-500">
@@ -480,31 +585,106 @@ export default function ChurchStudioPage() {
                 <div className={cardClass + " grid gap-5"}>
                   <label className="text-xs font-bold">Nome da igreja<input className={inputClass + " mt-2"} value={churchName} onChange={e => setChurchName(e.target.value)} maxLength={120} /></label>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="text-xs font-bold">Logo da igreja
+                    <label className="text-xs font-bold">Logo da igreja {canApk && <span className="text-amber-700">• obrigatória para gerar APK</span>}
                       <input className={inputClass + " mt-2"} type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setLogoFile(e.target.files?.[0] ?? null)} />
+                      <span className={"mt-2 block text-xs font-medium " + (logoSaved ? "text-emerald-700" : "text-amber-700")}>
+                        {logoSaved ? "✓ Logo salva" : logoFile ? "Imagem selecionada. Salve a identidade para continuar." : "Nenhuma logo salva. Envie uma imagem PNG, JPG ou WEBP de até 5 MB."}
+                      </span>
                     </label>
                     <label className="text-xs font-bold">Nome no celular {canAppName ? "" : "• plano White Label / Rede"}
                       <input disabled={!canAppName} className={inputClass + " mt-2 disabled:bg-slate-100"} value={canAppName ? appName : churchName} onChange={e => setAppName(e.target.value)} maxLength={40} />
                     </label>
                   </div>
-                  <div>
-                    <p className="mb-3 text-xs font-bold">Cor principal {canColors ? "" : "• acompanhe a identidade Elo no seu plano"}</p>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-bold">Cor principal {canColors ? "" : "• acompanhe a identidade Elo no seu plano"}</p>
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                        HEX
+                        <input aria-label="Código hexadecimal da cor principal" disabled={!canColors}
+                          className="w-24 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center font-mono text-xs font-bold text-slate-800 disabled:bg-slate-100"
+                          value={primary} maxLength={7} onChange={e => setPrimary(e.target.value)} />
+                      </label>
+                    </div>
                     <div className="flex flex-wrap gap-2">{COLORS.map(c =>
-                      <button disabled={!canColors} title={c} key={c} className={"h-9 w-9 rounded-xl border-2 disabled:opacity-35 " + (primary === c ? "border-slate-900" : "border-white")} style={{ backgroundColor: c }} onClick={() => setPrimary(c)} />
+                      <button type="button" disabled={!canColors} title={c} aria-label={"Usar cor principal " + c}
+                        aria-pressed={primary.toUpperCase() === c}
+                        key={c}
+                        className={"h-10 w-10 rounded-xl border-2 transition disabled:opacity-35 " + (primary.toUpperCase() === c ? "border-slate-900 ring-2 ring-slate-200" : "border-slate-200")}
+                        style={{ backgroundColor: c }} onClick={() => setPrimary(c)} />
                     )}</div>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {([{ label: "Principal", value: primary, set: setPrimary }, { label: "Secundária", value: secondary, set: setSecondary }, { label: "Fundo", value: background, set: setBackground }]).map(field =>
-                      <label className="text-xs font-bold" key={field.label}>{field.label}
-                        <input disabled={!canColors} className={inputClass + " mt-2 disabled:bg-slate-100"} value={field.value} maxLength={7} onChange={e => field.set(e.target.value)} />
-                      </label>)}
-                  </div>
-                  {(canIcon || canSplash) ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {canIcon && <label className="text-xs font-bold">Ícone exclusivo (opcional)<input className={inputClass + " mt-2"} type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setIconFile(e.target.files?.[0] ?? null)} /></label>}
-                      {canSplash && <label className="text-xs font-bold">Imagem de abertura (opcional)<input className={inputClass + " mt-2"} type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setSplashFile(e.target.files?.[0] ?? null)} /></label>}
+                  {(canColors || canIcon || canSplash) && (
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70">
+                      <button type="button" aria-controls="elo-brand-advanced" aria-expanded={advancedBrandOpen}
+                        className="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                        onClick={() => setAdvancedBrandOpen(value => !value)}>
+                        <span>
+                          <span className="block text-sm font-bold text-slate-800">Personalização avançada</span>
+                          <span className="mt-1 block text-xs text-slate-500">Cores secundária e de fundo • ícone • abertura</span>
+                        </span>
+                        <span aria-hidden="true" className="shrink-0 text-xl font-bold text-slate-600">{advancedBrandOpen ? "−" : "+"}</span>
+                      </button>
+                      {advancedBrandOpen && (
+                        <div id="elo-brand-advanced" className="space-y-5 border-t border-slate-200 bg-white p-4">
+                          {canColors && ([
+                            { label: "Cor secundária", value: secondary, update: setSecondary },
+                            { label: "Cor de fundo", value: background, update: setBackground },
+                          ]).map(field => (
+                            <div className="space-y-3" key={field.label}>
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-sm font-bold text-slate-800">{field.label}</p>
+                                <div className="flex items-center gap-2">
+                                  <label className="relative flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-slate-200" title={"Abrir paleta para " + field.label}>
+                                    <input type="color" aria-label={"Escolher " + field.label.toLowerCase() + " na paleta"}
+                                      className="h-12 w-14 cursor-pointer border-0 bg-transparent p-0"
+                                      value={isHex(field.value) ? field.value : "#FFFFFF"}
+                                      onChange={e => field.update(e.target.value.toUpperCase())} />
+                                  </label>
+                                  <input aria-label={"Código hexadecimal da " + field.label.toLowerCase()}
+                                    className="w-24 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center font-mono text-xs font-bold text-slate-800"
+                                    maxLength={7} value={field.value} onChange={e => field.update(e.target.value)} />
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-2" aria-label={"Cores sugeridas para " + field.label.toLowerCase()}>
+                                {SOFT_COLORS.map(c => (
+                                  <button type="button" key={c} title={c} aria-label={field.label + " " + c}
+                                    aria-pressed={field.value.toUpperCase() === c}
+                                    className={"h-9 w-9 rounded-xl border-2 transition " + (field.value.toUpperCase() === c ? "border-slate-900 ring-2 ring-slate-200" : "border-slate-200")}
+                                    style={{ backgroundColor: c }} onClick={() => field.update(c)} />
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          {(canIcon || canSplash) && (
+                            <div className="space-y-3 border-t border-slate-100 pt-4">
+                              <p className="text-sm font-bold text-slate-800">Imagens opcionais do aplicativo</p>
+                              <p className="text-xs leading-5 text-slate-500">Caso não exista imagem personalizada salva, a logo será usada automaticamente.</p>
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                {canIcon && (
+                                  <label className="flex min-h-24 cursor-pointer flex-col justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm transition hover:border-sky-400">
+                                    <span className="font-bold text-slate-800">Ícone na tela do celular</span>
+                                    <span className="text-xs text-sky-700">Escolher ou trocar imagem</span>
+                                    <span className="break-all text-xs text-slate-500">{iconFile ? iconFile.name : iconUrl ? "Imagem já salva" : "Usará a logo da igreja"}</span>
+                                    <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp"
+                                      aria-label="Enviar ícone exclusivo do aplicativo" onChange={e => setIconFile(e.target.files?.[0] ?? null)} />
+                                  </label>
+                                )}
+                                {canSplash && (
+                                  <label className="flex min-h-24 cursor-pointer flex-col justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm transition hover:border-sky-400">
+                                    <span className="font-bold text-slate-800">Imagem de abertura</span>
+                                    <span className="text-xs text-sky-700">Escolher ou trocar imagem</span>
+                                    <span className="break-all text-xs text-slate-500">{splashFile ? splashFile.name : splashUrl ? "Imagem já salva" : "Usará a logo da igreja"}</span>
+                                    <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp"
+                                      aria-label="Enviar imagem de abertura do aplicativo" onChange={e => setSplashFile(e.target.files?.[0] ?? null)} />
+                                  </label>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  ) : null}
+                  )}
                   <button className={primaryButton + " w-fit"} disabled={busy} onClick={() => void saveBrand()}>{busy ? "Salvando..." : "Salvar identidade e continuar →"}</button>
                 </div>
               ) : null}
@@ -595,8 +775,8 @@ export default function ChurchStudioPage() {
               {step === 3 ? (
                 <div className="grid gap-4">
                   <section className={cardClass}>
-                    <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">✓ Personalização concluída</span>
-                    <h3 className="mt-4 text-2xl font-black">Tudo pronto para sua igreja.</h3>
+                    <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">✓ Estrutura concluída</span>
+                    <h3 className="mt-4 text-2xl font-black">{canApk && !logoSaved ? "Sua estrutura está pronta. Falta a logo do aplicativo." : "Tudo pronto para sua igreja."}</h3>
                     <p className="mt-3 text-sm leading-7 text-slate-500">Foram escolhidos {activeDepts.length} departamentos e {Object.keys(chosenMinistries).length} cargos ministeriais. O motor de escalas usa essas equipes para configurar cada culto.</p>
                   </section>
                   <section className={cardClass}>
@@ -620,14 +800,40 @@ export default function ChurchStudioPage() {
                         </div>
                       )}
                     </div>
+                    {canApk && !logoSaved && (
+                      <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                        <p className="font-bold">Falta a logo da igreja para gerar o APK.</p>
+                        <p className="mt-1 text-xs leading-5 text-amber-900">Os departamentos e ministérios já estão salvos. Envie a logo na etapa Sua marca e salve a identidade. Não será necessário refazer a estrutura.</p>
+                        <button type="button" className={secondaryButton + " mt-3 w-full border-amber-300"} onClick={() => { setStep(0); setError(""); setMessage(""); }}>
+                          Adicionar logo em Sua marca →
+                        </button>
+                      </div>
+                    )}
                     <button disabled={!canApk || busy} className={primaryButton + " w-full"} onClick={() => void requestApk()}>
-                      {busy ? "Solicitando..." : canApk ? "Solicitar meu APK personalizado" : "APK exclusivo indisponível neste plano"}
+                      {busy ? "Solicitando..." : !canApk ? "APK exclusivo indisponível neste plano" : !logoSaved ? "Adicionar logo para liberar APK" : "Solicitar meu APK personalizado"}
                     </button>
                     <p className="mt-3 text-xs leading-5 text-slate-500">*Para push Android funcionar, o aplicativo exige credenciais FCM específicas e permissão do usuário. O ícone de push é incorporado na compilação.</p>
                     {!canApk && <p className="mt-3 text-sm text-sky-800">A identidade e estrutura continuam funcionando no aplicativo Elo compartilhado, conforme os recursos do plano.</p>}
                   </section>
                   <section className={cardClass}>
-                    <div className="flex items-center justify-between gap-3"><h3 className="text-lg font-extrabold">Minhas compilações</h3><button className="text-xs font-bold text-sky-700" onClick={() => void loadBuilds(church.id)}>Atualizar</button></div>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="text-lg font-extrabold">Minhas compilações</h3>
+                      <button type="button" aria-label="Atualizar situação das compilações"
+                        disabled={refreshingBuilds}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 text-sm font-bold text-sky-800 transition hover:bg-sky-100 disabled:opacity-60"
+                        onClick={() => void refreshBuilds()}>
+                        <span aria-hidden="true" className={refreshingBuilds ? "animate-spin" : ""}>↻</span>
+                        {refreshingBuilds ? "Atualizando..." : "Atualizar"}
+                      </button>
+                    </div>
+                    <div className="mt-2 min-h-5 text-xs text-slate-500" role="status" aria-live="polite">
+                      {refreshingBuilds ? "Consultando situação no Supabase..." : lastBuildRefresh ? "Última verificação: " + new Date(lastBuildRefresh).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "Carregando situação das compilações..."}
+                    </div>
+                    {buildRefreshError && (
+                      <p role="alert" className="mt-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+                        Não foi possível atualizar: {buildRefreshError}
+                      </p>
+                    )}
                     {builds.length === 0 ? <p className="mt-4 text-sm text-slate-500">Nenhuma compilação solicitada.</p> : <div className="mt-4 grid gap-3">{builds.map(b =>
                       <div key={b.id} className="rounded-2xl border border-slate-200 p-4">
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -635,6 +841,11 @@ export default function ChurchStudioPage() {
                             <p className="mt-1 text-xs text-slate-500">{new Date(b.created_at).toLocaleString("pt-BR")} • {b.android_package}</p></div>
                           {b.status === "ready" && <button className={primaryButton} onClick={() => void downloadApk(b)}>Baixar APK ↓</button>}
                         </div>
+                        {b.status === "queued" && (
+                          <p className="mt-2 text-xs leading-5 text-amber-800">
+                            Pedido recebido. A fábrica processa a fila automaticamente; atualizar apenas consulta o andamento, sem reiniciar o pedido.
+                          </p>
+                        )}
                         {b.branded_push && b.status === "ready" && setup && !setup.expo_fcm_verified && (
                           <p className="mt-2 text-xs text-amber-700">APK disponível, mas o Push externo ainda aguarda configuração/validação FCM no Expo.</p>
                         )}
@@ -674,6 +885,124 @@ export default function ChurchStudioPage() {
             </aside>
           </div>
         ) : null}
+
+        {!booting && page === "studio" && church && !loadingChurch && latestBuild && !editingAfterRequest && (
+          <div className="mx-auto max-w-3xl space-y-5" aria-label="Acompanhamento do aplicativo">
+            <header className={cardClass}>
+              <div className="flex items-center gap-4">
+                {logoUrl ? (
+                  <img src={logoUrl} alt={"Logo da " + church.name} className="h-16 w-16 shrink-0 rounded-2xl border border-slate-200 bg-white object-contain p-1.5" />
+                ) : (
+                  <span aria-hidden="true" className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-2xl font-bold">E</span>
+                )}
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-sky-700">Meu aplicativo • Nethanel Elo</p>
+                  <h1 className="mt-1 truncate text-2xl font-black tracking-tight">{appName || church.name}</h1>
+                  <p className="mt-1 text-sm text-slate-500">{church.name}</p>
+                </div>
+              </div>
+              <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span role="status" className={"inline-flex rounded-full px-3 py-1.5 text-xs font-black " + (
+                    latestBuild.status === "ready" ? "bg-emerald-100 text-emerald-800" :
+                      latestBuild.status === "failed" ? "bg-red-100 text-red-800" :
+                        latestBuild.status === "building" ? "bg-sky-100 text-sky-800" : "bg-amber-100 text-amber-800"
+                  )}>
+                    {latestBuild.status === "ready" ? "✓ Aplicativo pronto" :
+                      latestBuild.status === "failed" ? "Falha na geração" :
+                        latestBuild.status === "building" ? "◷ Compilando aplicativo" : "◷ Aguardando processamento"}
+                  </span>
+                  <span className="text-xs text-slate-500">Solicitado em {new Date(latestBuild.created_at).toLocaleString("pt-BR")}</span>
+                </div>
+                <h2 className="mt-4 text-xl font-black">
+                  {latestBuild.status === "ready" ? "Seu APK já está disponível!" :
+                    latestBuild.status === "failed" ? "Não foi possível concluir a geração" :
+                      latestBuild.status === "building" ? "Estamos preparando seu aplicativo" :
+                        "Sua solicitação foi recebida"}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {latestBuild.status === "ready"
+                    ? "Agora você pode baixar e instalar o aplicativo exclusivo da sua igreja."
+                    : latestBuild.status === "failed"
+                      ? "O pedido não foi concluído. Confira o motivo abaixo antes de tentar novamente."
+                      : latestBuild.status === "building"
+                        ? "A fábrica está compilando o aplicativo. Você pode sair e voltar mais tarde."
+                        : "O pedido está salvo na fila e ainda não iniciou a compilação. Acompanhe o andamento aqui; não precisa solicitar outra vez."}
+                </p>
+                {latestBuild.status === "queued" &&
+                  Date.now() - new Date(latestBuild.created_at).getTime() > 60 * 60 * 1000 && (
+                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                    Esta solicitação está aguardando há mais de uma hora. Isso indica atraso no processamento, não uma nova etapa de personalização.
+                  </p>
+                )}
+              </div>
+            </header>
+
+            <section className={cardClass}>
+              <h3 className="text-lg font-extrabold">Andamento da solicitação</h3>
+              <div className="mt-5 grid gap-3">
+                {([
+                  { title: "Solicitação recebida", description: "Configuração da igreja e pedido salvos.", completed: true, active: false },
+                  { title: "Preparação e compilação", description: "Firebase, autenticação, notificações e geração do APK.", completed: latestBuild.status === "ready", active: latestBuild.status === "building" },
+                  { title: "Aplicativo disponível", description: "Download e instalação no Android.", completed: latestBuild.status === "ready", active: false },
+                ] as const).map((item, index) => (
+                  <div key={item.title} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <div className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black " + (
+                      item.completed ? "bg-emerald-100 text-emerald-800" :
+                        item.active ? "bg-sky-100 text-sky-800" : "bg-slate-200 text-slate-500"
+                    )}>{item.completed ? "✓" : index + 1}</div>
+                    <div>
+                      <p className="font-bold">{item.title}{item.active ? " • em andamento" : ""}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {latestBuild.status === "failed" && latestBuild.failure_reason && (
+                <p role="alert" className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-800">{latestBuild.failure_reason}</p>
+              )}
+              {latestBuild.status === "ready" && (
+                <button type="button" className={primaryButton + " mt-5 w-full"}
+                  disabled={busy || !latestBuild.artifact_path} onClick={() => void downloadApk(latestBuild)}>
+                  {busy ? "Preparando download..." : "Baixar meu APK ↓"}
+                </button>
+              )}
+              {latestBuild.status === "failed" && (
+                <button type="button" className={primaryButton + " mt-5 w-full"} disabled={busy} onClick={() => void requestApk()}>
+                  {busy ? "Solicitando..." : "Solicitar nova compilação"}
+                </button>
+              )}
+            </section>
+
+            <section className={cardClass}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-extrabold">Atualização do status</h3>
+                  <p className="mt-1 text-xs text-slate-500">Verificação automática a cada 20 segundos enquanto esta página estiver aberta.</p>
+                </div>
+                <button type="button" aria-label="Atualizar situação do aplicativo" disabled={refreshingBuilds}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 text-sm font-bold text-sky-800 hover:bg-sky-100 disabled:opacity-60"
+                  onClick={() => void refreshBuilds()}>
+                  <span aria-hidden="true" className={refreshingBuilds ? "animate-spin" : ""}>↻</span>
+                  {refreshingBuilds ? "Atualizando..." : "Atualizar status"}
+                </button>
+              </div>
+              <p role="status" aria-live="polite" className="mt-3 text-xs text-slate-500">
+                {refreshingBuilds ? "Consultando Supabase..." :
+                  lastBuildRefresh ? "Última verificação: " + new Date(lastBuildRefresh).toLocaleTimeString("pt-BR") :
+                    "Aguardando primeira atualização."}
+              </p>
+              {buildRefreshError && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">Falha ao atualizar: {buildRefreshError}</p>}
+            </section>
+
+            {latestBuild.status === "ready" && (
+              <button type="button" className="mx-auto block py-2 text-sm font-semibold text-slate-500 underline underline-offset-4"
+                onClick={() => { setEditingAfterRequest(true); setStep(0); }}>
+                Revisar personalização da igreja
+              </button>
+            )}
+          </div>
+        )}
 
         {message && <div role="status" className="mx-auto mt-5 max-w-5xl rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{message}</div>}
         {error && <div role="alert" className="mx-auto mt-5 max-w-5xl rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>}
