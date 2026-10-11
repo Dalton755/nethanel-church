@@ -14,12 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Conferir autenticacao Expo via ferramenta oficial
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: |
-          npx --yes eas-cli@latest whoami
-
       - name: Consultar apenas metadados de credenciais Expo
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -36,17 +30,19 @@ jobs:
               sys.exit("FALHA: EXPO_TOKEN indisponivel no runner.")
           query = """
           query ExpoFcmCredentialRead($appId: String!) {
+            account {
+              byName(accountName: "dalton_silva") {
+                name
+                googleServiceAccountKeys {
+                  id
+                  projectIdentifier
+                  clientEmail
+                }
+              }
+            }
             app {
               byId(appId: $appId) {
                 id
-                account {
-                  name
-                  googleServiceAccountKeys {
-                    id
-                    projectIdentifier
-                    clientEmail
-                  }
-                }
                 androidAppCredentials {
                   id
                   applicationIdentifier
@@ -100,7 +96,7 @@ jobs:
               sys.exit("FALHA: projeto Expo nao encontrado.")
           if app.get("id")!="d35d3c12-a2b2-4e2e-af58-d2dcb512e9e2":
               sys.exit("FALHA: retorno Expo aponta para outro projeto.")
-          account=app.get("account",{})
+          account=data.get("data",{}).get("account",{}).get("byName") or {}
           saved=account.get("googleServiceAccountKeys",[])
           safe=[x for x in saved if x.get("projectIdentifier")=="nethanel-elo"]
           packages=[
