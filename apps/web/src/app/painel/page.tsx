@@ -81,6 +81,7 @@ export default function ChurchStudioPage() {
   const [church, setChurch] = useState<Church | null>(null);
   const activeChurchIdRef = useRef<string | null>(null);
   const [loadingChurch, setLoadingChurch] = useState(false);
+  const [editingAfterRequest, setEditingAfterRequest] = useState(false);
   const [newChurchName, setNewChurchName] = useState("");
   const [unitName, setUnitName] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -183,6 +184,7 @@ export default function ChurchStudioPage() {
     setLoadingChurch(true);
     setError(""); setMessage(""); setChurch(next); setChurchName(next.name);
     setStep(0); setBuilds([]); setSetup(null); setAdvancedBrandOpen(false);
+    setEditingAfterRequest(false);
     setBuildRefreshError(""); setLastBuildRefresh(null);
     try {
       const unit = next.units.find((u) => u.is_headquarters) ?? next.units[0];
@@ -445,7 +447,18 @@ export default function ChurchStudioPage() {
     } catch (err) { fail(err); } finally { setBusy(false); }
   }
 
+  const latestBuild = builds[0];
+  const alreadyRequested = Boolean(latestBuild);
   const page = !user ? "auth" : !church ? "church" : "studio";
+  function leaveChurch() {
+    activeChurchIdRef.current = null;
+    if (user?.id) {
+      try { window.localStorage.removeItem("elo:studio:church:" + user.id); } catch { /* opcional */ }
+    }
+    setChurch(null);
+    setMessage("");
+    setError("");
+  }
   return (
     <main className="min-h-screen bg-[#f5f7f7] text-[#1e3040]">
       <header className="border-b border-slate-200/70 bg-white/95">
@@ -456,8 +469,8 @@ export default function ChurchStudioPage() {
           </Link>
           <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
             <span className="hidden sm:block">Estúdio da igreja</span>
-            {user && <button onClick={() => { setChurch(null); setMessage(""); }} className="rounded-xl border border-slate-200 px-3 py-2 hover:bg-slate-50">Trocar igreja</button>}
-            {user && <button onClick={() => { void client?.auth.signOut(); setChurch(null); }} className="rounded-xl px-2 py-2 text-red-600">Sair</button>}
+            {user && <button onClick={leaveChurch} className="rounded-xl border border-slate-200 px-3 py-2 hover:bg-slate-50">Trocar igreja</button>}
+            {user && <button onClick={() => { leaveChurch(); void client?.auth.signOut(); }} className="rounded-xl px-2 py-2 text-red-600">Sair</button>}
           </div>
         </div>
       </header>
@@ -519,7 +532,13 @@ export default function ChurchStudioPage() {
           </div>
         ) : null}
 
-        {!booting && page === "studio" && church ? (
+        {!booting && page === "studio" && church && loadingChurch && (
+          <section className={cardClass + " mx-auto max-w-3xl"} role="status" aria-live="polite">
+            <p className="text-lg font-bold">Recuperando seu aplicativo...</p>
+            <p className="mt-2 text-sm text-slate-500">Consultando os dados e o andamento de {church.name}.</p>
+          </section>
+        )}
+        {!booting && page === "studio" && church && !loadingChurch && (!alreadyRequested || editingAfterRequest) ? (
           <div className="grid gap-7 lg:grid-cols-[240px_minmax(0,1fr)_280px]">
             <aside className="h-fit lg:sticky lg:top-6">
               <div className="rounded-3xl border border-slate-200 bg-white p-4">
@@ -541,6 +560,11 @@ export default function ChurchStudioPage() {
 
             <section className="min-w-0">
               <div className="mb-6">
+                {alreadyRequested && editingAfterRequest && (
+                  <button type="button" className={secondaryButton + " mb-4"} onClick={() => setEditingAfterRequest(false)}>
+                    ← Voltar ao acompanhamento do APK
+                  </button>
+                )}
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-600">Passo {step + 1} de 4</p>
                 <h1 className="mt-2 text-3xl font-black tracking-tight">{STEPS[step]}</h1>
                 <p className="mt-2 text-sm leading-7 text-slate-500">
