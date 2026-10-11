@@ -54,7 +54,7 @@ jobs:
               raise RuntimeError("Consulta da fila retornou formato invalido.")
           pending = bool(rows)
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"pending={str(pending).lower()}\\n".replace("\\n", "\n"))
+              print(f"pending={str(pending).lower()}", file=output)
           print("Solicitacao pendente encontrada." if pending
                 else "Fila vazia; nenhuma compilacao iniciada.")
           PY
