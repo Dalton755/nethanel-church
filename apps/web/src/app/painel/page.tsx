@@ -107,6 +107,9 @@ export default function ChurchStudioPage() {
   const [newMinistryName, setNewMinistryName] = useState("");
   const [builds, setBuilds] = useState<Build[]>([]);
   const [setup, setSetup] = useState<SetupStatus | null>(null);
+  const [refreshingBuilds, setRefreshingBuilds] = useState(false);
+  const [buildRefreshError, setBuildRefreshError] = useState("");
+  const [lastBuildRefresh, setLastBuildRefresh] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -144,21 +147,40 @@ export default function ChurchStudioPage() {
   }, [client, user, loadChurches]);
 
   const loadBuilds = useCallback(async (orgId: string) => {
-    if (!client) return;
+    if (!client) throw new Error("A conexão com o estúdio ainda não está pronta.");
     const [buildResult, setupResult] = await Promise.all([
       client.from("church_apk_builds")
         .select("id,status,artifact_path,created_at,failure_reason,android_package,branded_push")
         .eq("organization_id", orgId).order("created_at", { ascending: false }).limit(5),
       client.rpc("get_church_apk_setup_status", { p_organization_id: orgId }),
     ]);
-    if (!buildResult.error) setBuilds((buildResult.data ?? []) as Build[]);
-    if (!setupResult.error && setupResult.data) setSetup(setupResult.data as SetupStatus);
+    if (buildResult.error) throw buildResult.error;
+    if (setupResult.error) throw setupResult.error;
+    if (!setupResult.data) throw new Error("Não foi possível consultar a preparação do APK.");
+    setBuilds((buildResult.data ?? []) as Build[]);
+    setSetup(setupResult.data as SetupStatus);
+    setLastBuildRefresh(new Date().toISOString());
+    setBuildRefreshError("");
   }, [client]);
+
+  async function refreshBuilds() {
+    if (!church || !client || refreshingBuilds) return;
+    setRefreshingBuilds(true);
+    setBuildRefreshError("");
+    try {
+      await loadBuilds(church.id);
+    } catch (err) {
+      setBuildRefreshError(readableError(err));
+    } finally {
+      setRefreshingBuilds(false);
+    }
+  }
 
   const selectChurch = useCallback(async (next: Church) => {
     if (!client) return;
     setError(""); setMessage(""); setChurch(next); setChurchName(next.name);
     setStep(0); setBuilds([]); setSetup(null); setAdvancedBrandOpen(false);
+    setBuildRefreshError(""); setLastBuildRefresh(null);
     try {
       const unit = next.units.find((u) => u.is_headquarters) ?? next.units[0];
       if (!unit) throw new Error("A igreja ainda não possui uma unidade.");
@@ -195,7 +217,9 @@ export default function ChurchStudioPage() {
 
   useEffect(() => {
     if (!church || !client) return;
-    const timer = window.setInterval(() => { void loadBuilds(church.id); }, 20000);
+    const timer = window.setInterval(() => {
+      void loadBuilds(church.id).catch(err => setBuildRefreshError(readableError(err)));
+    }, 20000);
     return () => window.clearInterval(timer);
   }, [church, client, loadBuilds]);
 
