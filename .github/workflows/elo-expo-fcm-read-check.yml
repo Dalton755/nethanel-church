@@ -1,0 +1,98 @@
+name: Elo Factory - analisar FCM no Expo (somente leitura)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/elo-expo-fcm-read-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  expo-fcm-read-check:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Consultar apenas metadados de credenciais Expo
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.request
+          import urllib.error
+
+          token = os.environ.get("EXPO_TOKEN", "").strip()
+          if not token:
+              sys.exit("FALHA: EXPO_TOKEN indisponivel no runner.")
+          query = """
+          query ExpoFcmCredentialRead($appId: String!) {
+            app {
+              byId(appId: $appId) {
+                id
+                account {
+                  name
+                  googleServiceAccountKeys {
+                    id
+                    projectIdentifier
+                    clientEmail
+                  }
+                }
+                androidAppCredentials {
+                  id
+                  applicationIdentifier
+                  googleServiceAccountKeyForFcmV1 {
+                    id
+                    projectIdentifier
+                  }
+                }
+              }
+            }
+          }
+          """
+          payload = json.dumps({
+              "query":query,
+              "variables":{"appId":"d35d3c12-a2b2-4e2e-af58-d2dcb512e9e2"},
+          }).encode()
+          req = urllib.request.Request(
+              "https://api.expo.dev/graphql", data=payload, method="POST",
+              headers={"Authorization":"Bearer "+token,
+                       "Content-Type":"application/json",
+                       "Accept":"application/json"})
+          try:
+              with urllib.request.urlopen(req,timeout=25) as response:
+                  data=json.load(response)
+          except urllib.error.HTTPError as err:
+              sys.exit(f"FALHA: consulta do Expo retornou HTTP {err.code}.")
+          except Exception:
+              sys.exit("FALHA: nao foi possivel consultar metadados do Expo.")
+
+          if data.get("errors"):
+              errors = [x.get("message","Erro GraphQL")[:150] for x in data["errors"]]
+              sys.exit("FALHA: schema Expo GraphQL nao corresponde ao esperado: "+str(errors))
+          app=data.get("data",{}).get("app",{}).get("byId")
+          if not app:
+              sys.exit("FALHA: projeto Expo nao encontrado.")
+          if app.get("id")!="d35d3c12-a2b2-4e2e-af58-d2dcb512e9e2":
+              sys.exit("FALHA: retorno Expo aponta para outro projeto.")
+          account=app.get("account",{})
+          saved=account.get("googleServiceAccountKeys",[])
+          safe=[x for x in saved if x.get("projectIdentifier")=="nethanel-elo"]
+          packages=[
+              "br.com.nethanel.elo.c101212c56e814915ae9afbde5b42bb04",
+              "br.com.nethanel.elo.cdfe3dfb737be4120a46a8f010beaabc3"
+          ]
+          credentials=app.get("androidAppCredentials",[])
+          print("OK: leitura de metadados Expo validada no projeto esperado.")
+          print("Conta Expo: ",account.get("name","indisponivel"))
+          print("Chaves de conta de servico cadastradas no projeto Firebase correto:",len(safe))
+          for package in packages:
+              existing=next((x for x in credentials if x.get("applicationIdentifier")==package),None)
+              status=("credencial FCM presente" if existing and existing.get("googleServiceAccountKeyForFcmV1")
+                     else "FCM ausente" if existing else "identificador Android nao encontrado")
+              print("Pacote de teste "+package[-8:]+": "+status)
+          print("NENHUMA chave privada consultada, nenhum dado modificado.")
+          PY
