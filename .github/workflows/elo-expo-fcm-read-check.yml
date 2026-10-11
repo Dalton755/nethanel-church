@@ -67,7 +67,9 @@ jobs:
               "https://api.expo.dev/graphql", data=payload, method="POST",
               headers={"Authorization":"Bearer "+token,
                        "Content-Type":"application/json",
-                       "Accept":"application/json"})
+                       "Accept":"application/json",
+                       "User-Agent":"eas-cli/24.8.0 (Elo App Factory)",
+                       "expo-platform":"node"})
           try:
               with urllib.request.urlopen(req,timeout=25) as response:
                   data=json.load(response)
