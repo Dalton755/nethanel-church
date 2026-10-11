@@ -571,7 +571,7 @@ export default function ChurchStudioPage() {
                           {(canIcon || canSplash) && (
                             <div className="space-y-3 border-t border-slate-100 pt-4">
                               <p className="text-sm font-bold text-slate-800">Imagens opcionais do aplicativo</p>
-                              <p className="text-xs leading-5 text-slate-500">Sem enviar novas imagens, usamos a logo da igreja como ícone e imagem de abertura.</p>
+                              <p className="text-xs leading-5 text-slate-500">Caso não exista imagem personalizada salva, a logo será usada automaticamente.</p>
                               <div className="grid gap-3 sm:grid-cols-2">
                                 {canIcon && (
                                   <label className="flex min-h-24 cursor-pointer flex-col justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm transition hover:border-sky-400">
