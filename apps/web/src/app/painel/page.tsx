@@ -753,7 +753,24 @@ export default function ChurchStudioPage() {
                     {!canApk && <p className="mt-3 text-sm text-sky-800">A identidade e estrutura continuam funcionando no aplicativo Elo compartilhado, conforme os recursos do plano.</p>}
                   </section>
                   <section className={cardClass}>
-                    <div className="flex items-center justify-between gap-3"><h3 className="text-lg font-extrabold">Minhas compilações</h3><button className="text-xs font-bold text-sky-700" onClick={() => void loadBuilds(church.id)}>Atualizar</button></div>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="text-lg font-extrabold">Minhas compilações</h3>
+                      <button type="button" aria-label="Atualizar situação das compilações"
+                        disabled={refreshingBuilds}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 text-sm font-bold text-sky-800 transition hover:bg-sky-100 disabled:opacity-60"
+                        onClick={() => void refreshBuilds()}>
+                        <span aria-hidden="true" className={refreshingBuilds ? "animate-spin" : ""}>↻</span>
+                        {refreshingBuilds ? "Atualizando..." : "Atualizar"}
+                      </button>
+                    </div>
+                    <div className="mt-2 min-h-5 text-xs text-slate-500" role="status" aria-live="polite">
+                      {refreshingBuilds ? "Consultando situação no Supabase..." : lastBuildRefresh ? "Última verificação: " + new Date(lastBuildRefresh).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "Carregando situação das compilações..."}
+                    </div>
+                    {buildRefreshError && (
+                      <p role="alert" className="mt-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+                        Não foi possível atualizar: {buildRefreshError}
+                      </p>
+                    )}
                     {builds.length === 0 ? <p className="mt-4 text-sm text-slate-500">Nenhuma compilação solicitada.</p> : <div className="mt-4 grid gap-3">{builds.map(b =>
                       <div key={b.id} className="rounded-2xl border border-slate-200 p-4">
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -761,6 +778,11 @@ export default function ChurchStudioPage() {
                             <p className="mt-1 text-xs text-slate-500">{new Date(b.created_at).toLocaleString("pt-BR")} • {b.android_package}</p></div>
                           {b.status === "ready" && <button className={primaryButton} onClick={() => void downloadApk(b)}>Baixar APK ↓</button>}
                         </div>
+                        {b.status === "queued" && (
+                          <p className="mt-2 text-xs leading-5 text-amber-800">
+                            Pedido recebido. A fábrica processa a fila automaticamente; atualizar apenas consulta o andamento, sem reiniciar o pedido.
+                          </p>
+                        )}
                         {b.branded_push && b.status === "ready" && setup && !setup.expo_fcm_verified && (
                           <p className="mt-2 text-xs text-amber-700">APK disponível, mas o Push externo ainda aguarda configuração/validação FCM no Expo.</p>
                         )}
