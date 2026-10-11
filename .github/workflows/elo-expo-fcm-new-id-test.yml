@@ -1,0 +1,68 @@
+name: Elo Factory - testar novo identificador FCM sem APK
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/elo-expo-fcm-new-id-test.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  create-and-clean:
+    if: github.event.pull_request.number == 44 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Criar credencial isolada e excluir apos validar
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          PYTHONPATH=scripts python - <<'PY'
+          import elo_expo_fcm as fcm
+
+          # Somente Expo; nao e criado app Firebase, APK ou organizacao.
+          # Este package nunca pertenceu a uma igreja real.
+          package="br.com.nethanel.elo.c00000000000000000000000000000001"
+          key_id, before = fcm.current_credentials()
+          if any(c.get("applicationIdentifier")==package for c in before):
+              raise RuntimeError("Identificador de teste ja existia. Pare sem modificar.")
+
+          created_id=None
+          try:
+              out=fcm.expo_graphql(fcm.CREATE_MUTATION,{
+                  "appId":fcm.EXPO_PROJECT_ID,"package":package,"keyId":key_id})
+              created=(out.get("androidAppCredentials") or {}).get("createAndroidAppCredentials") or {}
+              if created.get("applicationIdentifier") != package:
+                  raise RuntimeError("Expo nao retornou o identificador exclusivo de teste.")
+              created_id=created.get("id")
+              assoc=created.get("googleServiceAccountKeyForFcmV1") or {}
+              if assoc.get("id") != key_id or assoc.get("projectIdentifier") != fcm.FIREBASE_PROJECT_ID:
+                  raise RuntimeError("FCM salvo nao foi associado durante a criacao.")
+
+              _, after=fcm.current_credentials()
+              matches=[c for c in after if c.get("applicationIdentifier")==package]
+              if len(matches)!=1 or matches[0].get("id")!=created_id:
+                  raise RuntimeError("Expo nao confirmou a nova credencial.")
+              print("OK: nova credencial Expo Android foi criada com FCM V1 existente.")
+          finally:
+              # Limpar apenas a credencial sem igreja e sem APK.
+              _, current=fcm.current_credentials()
+              mine=[c for c in current if c.get("applicationIdentifier")==package]
+              if len(mine)==1 and mine[0].get("id"):
+                  delete = """
+                  mutation EloDeleteTemporaryAppCredentials($id: ID!) {
+                    androidAppCredentials {
+                      deleteAndroidAppCredentials(id:$id) { id }
+                    }
+                  }
+                  """
+                  fcm.expo_graphql(delete,{"id":mine[0]["id"]})
+                  _, cleaned=fcm.current_credentials()
+                  if any(c.get("applicationIdentifier")==package for c in cleaned):
+                      raise RuntimeError("Credencial temporaria ainda esta no Expo.")
+                  print("OK: registro Expo de teste excluido; apps reais preservados.")
+          PY
