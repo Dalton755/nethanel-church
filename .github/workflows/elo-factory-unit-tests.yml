@@ -5,6 +5,8 @@ on:
     paths:
       - "scripts/elo_firebase_provision.py"
       - "scripts/elo_auth_redirects.py"
+      - "scripts/elo_expo_fcm.py"
+      - "scripts/test_elo_expo_fcm.py"
       - "scripts/test_elo_auth_redirects.py"
       - "scripts/elo_app_factory.py"
       - "scripts/test_elo_firebase_provision.py"
@@ -14,6 +16,8 @@ on:
     paths:
       - "scripts/elo_firebase_provision.py"
       - "scripts/elo_auth_redirects.py"
+      - "scripts/elo_expo_fcm.py"
+      - "scripts/test_elo_expo_fcm.py"
       - "scripts/test_elo_auth_redirects.py"
       - "scripts/elo_app_factory.py"
       - "scripts/test_elo_firebase_provision.py"
@@ -30,5 +34,5 @@ jobs:
       - uses: actions/checkout@v5
       - name: Validar Python sem segredos
         run: |
-          python -m py_compile scripts/elo_firebase_provision.py scripts/elo_auth_redirects.py scripts/elo_app_factory.py
-          PYTHONPATH=scripts python -m unittest -v test_elo_firebase_provision test_elo_auth_redirects
+          python -m py_compile scripts/elo_firebase_provision.py scripts/elo_auth_redirects.py scripts/elo_expo_fcm.py scripts/elo_app_factory.py
+          PYTHONPATH=scripts python -m unittest -v test_elo_firebase_provision test_elo_auth_redirects test_elo_expo_fcm

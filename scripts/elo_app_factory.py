@@ -105,10 +105,21 @@ def claim():
             return
         approved = set(json.loads(READY_FILE.read_text(encoding="utf-8")))
 
+    expo_approved = None
+    if os.environ.get("ELO_REQUIRE_EXPO_FCM") == "true":
+        from elo_expo_fcm import READY_FILE as EXPO_READY_FILE
+        if not EXPO_READY_FILE.exists():
+            print("Falta confirmacao Expo FCM nesta execucao; build bloqueado.")
+            return
+        expo_approved = set(json.loads(EXPO_READY_FILE.read_text(encoding="utf-8")))
+
     record = None
     for candidate in rows:
         if approved is not None and candidate["id"] not in approved:
             # Nunca marcar falha nem remover fila: aguardar credencial de Auth.
+            continue
+        if candidate.get("branded_push") and expo_approved is not None and candidate["id"] not in expo_approved:
+            # Exige FCM V1 associado a ESTE aplicativo no Expo.
             continue
         if candidate.get("branded_push") and registered.get(
                 candidate["organization_id"]) != candidate["android_package"]:
