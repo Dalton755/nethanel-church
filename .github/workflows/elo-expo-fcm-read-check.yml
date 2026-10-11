@@ -74,12 +74,21 @@ jobs:
               with urllib.request.urlopen(req,timeout=25) as response:
                   data=json.load(response)
           except urllib.error.HTTPError as err:
-              response=err.read(600).decode("utf-8","replace").lower()
-              # Nunca apresentar headers, valores sensíveis ou resposta completa.
-              reason=("autorizacao" if any(x in response for x in ("unauthorized","permission","forbidden","access denied"))
-                      else "bloqueio de rede" if "cloudflare" in response or "waf" in response
-                      else "resposta nao identificada")
-              sys.exit(f"FALHA: Expo GraphQL HTTP {err.code}; categoria: {reason}.")
+              response=err.read(1800).decode("utf-8","replace")
+              # Nao imprimir resposta completa, tokens ou outros valores.
+              try:
+                  issues=json.loads(response).get("errors") or []
+                  hint=" | ".join(
+                      str(issue.get("message",""))[:170]
+                      for issue in issues[:2]
+                      if str(issue.get("message","")).startswith((
+                          "Cannot query field", "Unknown argument", "Field ",
+                          "Variable ", "Syntax Error", "Expected "))
+                  ) or "resposta sem erros GraphQL conhecidos"
+              except (ValueError,AttributeError):
+                  hint=("autorizacao" if any(z in response.lower() for z in ("unauthorized","permission","forbidden"))
+                        else "resposta nao reconhecida")
+              sys.exit(f"FALHA: Expo GraphQL HTTP {err.code}; motivo: {hint}.")
           except Exception:
               sys.exit("FALHA: nao foi possivel consultar metadados do Expo.")
 
