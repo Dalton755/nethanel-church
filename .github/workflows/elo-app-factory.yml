@@ -46,11 +46,21 @@ jobs:
           ELO_SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.ELO_SUPABASE_MANAGEMENT_TOKEN }}
         run: python scripts/elo_auth_redirects.py
 
+      - name: Associar e verificar FCM V1 no Expo por igreja
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          # Criacao automatica de novos identificadores fica sob controle
+          # ate validar separadamente um terceiro aplicativo de teste.
+          ELO_EXPO_ALLOW_CREATE_CREDENTIALS: ${{ vars.ELO_EXPO_ALLOW_CREATE_CREDENTIALS }}
+        run: python scripts/elo_expo_fcm.py
+
       - name: Busca solicitação autorizada e inicia compilação
         id: claim
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
           ELO_REQUIRE_OAUTH_URLS: "true"
+          ELO_REQUIRE_EXPO_FCM: "true"
         run: |
           set -euo pipefail
           python scripts/elo_app_factory.py claim
