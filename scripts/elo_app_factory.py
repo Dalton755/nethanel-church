@@ -95,8 +95,21 @@ def claim():
                        "?select=organization_id,android_package")
     registered = {row["organization_id"]: row["android_package"] for row in firebase}
 
+    # O controle executa somente apos confirmar as Redirect URLs por
+    # Management API; evita APK com Google OAuth abrindo outro aplicativo.
+    approved = None
+    if os.environ.get("ELO_REQUIRE_OAUTH_URLS") == "true":
+        from elo_auth_redirects import READY_FILE
+        if not READY_FILE.exists():
+            print("Nao existe verificacao OAuth para esta execucao. Compilacao bloqueada.")
+            return
+        approved = set(json.loads(READY_FILE.read_text(encoding="utf-8")))
+
     record = None
     for candidate in rows:
+        if approved is not None and candidate["id"] not in approved:
+            # Nunca marcar falha nem remover fila: aguardar credencial de Auth.
+            continue
         if candidate.get("branded_push") and registered.get(
                 candidate["organization_id"]) != candidate["android_package"]:
             # Espera provisionamento oficial do Firebase. Não queima tentativas
