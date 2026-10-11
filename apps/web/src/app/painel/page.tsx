@@ -431,7 +431,9 @@ export default function ChurchStudioPage() {
       if (apiError) throw apiError;
       await loadBuilds(church.id);
       setStep(3);
+      setEditingAfterRequest(false);
       show("Solicitação registrada. Você já pode acompanhar o andamento do seu aplicativo.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) { fail(err); } finally { setBusy(false); }
   }
 
@@ -879,6 +881,124 @@ export default function ChurchStudioPage() {
             </aside>
           </div>
         ) : null}
+
+        {!booting && page === "studio" && church && !loadingChurch && latestBuild && !editingAfterRequest && (
+          <div className="mx-auto max-w-3xl space-y-5" aria-label="Acompanhamento do aplicativo">
+            <header className={cardClass}>
+              <div className="flex items-center gap-4">
+                {logoUrl ? (
+                  <img src={logoUrl} alt={"Logo da " + church.name} className="h-16 w-16 shrink-0 rounded-2xl border border-slate-200 bg-white object-contain p-1.5" />
+                ) : (
+                  <span aria-hidden="true" className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-2xl font-bold">E</span>
+                )}
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-sky-700">Meu aplicativo • Nethanel Elo</p>
+                  <h1 className="mt-1 truncate text-2xl font-black tracking-tight">{appName || church.name}</h1>
+                  <p className="mt-1 text-sm text-slate-500">{church.name}</p>
+                </div>
+              </div>
+              <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span role="status" className={"inline-flex rounded-full px-3 py-1.5 text-xs font-black " + (
+                    latestBuild.status === "ready" ? "bg-emerald-100 text-emerald-800" :
+                      latestBuild.status === "failed" ? "bg-red-100 text-red-800" :
+                        latestBuild.status === "building" ? "bg-sky-100 text-sky-800" : "bg-amber-100 text-amber-800"
+                  )}>
+                    {latestBuild.status === "ready" ? "✓ Aplicativo pronto" :
+                      latestBuild.status === "failed" ? "Falha na geração" :
+                        latestBuild.status === "building" ? "◷ Compilando aplicativo" : "◷ Aguardando processamento"}
+                  </span>
+                  <span className="text-xs text-slate-500">Solicitado em {new Date(latestBuild.created_at).toLocaleString("pt-BR")}</span>
+                </div>
+                <h2 className="mt-4 text-xl font-black">
+                  {latestBuild.status === "ready" ? "Seu APK já está disponível!" :
+                    latestBuild.status === "failed" ? "Não foi possível concluir a geração" :
+                      latestBuild.status === "building" ? "Estamos preparando seu aplicativo" :
+                        "Sua solicitação foi recebida"}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {latestBuild.status === "ready"
+                    ? "Agora você pode baixar e instalar o aplicativo exclusivo da sua igreja."
+                    : latestBuild.status === "failed"
+                      ? "O pedido não foi concluído. Confira o motivo abaixo antes de tentar novamente."
+                      : latestBuild.status === "building"
+                        ? "A fábrica está compilando o aplicativo. Você pode sair e voltar mais tarde."
+                        : "O pedido está salvo na fila e ainda não iniciou a compilação. Acompanhe o andamento aqui; não precisa solicitar outra vez."}
+                </p>
+                {latestBuild.status === "queued" &&
+                  Date.now() - new Date(latestBuild.created_at).getTime() > 60 * 60 * 1000 && (
+                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                    Esta solicitação está aguardando há mais de uma hora. Isso indica atraso no processamento, não uma nova etapa de personalização.
+                  </p>
+                )}
+              </div>
+            </header>
+
+            <section className={cardClass}>
+              <h3 className="text-lg font-extrabold">Andamento da solicitação</h3>
+              <div className="mt-5 grid gap-3">
+                {([
+                  { title: "Solicitação recebida", description: "Configuração da igreja e pedido salvos.", completed: true, active: false },
+                  { title: "Preparação e compilação", description: "Firebase, autenticação, notificações e geração do APK.", completed: latestBuild.status === "ready", active: latestBuild.status === "building" },
+                  { title: "Aplicativo disponível", description: "Download e instalação no Android.", completed: latestBuild.status === "ready", active: false },
+                ] as const).map((item, index) => (
+                  <div key={item.title} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <div className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black " + (
+                      item.completed ? "bg-emerald-100 text-emerald-800" :
+                        item.active ? "bg-sky-100 text-sky-800" : "bg-slate-200 text-slate-500"
+                    )}>{item.completed ? "✓" : index + 1}</div>
+                    <div>
+                      <p className="font-bold">{item.title}{item.active ? " • em andamento" : ""}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {latestBuild.status === "failed" && latestBuild.failure_reason && (
+                <p role="alert" className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-800">{latestBuild.failure_reason}</p>
+              )}
+              {latestBuild.status === "ready" && (
+                <button type="button" className={primaryButton + " mt-5 w-full"}
+                  disabled={busy || !latestBuild.artifact_path} onClick={() => void downloadApk(latestBuild)}>
+                  {busy ? "Preparando download..." : "Baixar meu APK ↓"}
+                </button>
+              )}
+              {latestBuild.status === "failed" && (
+                <button type="button" className={primaryButton + " mt-5 w-full"} disabled={busy} onClick={() => void requestApk()}>
+                  {busy ? "Solicitando..." : "Solicitar nova compilação"}
+                </button>
+              )}
+            </section>
+
+            <section className={cardClass}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-extrabold">Atualização do status</h3>
+                  <p className="mt-1 text-xs text-slate-500">Verificação automática a cada 20 segundos enquanto esta página estiver aberta.</p>
+                </div>
+                <button type="button" aria-label="Atualizar situação do aplicativo" disabled={refreshingBuilds}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 text-sm font-bold text-sky-800 hover:bg-sky-100 disabled:opacity-60"
+                  onClick={() => void refreshBuilds()}>
+                  <span aria-hidden="true" className={refreshingBuilds ? "animate-spin" : ""}>↻</span>
+                  {refreshingBuilds ? "Atualizando..." : "Atualizar status"}
+                </button>
+              </div>
+              <p role="status" aria-live="polite" className="mt-3 text-xs text-slate-500">
+                {refreshingBuilds ? "Consultando Supabase..." :
+                  lastBuildRefresh ? "Última verificação: " + new Date(lastBuildRefresh).toLocaleTimeString("pt-BR") :
+                    "Aguardando primeira atualização."}
+              </p>
+              {buildRefreshError && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">Falha ao atualizar: {buildRefreshError}</p>}
+            </section>
+
+            {latestBuild.status === "ready" && (
+              <button type="button" className="mx-auto block py-2 text-sm font-semibold text-slate-500 underline underline-offset-4"
+                onClick={() => { setEditingAfterRequest(true); setStep(0); }}>
+                Revisar personalização da igreja
+              </button>
+            )}
+          </div>
+        )}
 
         {message && <div role="status" className="mx-auto mt-5 max-w-5xl rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{message}</div>}
         {error && <div role="alert" className="mx-auto mt-5 max-w-5xl rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>}
