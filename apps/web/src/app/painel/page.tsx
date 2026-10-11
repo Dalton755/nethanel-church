@@ -454,12 +454,16 @@ export default function ChurchStudioPage() {
   const page = !user ? "auth" : !church ? "church" : "studio";
   function leaveChurch() {
     activeChurchIdRef.current = null;
-    if (user?.id) {
-      try { window.localStorage.removeItem("elo:studio:church:" + user.id); } catch { /* opcional */ }
-    }
     setChurch(null);
     setMessage("");
     setError("");
+  }
+  function switchChurch() {
+    if (user?.id) {
+      try { window.localStorage.removeItem("elo:studio:church:" + user.id); }
+      catch { /* A troca manual continua funcionando sem armazenamento. */ }
+    }
+    leaveChurch();
   }
   return (
     <main className="min-h-screen bg-[#f5f7f7] text-[#1e3040]">
@@ -471,7 +475,7 @@ export default function ChurchStudioPage() {
           </Link>
           <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
             <span className="hidden sm:block">Estúdio da igreja</span>
-            {user && <button onClick={leaveChurch} className="rounded-xl border border-slate-200 px-3 py-2 hover:bg-slate-50">Trocar igreja</button>}
+            {user && <button onClick={switchChurch} className="rounded-xl border border-slate-200 px-3 py-2 hover:bg-slate-50">Trocar igreja</button>}
             {user && <button onClick={() => { leaveChurch(); void client?.auth.signOut(); }} className="rounded-xl px-2 py-2 text-red-600">Sair</button>}
           </div>
         </div>
