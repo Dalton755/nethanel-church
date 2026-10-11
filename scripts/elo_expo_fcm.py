@@ -9,6 +9,7 @@ Se o schema for incompatível, falha fechado (não desabilita outro app).
 import json
 import os
 import re
+from pathlib import Path
 import urllib.error
 import urllib.request
 
@@ -18,6 +19,7 @@ EXPO_URL = "https://api.expo.dev/graphql"
 EXPO_PROJECT_ID = "d35d3c12-a2b2-4e2e-af58-d2dcb512e9e2"
 EXPO_ACCOUNT = "dalton_silva"
 FIREBASE_PROJECT_ID = "nethanel-elo"
+READY_FILE = Path("/tmp/elo-app-factory-expo-fcm-ready.json")
 
 QUERY = """
 query EloExpoFcmDetails($appId: String!) {
@@ -186,6 +188,9 @@ def ensure_app_fcm(item, *, allow_create=False):
 
 
 def main():
+    # A cada execucao, o arquivo com aprovados comeca vazio.
+    # Nunca reutilizar aprovacao de outro job/igreja.
+    READY_FILE.write_text("[]", encoding="utf-8")
     queued = request(
         "GET",
         "/rest/v1/church_apk_builds?status=eq.queued&branded_push=eq.true"
@@ -194,15 +199,23 @@ def main():
     if not queued:
         print("Nao ha novos APKs aguardando associacao FCM no Expo.")
         return
-    # Evita exceder limites de API Expo: uma igreja por execucao.
+
+    verified = []
     for record in queued:
+        # Restringe os pedidos aos que ja passaram pelo fluxo autorizado
+        # e impede vincular credencial Expo a package de outra igreja.
         validate_claim(record)
-        ensure_app_fcm(
+        status = ensure_app_fcm(
             record,
             allow_create=os.environ.get("ELO_EXPO_ALLOW_CREATE_CREDENTIALS") == "true"
         )
-        print("FCM Expo confirmado para uma igreja na fila.")
-        return
+        if status not in ("linked","already_linked"):
+            raise RuntimeError("Expo nao confirmou a associacao da FCM.")
+        verified.append(record["id"])
+        # Trabalhar com uma solicitacao por execucao.
+        break
+    READY_FILE.write_text(json.dumps(verified), encoding="utf-8")
+    print("Expo FCM pronto para 1 compilacao exclusiva.")
 
 
 if __name__ == "__main__":
