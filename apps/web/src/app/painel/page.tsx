@@ -54,7 +54,16 @@ function cleanKey(name: string) {
     .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30);
 }
 function isHex(value: string) { return /^#[0-9a-fA-F]{6}$/.test(value); }
-function readableError(error: unknown) { return error instanceof Error ? error.message : "Não foi possível concluir. Tente novamente."; }
+function readableError(error: unknown) {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  // Erros das RPCs do Supabase são objetos PostgrestError e não Error.
+  // O painel deve apresentar a mensagem do servidor, não escondê-la.
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message.trim();
+  }
+  return "Não foi possível concluir. Tente novamente.";
+}
 const inputClass = "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100";
 const cardClass = "rounded-[1.5rem] border border-slate-200/90 bg-white p-5 shadow-[0_14px_60px_-48px_#1e293b] sm:p-7";
 const primaryButton = "inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#1a3044] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#2b4c68] disabled:cursor-not-allowed disabled:opacity-50";
@@ -194,6 +203,7 @@ export default function ChurchStudioPage() {
   const canIcon = features.custom_launcher_icon === true;
   const canSplash = features.custom_splash === true;
   const canApk = features.standalone_apk === true;
+  const logoSaved = typeof logoUrl === "string" && logoUrl.trim().length > 0;
   const brandedPush = features.branded_push === true;
   const departments = useMemo(() => [...DEPARTMENT_PRESETS, ...customDepartments], [customDepartments]);
   const activeDepts = departments.filter(d => chosenDepartments[d.key] !== undefined);
@@ -345,6 +355,12 @@ export default function ChurchStudioPage() {
 
   async function requestApk() {
     if (!client || !church || !canApk) return;
+    if (!logoSaved) {
+      setStep(0);
+      setError("Antes de gerar o APK, adicione a logo da igreja e toque em Salvar identidade e continuar.");
+      setMessage("");
+      return;
+    }
     const unit = church.units.find(u => u.is_headquarters) ?? church.units[0];
     if (!unit) return;
     setBusy(true); setError("");
@@ -480,8 +496,11 @@ export default function ChurchStudioPage() {
                 <div className={cardClass + " grid gap-5"}>
                   <label className="text-xs font-bold">Nome da igreja<input className={inputClass + " mt-2"} value={churchName} onChange={e => setChurchName(e.target.value)} maxLength={120} /></label>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="text-xs font-bold">Logo da igreja
+                    <label className="text-xs font-bold">Logo da igreja {canApk && <span className="text-amber-700">• obrigatória para gerar APK</span>}
                       <input className={inputClass + " mt-2"} type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setLogoFile(e.target.files?.[0] ?? null)} />
+                      <span className={"mt-2 block text-xs font-medium " + (logoSaved ? "text-emerald-700" : "text-amber-700")}>
+                        {logoSaved ? "✓ Logo salva" : logoFile ? "Imagem selecionada. Salve a identidade para continuar." : "Nenhuma logo salva. Envie uma imagem PNG, JPG ou WEBP de até 5 MB."}
+                      </span>
                     </label>
                     <label className="text-xs font-bold">Nome no celular {canAppName ? "" : "• plano White Label / Rede"}
                       <input disabled={!canAppName} className={inputClass + " mt-2 disabled:bg-slate-100"} value={canAppName ? appName : churchName} onChange={e => setAppName(e.target.value)} maxLength={40} />
@@ -595,8 +614,8 @@ export default function ChurchStudioPage() {
               {step === 3 ? (
                 <div className="grid gap-4">
                   <section className={cardClass}>
-                    <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">✓ Personalização concluída</span>
-                    <h3 className="mt-4 text-2xl font-black">Tudo pronto para sua igreja.</h3>
+                    <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">✓ Estrutura concluída</span>
+                    <h3 className="mt-4 text-2xl font-black">{canApk && !logoSaved ? "Sua estrutura está pronta. Falta a logo do aplicativo." : "Tudo pronto para sua igreja."}</h3>
                     <p className="mt-3 text-sm leading-7 text-slate-500">Foram escolhidos {activeDepts.length} departamentos e {Object.keys(chosenMinistries).length} cargos ministeriais. O motor de escalas usa essas equipes para configurar cada culto.</p>
                   </section>
                   <section className={cardClass}>
@@ -620,8 +639,17 @@ export default function ChurchStudioPage() {
                         </div>
                       )}
                     </div>
+                    {canApk && !logoSaved && (
+                      <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                        <p className="font-bold">Falta a logo da igreja para gerar o APK.</p>
+                        <p className="mt-1 text-xs leading-5 text-amber-900">Os departamentos e ministérios já estão salvos. Envie a logo na etapa Sua marca e salve a identidade. Não será necessário refazer a estrutura.</p>
+                        <button type="button" className={secondaryButton + " mt-3 w-full border-amber-300"} onClick={() => { setStep(0); setError(""); setMessage(""); }}>
+                          Adicionar logo em Sua marca →
+                        </button>
+                      </div>
+                    )}
                     <button disabled={!canApk || busy} className={primaryButton + " w-full"} onClick={() => void requestApk()}>
-                      {busy ? "Solicitando..." : canApk ? "Solicitar meu APK personalizado" : "APK exclusivo indisponível neste plano"}
+                      {busy ? "Solicitando..." : !canApk ? "APK exclusivo indisponível neste plano" : !logoSaved ? "Adicionar logo para liberar APK" : "Solicitar meu APK personalizado"}
                     </button>
                     <p className="mt-3 text-xs leading-5 text-slate-500">*Para push Android funcionar, o aplicativo exige credenciais FCM específicas e permissão do usuário. O ícone de push é incorporado na compilação.</p>
                     {!canApk && <p className="mt-3 text-sm text-sky-800">A identidade e estrutura continuam funcionando no aplicativo Elo compartilhado, conforme os recursos do plano.</p>}
