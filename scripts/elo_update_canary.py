@@ -132,26 +132,26 @@ def stage_preview():
     candidate = inspect_apk(APK_FILE)
     if baseline["organization_id"] != DEMO_ORGANIZATION_ID:
         raise RuntimeError("Somente Demo permitido.")
-    if baseline["previous_apk"]["version_code"] != 2 or candidate["version_code"] != 3:
-        raise RuntimeError("Este teste exige migracao da versao 2 para a versao 3.")
+    if baseline["previous_apk"]["version_code"] != 3 or candidate["version_code"] != 4:
+        raise RuntimeError("Este teste exige migracao da versao 3 para a versao 4.")
 
     releases = request(
         "GET", "/rest/v1/church_app_releases"
-        "?channel=eq.preview&version_code=eq.3&select=id,status,version_name,update_kind"
+        "?channel=eq.preview&version_code=eq.4&select=id,status,version_name,update_kind"
     ) or []
     if releases:
-        if len(releases) != 1 or releases[0]["status"] != "testing" or releases[0]["version_name"] != "1.0.3":
-            raise RuntimeError("Release preview 3 ja esta reservado por outra execucao.")
+        if len(releases) != 1 or releases[0]["status"] != "testing" or releases[0]["version_name"] != "1.0.4":
+            raise RuntimeError("Release preview 4 ja esta reservado por outra execucao.")
         release_id = releases[0]["id"]
     else:
         created = request("POST", "/rest/v1/church_app_releases", {
             "channel": "preview",
-            "version_name": "1.0.3",
-            "version_code": 3,
+            "version_name": "1.0.4",
+            "version_code": 4,
             "minimum_supported_version_code": 1,
             "update_kind": "apk",
-            "runtime_version": "elo" + DEMO_ORGANIZATION_ID.replace("-", "") + "-1.0.3",
-            "release_notes": "Teste interno: atualizacao pelo proprio Elo. Personalizacao, login e dados preservados.",
+            "runtime_version": "elo" + DEMO_ORGANIZATION_ID.replace("-", "") + "-1.0.4",
+            "release_notes": "Teste interno da atualizacao pelo proprio Elo: toque em Abrir download seguro. Instalacao mantem login e dados.",
             "status": "testing",
         })
         if not created or len(created) != 1:
@@ -159,11 +159,11 @@ def stage_preview():
         release_id = created[0]["id"]
 
     existing = request("GET", "/rest/v1/church_apk_builds"
-        f"?organization_id=eq.{DEMO_ORGANIZATION_ID}&version_code=eq.3"
+        f"?organization_id=eq.{DEMO_ORGANIZATION_ID}&version_code=eq.4"
         "&status=eq.ready&select=id,release_id") or []
     if existing:
         if len(existing) != 1 or existing[0]["release_id"] != release_id:
-            raise RuntimeError("Versao 3 pronta divergente do release de preview.")
+            raise RuntimeError("Versao 4 pronta divergente do release de preview.")
         print("Preview ja preparado anteriormente e disponivel apenas para solicitante do APK Demo.")
         return
 
@@ -203,7 +203,7 @@ def stage_preview():
     })
     if not created or len(created) != 1:
         raise RuntimeError("Nao foi possivel indexar o APK Demo apos upload.")
-    print("CANARY v3 STAGED: apenas release preview/testing e solicitante do Demo.")
+    print("CANARY v4 STAGED: apenas release preview/testing e solicitante do Demo.")
     print("Nenhum release production/published alterado.")
     
 
