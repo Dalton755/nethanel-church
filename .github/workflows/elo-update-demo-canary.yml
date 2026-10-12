@@ -1,7 +1,7 @@
 name: Elo Church Demo - Canary de atualizacao Android
 
 # Isolado: NAO roda factory, NAO grava no Supabase e NAO publica versao.
-# O push inicial nesta branch executa uma unica vez esta validacao.
+# Uma alteracao revisada deste proprio workflow executa novamente o canary.\n# Diagnostico de assinatura no APK anterior, sem exposicao de credenciais.
 on:
   push:
     branches:
