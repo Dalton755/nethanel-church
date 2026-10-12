@@ -45,3 +45,13 @@ Criar no **Perfil > Painel Nethanel > Central de Atualizações** uma gestão ce
 - Existe 1 APK pendente em outra igreja que permanece inalterado.
 - Nenhum release `production/published` foi criado.
 - Validação TypeScript e Expo no GitHub executada sem deploy.
+
+
+## Fase de rascunhos de distribuição (v60)
+- No resultado da simulação há um formulário discreto para nomear e **salvar planejamento**.
+- A RPC `platform_admin_save_distribution_draft` registra a seleção exclusivamente como `draft`.
+- Os rascunhos podem ser listados e reabertos pela conta de administrador da plataforma. A nova tabela não concede acesso direto a usuários comuns nem habilita execução.
+- `preview` é rigorosamente limitado ao Elo Church Demo (um único destinatário). Produção pode ser planejada, mas **não publicada**.
+- O banco rejeita igrejas desconhecidas, repetidas, valores nulos e versões fora do estado rascunho/teste.
+- Backend verificado usando uma transação revertida e nenhuma solicitação real enviada. Monitor de compilação da prévia do Elo principal valida package, certificado e versão crescente relativamente ao último APK instalado.
+- Passos de promoção, enfileiramento de build, push ou deploy de produção continuam indisponíveis nesta etapa.
