@@ -1,0 +1,129 @@
+name: Elo Principal - Central de Atualizacoes (APK de previa seguro)
+
+# Roda SOMENTE na branch de testes. Nao faz merge nem deploy.
+on:
+  push:
+    branches:
+      - feature/elo-updates-foundation
+    paths:
+      - ".github/workflows/elo-generic-updates-preview.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: elo-generic-updates-preview
+  cancel-in-progress: false
+
+jobs:
+  platform-preview:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+    steps:
+      - name: Codigo de previa isolado
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Recuperar tres APKs do Elo principal anteriormente distribuidos
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/elo-generic-historic/{latest,previous,earliest}
+          gh run download 37397162273 --repo "$GITHUB_REPOSITORY" \
+            --name nethanel-elo-generic-apk --dir /tmp/elo-generic-historic/latest
+          gh run download 37383797310 --repo "$GITHUB_REPOSITORY" \
+            --name nethanel-elo-generic-apk --dir /tmp/elo-generic-historic/previous
+          gh run download 37334947872 --repo "$GITHUB_REPOSITORY" \
+            --name nethanel-elo-generic-apk --dir /tmp/elo-generic-historic/earliest
+          test -s /tmp/elo-generic-historic/latest/nethanel-elo-generic.apk
+          test -s /tmp/elo-generic-historic/previous/nethanel-elo-generic.apk
+          test -s /tmp/elo-generic-historic/earliest/nethanel-elo-generic.apk
+
+      - name: Java 17 e SDK Android
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Expo EAS com assinatura original
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Validar assinatura dos APKs anteriores e incrementar versionCode
+        run: |
+          python -m py_compile scripts/elo_verify_apk.py scripts/elo_verify_generic_preview.py
+          python scripts/elo_verify_generic_preview.py prepare
+
+      - name: Instalar dependencias
+        run: |
+          npm ci
+          npm install --no-save --workspace=mobile \
+            expo@57.0.26 expo-camera@57.0.6 expo-constants@57.0.20
+
+      - name: Gerar recursos de identidade do Elo principal
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python apps/mobile/scripts/generate_elo_native_assets.py
+
+      - name: Definir versionCode do APK sem alterar codigo-fonte da branch
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          app=Path('apps/mobile/app.json')
+          cfg=json.loads(app.read_text(encoding='utf-8'))
+          cfg['expo']['version']=os.environ['ELO_GENERIC_PREVIEW_VERSION_NAME']
+          cfg['expo']['android']['versionCode']=int(os.environ['ELO_GENERIC_PREVIEW_VERSION_CODE'])
+          app.write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          eas=Path('apps/mobile/eas.json')
+          e=json.loads(eas.read_text(encoding='utf-8'))
+          e['cli']['appVersionSource']='local'
+          e['build']['preview'].pop('autoIncrement',None)
+          eas.write_text(json.dumps(e,indent=2)+'\n',encoding='utf-8')
+          print('App Elo principal preparado em versionCode local para teste.')
+          PY
+
+      - name: Checar TypeScript e identidade Expo
+        run: |
+          npm run typecheck --workspace=mobile
+          cd apps/mobile
+          npx expo config --type public --json > /tmp/elo-generic-updates-config.json
+          python - <<'PY'
+          import json,os
+          cfg=json.load(open('/tmp/elo-generic-updates-config.json',encoding='utf-8'))
+          assert cfg['name']=='Nethanel Elo',cfg['name']
+          assert cfg['android']['package']=='br.com.nethanel.church'
+          assert cfg['android']['versionCode']==int(os.environ['ELO_GENERIC_PREVIEW_VERSION_CODE'])
+          assert cfg['version']==os.environ['ELO_GENERIC_PREVIEW_VERSION_NAME']
+          assert 'nethanelelo' in cfg['scheme']
+          assert cfg.get('extra',{}).get('whiteLabel') is not True
+          print('Nethanel Elo principal: tenant, package e versao validados.')
+          PY
+
+      - name: Gerar APK de previa sem publicar o app
+        working-directory: apps/mobile
+        run: eas build --platform android --profile preview --local --non-interactive --output ./nethanel-elo-platform-preview.apk
+
+      - name: Comparar assinatura, versao e package com os 3 APKs anteriores
+        run: python scripts/elo_verify_generic_preview.py verify
+
+      - name: Disponibilizar somente APK aprovado para teste no GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: nethanel-elo-principal-central-atualizacoes-preview
+          path: apps/mobile/nethanel-elo-platform-preview.apk
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 0
