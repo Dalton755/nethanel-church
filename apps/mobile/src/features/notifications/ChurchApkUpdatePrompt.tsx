@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  DeviceEventEmitter,
   Linking,
   Modal,
   Platform,
@@ -26,7 +27,14 @@ type AvailableUpdate = {
 };
 
 const BUCKET = "elo-church-apks";
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const CHECK_INTERVAL_MS = 15 * 60 * 1000;
+const DEMO_CHECK_INTERVAL_MS = 60 * 1000;
+
+function safeBuildCode(value: unknown): number | null {
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) && value > 0
+    ? value : null;
+}
 
 /** Nenhuma consulta e feita por apps genericos ou pelo APK de OUTRA igreja. */
 export function ChurchApkUpdatePrompt() {
@@ -42,43 +50,81 @@ export function ChurchApkUpdatePrompt() {
     ? config.eloOrganizationId : null;
   const androidPackage = typeof config?.whiteLabelAndroidPackage === "string"
     ? config.whiteLabelAndroidPackage : null;
-  // Versao do manifest Android efetivamente instalado, nao do bundle OTA.
-  // Futura migracao para Application.nativeBuildVersion (expo-application).
-  const installedCode = Constants.platform?.android?.versionCode;
+  // No Android Expo SDK 57, Constants.platform?.android?.versionCode pode
+  // ficar ausente em builds EAS. O versionCode tambem e fixado na config
+  // white-label embutida no proprio APK (nunca vem do servidor/OTA).
+  const installedCode =
+    safeBuildCode(Constants.platform?.android?.versionCode) ??
+    safeBuildCode(config?.whiteLabelVersionCode);
+  const isWhiteLabelChurch = Platform.OS === "android" &&
+    typeof organizationId === "string" &&
+    installedOrg === organizationId &&
+    typeof androidPackage === "string" &&
+    androidPackage === `br.com.nethanel.elo.c${organizationId.replace(/-/g, "")}`;
+  const demoMode = organizationId === "101212c5-6e81-4915-ae9a-fbde5b42bb04";
 
   useEffect(() => {
-    if (Platform.OS !== "android" || !organizationId || !installedOrg ||
-        installedOrg !== organizationId || !androidPackage ||
-        !Number.isInteger(installedCode) || (installedCode ?? 0) <= 0) return;
-
     let mounted = true;
-    async function checkUpdate() {
+
+    async function checkUpdate(force = false) {
+      if (!isWhiteLabelChurch || !organizationId || !androidPackage || !installedCode) {
+        if (force) {
+          Alert.alert("Atualizações indisponíveis",
+            "Não foi possível reconhecer a identidade ou versão deste aplicativo da igreja.");
+        }
+        return;
+      }
+
       const now = Date.now();
-      if (now - lastCheck.current < CHECK_INTERVAL_MS) return;
+      const interval = demoMode ? DEMO_CHECK_INTERVAL_MS : CHECK_INTERVAL_MS;
+      if (!force && now - lastCheck.current < interval) return;
       lastCheck.current = now;
-      const { data, error } = await supabase.rpc("get_church_app_update", {
-        p_organization_id: organizationId,
-        p_android_package: androidPackage,
-        p_installed_version_code: installedCode,
-      });
-      if (!mounted || error) return;
-      const value = data as AvailableUpdate | { available: false } | null;
-      if (value?.available && Number.isInteger(value.version_code) &&
-          typeof value.artifact_path === "string") {
-        setUpdate(value);
-        setDismissed(false);
+
+      try {
+        const { data, error } = await supabase.rpc("get_church_app_update", {
+          p_organization_id: organizationId,
+          p_android_package: androidPackage,
+          p_installed_version_code: installedCode,
+        });
+        if (!mounted) return;
+        if (error) throw error;
+
+        const value = data as AvailableUpdate | { available: false } | null;
+        if (value?.available && Number.isInteger(value.version_code) &&
+            typeof value.artifact_path === "string") {
+          setUpdate(value);
+          setDismissed(false);
+        } else {
+          setUpdate(null);
+          if (force) {
+            Alert.alert("Aplicativo atualizado",
+              "Você já está utilizando a versão mais recente disponível para sua igreja.");
+          }
+        }
+      } catch (error) {
+        lastCheck.current = 0; // Falhas podem ser verificadas novamente.
+        console.warn("Elo: falha ao consultar atualizações", error);
+        if (force && mounted) {
+          Alert.alert("Não foi possível verificar",
+            "Confira sua conexão e entre novamente em Perfil > Verificar atualizações.");
+        }
       }
     }
 
     void checkUpdate();
-    const subscription = AppState.addEventListener("change", (state) => {
+    const appStateSub = AppState.addEventListener("change", (state) => {
       if (state === "active") void checkUpdate();
     });
+    const manualCheckSub = DeviceEventEmitter.addListener(
+      "elo:check-church-update", () => void checkUpdate(true),
+    );
+
     return () => {
       mounted = false;
-      subscription.remove();
+      appStateSub.remove();
+      manualCheckSub.remove();
     };
-  }, [organizationId, installedOrg, androidPackage, installedCode]);
+  }, [organizationId, androidPackage, installedCode, isWhiteLabelChurch, demoMode]);
 
   async function openDownload() {
     if (!update || downloading) return;
