@@ -31,6 +31,8 @@ const safeLink = (url: string) => {
       (u.hostname === "asaas.com" || u.hostname.endsWith(".asaas.com"));
   } catch { return false; }
 };
+const SUGGESTED_AMOUNTS_CENTS = [2000, 5000, 10000, 20000] as const;
+
 const statusName: Record<string, string> = {
   draft: "Preparando",
   processing: "Gerando cobrança",
@@ -56,7 +58,7 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
   const { activeOrganization } = useOrganization();
   const [frequency, setFrequency] = useState<Frequency>("once");
   const [method, setMethod] = useState<Method>("pix");
-  const [centsText, setCentsText] = useState("2000");
+  const [centsText, setCentsText] = useState("");
   const [creating, setCreating] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [enabled, setEnabled] = useState(false);
@@ -189,17 +191,39 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
 
       <Text style={eloSharedStyles.sectionTitle}>Valor da oferta</Text>
       <EloCard style={styles.amountCard}>
-        <Text style={styles.amountPreview}>{brl(cents)}</Text>
+        <Text style={styles.amountSectionLabel}>Escolha um valor sugerido</Text>
+        <View style={styles.amountSuggestions}>
+          {SUGGESTED_AMOUNTS_CENTS.map((amountCents) => {
+            const selected = centsText !== "" && cents === amountCents;
+            return (
+              <Pressable
+                key={amountCents}
+                accessibilityRole="button"
+                accessibilityLabel={`Ofertar ${brl(amountCents)}`}
+                accessibilityState={{ selected }}
+                onPress={() => setCentsText(String(amountCents))}
+                style={[styles.amountSuggestion, selected && styles.amountSuggestionSelected]}
+              >
+                <Text style={[styles.amountSuggestionText,
+                  selected && styles.amountSuggestionTextSelected]}>
+                  {brl(amountCents).replace(",00", "")}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.amountSectionLabel}>Ou digite o valor que deseja ofertar</Text>
         <TextInput
-          accessibilityLabel="Valor da oferta em reais"
+          accessibilityLabel="Outro valor da oferta em reais, mínimo de cinco reais"
           style={styles.amountInput}
           keyboardType="number-pad"
-          value={brl(cents)}
-          onChangeText={value => setCentsText(value.replace(/\D/g,"").slice(0,7))}
-          placeholder="R$ 20,00"
+          value={centsText ? brl(cents) : ""}
+          onChangeText={value => setCentsText(value.replace(/\D/g, "").slice(0, 7))}
+          placeholder="R$ 0,00"
+          placeholderTextColor={eloColors.muted}
           maxLength={17}
         />
-        <Text style={styles.smallNote}>Digite o valor desejado (mínimo R$ 5,00).</Text>
+        <Text style={styles.smallNote}>Valor mínimo: R$ 5,00.</Text>
       </EloCard>
 
       <Text style={eloSharedStyles.sectionTitle}>Forma de pagamento</Text>
@@ -270,8 +294,19 @@ const styles=StyleSheet.create({
   choiceActive:{ borderColor:eloColors.blue,backgroundColor:eloColors.surfaceSoft },
   choiceText:{ fontSize:13,color:eloColors.muted,fontWeight:"700" },
   choiceTextActive:{ color:eloColors.blue },
-  amountCard:{ gap:7,alignItems:"flex-start" },
-  amountPreview:{ fontSize:28,color:eloColors.ink,fontWeight:"900" },
+  amountCard:{ gap:12 },
+  amountSectionLabel:{ fontSize:13,fontWeight:"700",color:eloColors.ink },
+  amountSuggestions:{ flexDirection:"row",flexWrap:"wrap",gap:9 },
+  amountSuggestion:{
+    flexBasis:"46%",flexGrow:1,minHeight:49,borderRadius:13,
+    borderWidth:1,borderColor:eloColors.line,backgroundColor:"#FFFFFF",
+    alignItems:"center",justifyContent:"center",paddingHorizontal:10,
+  },
+  amountSuggestionSelected:{
+    borderColor:eloColors.blue,backgroundColor:eloColors.surfaceSoft,
+  },
+  amountSuggestionText:{ fontSize:16,fontWeight:"800",color:eloColors.ink },
+  amountSuggestionTextSelected:{ color:eloColors.blue },
   amountInput:{ width:"100%",paddingHorizontal:14,height:44,borderRadius:12,
     borderWidth:1,borderColor:eloColors.line,color:eloColors.ink,fontSize:16 },
   smallNote:{ fontSize:12,color:eloColors.muted,lineHeight:19 },
