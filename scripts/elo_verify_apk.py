@@ -46,7 +46,7 @@ def inspect_apk(path):
     # apksigner moderno usa "V2 Signer" / "V3 Signer", e pode apresentar
     # o MESMO certificado mais de uma vez para esquemas de assinatura distintos.
     matches = re.findall(
-        r"(?im)^\s*(?:v[0-9]+\s+)?signer\s*#\d+\s+certificate\s+SHA-256\s+digest:\s*([a-fA-F0-9:]+)",
+        r"(?im)^.*\bsigner\b.*\bSHA-256\s+digest:\s*([a-fA-F0-9:]+)\s*$",
         signed,
     )
     fingerprints = sorted(set(value.replace(":", "").lower() for value in matches))
