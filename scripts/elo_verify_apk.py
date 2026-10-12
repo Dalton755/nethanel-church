@@ -43,7 +43,7 @@ def inspect_apk(path):
         [sdk_tool("apksigner"), "verify", "--print-certs", apk],
         capture_output=True, text=True, check=True
     ).stdout
-    matches = re.findall(r"Signer #\\d+ certificate SHA-256 digest:\\s*([a-fA-F0-9:]+)", signed)
+    matches = re.findall(r"Signer #\d+ certificate SHA-256 digest:\s*([a-fA-F0-9:]+)", signed)
     if len(matches) != 1:
         raise RuntimeError("APK nao tem exatamente um certificado de assinatura verificado.")
     fingerprint = matches[0].replace(":", "").lower()
@@ -67,7 +67,7 @@ def previously_delivered(org, exclude_id):
 
 
 def download_prior(path, destination):
-    if not re.fullmatch(r"[a-f0-9-]{36}/[a-f0-9-]{36}\\.apk", path):
+    if not re.fullmatch(r"[a-f0-9-]{36}/[a-f0-9-]{36}\.apk", path):
         raise RuntimeError("Caminho anterior invalido.")
     url = f"{BASE_URL}/storage/v1/object/{BUCKET}/{path}"
     req = urllib.request.Request(url, headers=headers("application/octet-stream"))
