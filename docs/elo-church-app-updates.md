@@ -52,4 +52,4 @@ IMPORTANTE: hoje ha um unico `extra.eas.projectId` compartilhado pelos APKs whit
 8. Release forcada so ativa apos teste de download e instalacao funcionando.
 
 ## Arquivos
-- `supabase/migrations/20261011210000_elo_app_updates_v56.sql`: registro de versoes, identidade e download por membro, RPC com isolamento.
+- `supabase/migrations/20261012013054_elo_app_updates_v56.sql`: registro de versoes, identidade e download por membro, RPC com isolamento.
