@@ -194,10 +194,10 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
           accessibilityLabel="Valor da oferta em reais"
           style={styles.amountInput}
           keyboardType="number-pad"
-          value={centsText}
+          value={brl(cents)}
           onChangeText={value => setCentsText(value.replace(/\D/g,"").slice(0,7))}
-          placeholder="2000"
-          maxLength={7}
+          placeholder="R$ 20,00"
+          maxLength={17}
         />
         <Text style={styles.smallNote}>Digite o valor desejado (mínimo R$ 5,00).</Text>
       </EloCard>
