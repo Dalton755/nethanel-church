@@ -17,8 +17,11 @@ CANDIDATE = Path("apps/mobile/nethanel-elo-platform-preview.apk")
 PACKAGE = "br.com.nethanel.church"
 
 def historic():
-    paths = [APK_FOLDER / name / "nethanel-elo-generic.apk"
-             for name in ("latest", "previous", "earliest")]
+    # Comparar com a ultima previa que o usuario acabou de instalar,
+    # alem das tres releases genericas historicas.
+    paths = [APK_FOLDER / "last-preview" / "nethanel-elo-platform-preview.apk"]
+    paths.extend(APK_FOLDER / name / "nethanel-elo-generic.apk"
+                 for name in ("latest", "previous", "earliest"))
     return [inspect_apk(p) for p in paths]
 
 
@@ -35,8 +38,13 @@ def prepare():
             "Bloqueio: APKs anteriores possuem assinaturas diferentes. "
             "Nao distribuir; precisamos identificar qual esta instalado no celular."
         )
+    if previous[0]["version_code"] < max(p["version_code"] for p in previous[1:]):
+        raise RuntimeError("Ultima previa nao e a mais recente; pare a compilacao.")
     next_code = max(item["version_code"] for item in previous) + 1
-    name = "1.1.0"
+    old_version = previous[0]["version_name"].split(".")
+    if len(old_version) != 3 or not all(n.isdigit() for n in old_version):
+        raise RuntimeError("Versao da ultima previa invalida.")
+    name = f"{old_version[0]}.{old_version[1]}.{int(old_version[2])+1}"
     RESULT.write_text(json.dumps({
         "historical": previous,
         "next_code": next_code,
@@ -46,7 +54,7 @@ def prepare():
         env.write(f"ELO_GENERIC_PREVIEW_VERSION_CODE={next_code}\n")
         env.write(f"ELO_GENERIC_PREVIEW_VERSION_NAME={name}\n")
     print("Elo principal: pacote original preservado.")
-    print("Assinatura consistente em 3 APKs anteriores.")
+    print("Assinatura consistente em ultima previa e 3 APKs anteriores.")
     print("Codigo Android anterior mais recente: ", max(item["version_code"] for item in previous))
     print("Codigo Android novo para instalar por cima: ", next_code)
 
