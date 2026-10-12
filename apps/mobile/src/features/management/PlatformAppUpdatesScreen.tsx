@@ -12,6 +12,10 @@ import * as Phosphor from "phosphor-react-native";
 
 import { supabase } from "../../lib/supabase";
 import {
+  PlatformAppDistributionPlanner,
+  type DistributionRelease,
+} from "./PlatformAppDistributionPlanner";
+import {
   EloActionButton,
   EloCard,
   EloScreen,
@@ -98,6 +102,7 @@ export function PlatformAppUpdatesScreen({ onBack }: { onBack: () => void }) {
   const [versionCode, setVersionCode] = useState("");
   const [minimumVersion, setMinimumVersion] = useState("1");
   const [notes, setNotes] = useState("");
+  const [planningRelease, setPlanningRelease] = useState<DistributionRelease | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -194,6 +199,16 @@ export function PlatformAppUpdatesScreen({ onBack }: { onBack: () => void }) {
   }
 
   const summary = data?.summary;
+
+  if (planningRelease && data) {
+    return (
+      <PlatformAppDistributionPlanner
+        release={planningRelease}
+        churches={data.churches.map(({ id, name }) => ({id, name}))}
+        onBack={() => setPlanningRelease(null)}
+      />
+    );
+  }
 
   return (
     <EloScreen
@@ -321,6 +336,12 @@ export function PlatformAppUpdatesScreen({ onBack }: { onBack: () => void }) {
                     disabled={working !== null} />
                 </View>
               ) : null}
+              <EloActionButton
+                label="Simular distribuição por igreja"
+                icon="ListChecksIcon"
+                variant="secondary"
+                onPress={() => setPlanningRelease(release)}
+              />
               {release.channel === "production" && release.status === "draft" ? (
                 <Text style={styles.pending}>Aguardando aprovação para publicação em produção.</Text>
               ) : null}
