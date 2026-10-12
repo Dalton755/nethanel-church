@@ -1,4 +1,4 @@
-name: Elo Demo - Testar atualizacao direto pelo app (v3)
+name: Elo Demo - Testar atualizacao direto pelo app (v4)
 
 # PREVIEW SEGREGADO: somente APK do Elo Church Demo e seu solicitante.
 # Nao executa deploy Vercel, nao atualiza main, nao libera release em producao.
@@ -28,15 +28,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Baixar APK v2 aprovado para comparar a assinatura
+      - name: Baixar APK v3 aprovado para comparar a assinatura
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p /tmp/elo-demo-v2
-          gh run download 38194255222 --repo "$GITHUB_REPOSITORY"             --name elo-church-demo-update-canary             --dir /tmp/elo-demo-v2
-          test -s /tmp/elo-demo-v2/elo-church-app.apk
-          echo "APK v2 preservado para validar compatibilidade de instalacao."
+          mkdir -p /tmp/elo-demo-v3
+          gh run download 38197044490 --repo "$GITHUB_REPOSITORY"             --name elo-church-demo-v3-in-app-preview             --dir /tmp/elo-demo-v3
+          test -s /tmp/elo-demo-v3/elo-church-app.apk
+          echo "APK v3 preservado para validar compatibilidade de instalacao."
 
       - name: Java 17
         uses: actions/setup-java@v5
@@ -66,10 +66,10 @@ jobs:
           python -m py_compile scripts/elo_app_factory.py scripts/elo_verify_apk.py scripts/elo_update_canary.py
           PYTHONPATH=scripts python -m unittest -v test_elo_verify_apk
 
-      - name: Validar APK anterior e preparar o Demo 1.0.3 (versionCode 3)
+      - name: Validar APK anterior e preparar o Demo 1.0.4 (versionCode 4)
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
-          ELO_BASELINE_APK_PATH: /tmp/elo-demo-v2/elo-church-app.apk
+          ELO_BASELINE_APK_PATH: /tmp/elo-demo-v3/elo-church-app.apk
         run: python scripts/elo_update_canary.py prepare
 
       - name: Fixar versionCode por igreja para este build
@@ -99,12 +99,12 @@ jobs:
           c=json.load(open('/tmp/elo-in-app-v3.json',encoding='utf-8'))
           assert c['extra']['eloOrganizationId']=='101212c5-6e81-4915-ae9a-fbde5b42bb04'
           assert c['android']['package']==os.environ['ELO_ANDROID_PACKAGE']
-          assert c['android']['versionCode']==3
-          assert c['version']=='1.0.3'
-          print('VersionCode 3, package e tenant Elo Church Demo validados.')
+          assert c['android']['versionCode']==4
+          assert c['version']=='1.0.4'
+          print('VersionCode 4, package e tenant Elo Church Demo validados.')
           PY
 
-      - name: Compilar APK Demo v3 sem deploy
+      - name: Compilar APK Demo v4 sem deploy
         working-directory: apps/mobile
         run: eas build --platform android --profile preview --local --non-interactive --output ./elo-church-app.apk
 
@@ -117,7 +117,7 @@ jobs:
       - name: Backup de APK teste no GitHub por 7 dias
         uses: actions/upload-artifact@v4
         with:
-          name: elo-church-demo-v3-in-app-preview
+          name: elo-church-demo-v4-in-app-preview
           path: apps/mobile/elo-church-app.apk
           retention-days: 7
           if-no-files-found: error
