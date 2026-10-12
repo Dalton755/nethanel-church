@@ -143,7 +143,7 @@ create or replace function public.elo_apply_developer_donation_event(
 ) returns boolean
 language plpgsql security definer
 set search_path to pg_catalog,public,app_private
-as $
+as $$
 declare v_donation public.elo_developer_donations%rowtype; v_added uuid;
 begin
  if length(coalesce(p_event_key,'')) not between 5 and 250 or
@@ -178,7 +178,7 @@ begin
  where d.id=p_donation_id;
  return true;
 end;
-$;
+$$;
 revoke all on function public.elo_apply_developer_donation_event(uuid,text,text,text,integer,text)
  from public,anon,authenticated;
 grant execute on function public.elo_apply_developer_donation_event(uuid,text,text,text,integer,text)
