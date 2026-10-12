@@ -1,0 +1,114 @@
+name: Elo Church Demo - Canary de atualizacao Android
+
+# Isolado: NAO roda factory, NAO grava no Supabase e NAO publica versao.
+# O push inicial nesta branch executa uma unica vez esta validacao.
+on:
+  push:
+    branches:
+      - feature/elo-updates-foundation
+    paths:
+      - ".github/workflows/elo-update-demo-canary.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: elo-demo-update-canary
+  cancel-in-progress: false
+
+jobs:
+  demo-update:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+    steps:
+      - name: Checkout da branch de testes
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Expo e EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Instalar dependencias do motor Elo
+        run: |
+          npm ci
+          npm install --workspace=mobile expo@57.0.27 expo-constants@57.0.21 expo-linking@57.0.12 expo-notifications@57.0.22 expo-splash-screen
+
+      - name: Testar verificacao de identidade sem segredos
+        run: |
+          python -m py_compile scripts/elo_app_factory.py scripts/elo_verify_apk.py scripts/elo_update_canary.py
+          PYTHONPATH=scripts python -m unittest -v test_elo_verify_apk
+
+      - name: Ler APK existente e configurar compilacao exclusiva do Demo
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/elo_update_canary.py prepare
+
+      - name: Fixar versionCode em fonte local somente para o teste
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("apps/mobile/eas.json")
+          config = json.loads(path.read_text(encoding="utf-8"))
+          config["cli"]["appVersionSource"] = "local"
+          config["build"]["preview"].pop("autoIncrement", None)
+          path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+          print("Versao nativa controlada por igreja. Sem alteracao no arquivo do repositorio.")
+          PY
+
+      - name: Preparar arte com identidade do Demo
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python apps/mobile/scripts/prepare_white_label_assets.py \
+            --icon-url "$ELO_ICON_URL" \
+            --splash-url "$ELO_SPLASH_URL" \
+            --background-color "$ELO_BACKGROUND_COLOR"
+
+      - name: Validar configuracao e TypeScript
+        run: |
+          npm run typecheck --workspace=mobile
+          cd apps/mobile
+          npx expo config --type public --json > /tmp/elo-demo-update-expo.json
+          python - <<'PY'
+          import json, os
+          with open('/tmp/elo-demo-update-expo.json', encoding='utf-8') as f:
+            config=json.load(f)
+          assert config['android']['package'] == os.environ['ELO_ANDROID_PACKAGE']
+          assert config['extra']['eloOrganizationId'] == '101212c5-6e81-4915-ae9a-fbde5b42bb04'
+          assert config['android']['versionCode'] == int(os.environ['ELO_VERSION_CODE'])
+          assert config['version'] == os.environ['ELO_VERSION_NAME']
+          print("Demo isolado e versao Android crescente: configuracao OK.")
+          PY
+
+      - name: Compilar APK instalavel somente para canary
+        working-directory: apps/mobile
+        run: eas build --platform android --profile preview --local --non-interactive --output ./elo-church-app.apk
+
+      - name: Comparar assinatura e versao com APK previamente instalado
+        run: python scripts/elo_update_canary.py verify
+
+      - name: Disponibilizar APK apenas como artefato de teste
+        uses: actions/upload-artifact@v4
+        with:
+          name: elo-church-demo-update-canary
+          path: apps/mobile/elo-church-app.apk
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 0
