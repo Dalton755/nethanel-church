@@ -121,7 +121,7 @@ def stage_preview():
     """Disponibiliza SOMENTE o APK canary no canal testing do Elo Church Demo.
 
     Confere novamente a assinatura, exige que a linha de base seja o
-    versionCode 5 instalado e impede republicacao silenciosa.
+    versionCode 6 instalado e impede republicacao silenciosa.
     """
     import uuid
     verify()
@@ -132,26 +132,26 @@ def stage_preview():
     candidate = inspect_apk(APK_FILE)
     if baseline["organization_id"] != DEMO_ORGANIZATION_ID:
         raise RuntimeError("Somente Demo permitido.")
-    if baseline["previous_apk"]["version_code"] != 5 or candidate["version_code"] != 6:
-        raise RuntimeError("Este teste exige migracao da versao 5 para a versao 6.")
+    if baseline["previous_apk"]["version_code"] != 6 or candidate["version_code"] != 7:
+        raise RuntimeError("Este teste exige migracao da versao 6 para a versao 7.")
 
     releases = request(
         "GET", "/rest/v1/church_app_releases"
-        "?channel=eq.preview&version_code=eq.6&select=id,status,version_name,update_kind"
+        "?channel=eq.preview&version_code=eq.7&select=id,status,version_name,update_kind"
     ) or []
     if releases:
-        if len(releases) != 1 or releases[0]["status"] != "testing" or releases[0]["version_name"] != "1.0.6":
-            raise RuntimeError("Release preview 6 ja esta reservado por outra execucao.")
+        if len(releases) != 1 or releases[0]["status"] != "testing" or releases[0]["version_name"] != "1.0.7":
+            raise RuntimeError("Release preview 7 ja esta reservado por outra execucao.")
         release_id = releases[0]["id"]
     else:
         created = request("POST", "/rest/v1/church_app_releases", {
             "channel": "preview",
-            "version_name": "1.0.6",
-            "version_code": 6,
+            "version_name": "1.0.7",
+            "version_code": 7,
             "minimum_supported_version_code": 1,
             "update_kind": "apk",
-            "runtime_version": "elo" + DEMO_ORGANIZATION_ID.replace("-", "") + "-1.0.6",
-            "release_notes": "Teste do aviso de atualizacao dentro do Elo: toque em Perfil > Verificar atualizacoes.",
+            "runtime_version": "elo" + DEMO_ORGANIZATION_ID.replace("-", "") + "-1.0.7",
+            "release_notes": "Central de Atualizacoes: gerencie versoes no Painel Nethanel com conta administradora da plataforma.",
             "status": "testing",
         })
         if not created or len(created) != 1:
@@ -159,11 +159,11 @@ def stage_preview():
         release_id = created[0]["id"]
 
     existing = request("GET", "/rest/v1/church_apk_builds"
-        f"?organization_id=eq.{DEMO_ORGANIZATION_ID}&version_code=eq.6"
+        f"?organization_id=eq.{DEMO_ORGANIZATION_ID}&version_code=eq.7"
         "&status=eq.ready&select=id,release_id") or []
     if existing:
         if len(existing) != 1 or existing[0]["release_id"] != release_id:
-            raise RuntimeError("Versao 6 pronta divergente do release de preview.")
+            raise RuntimeError("Versao 7 pronta divergente do release de preview.")
         print("Preview ja preparado anteriormente e disponivel apenas para solicitante do APK Demo.")
         return
 
@@ -203,7 +203,7 @@ def stage_preview():
     })
     if not created or len(created) != 1:
         raise RuntimeError("Nao foi possivel indexar o APK Demo apos upload.")
-    print("CANARY v6 STAGED: apenas release preview/testing e solicitante do Demo.")
+    print("CANARY v7 STAGED: apenas release preview/testing e solicitante do Demo.")
     print("Nenhum release production/published alterado.")
     
 
