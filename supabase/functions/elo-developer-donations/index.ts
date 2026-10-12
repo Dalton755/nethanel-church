@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
     if (can.error || !Array.isArray(can.data) || !can.data.some((x: any) => x.id === d.id))
       return json({ ok: false, message: "Sem permissão para cancelar." }, 403);
 
-    if (d.status === "paid" && !d.provider_subscription_id)
+    if (!d.provider_subscription_id)
       return json({ ok: false, message: "A assinatura ainda não foi identificada. Solicite o cancelamento ao suporte da Nethanel." }, 409);
 
     try {
@@ -165,7 +165,16 @@ Deno.serve(async (req) => {
       checkout_url: String(payment.url),
       updated_at: new Date().toISOString(),
     }).eq("id", id).eq("status", "processing");
-    if (savedError) throw savedError;
+    if (savedError) {
+      // Não deixar um link cobrando sem registro local de rastreamento.
+      await fetch(`${base}/paymentLinks/${encodeURIComponent(String(payment.id))}`, {
+        method: "PUT", headers: {
+          "access_token": asaasKey, "content-type": "application/json",
+          "User-Agent": "Nethanel-Elo/1.0",
+        }, body: JSON.stringify({ active: false }),
+      }).catch(() => null);
+      throw savedError;
+    }
 
     return json({ ok: true, id, checkoutUrl: String(payment.url), sandbox: environment === "sandbox" });
   } catch (error) {
