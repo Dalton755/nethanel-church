@@ -37,8 +37,7 @@ create table if not exists public.elo_developer_donation_events (
  status text not null,
  provider_subscription_id text,
  received_at timestamptz not null default now(),
- unique(event_key),
- unique(donation_id,provider_payment_id,status)
+ unique(event_key)
 );
 alter table public.elo_developer_donation_events enable row level security;
 revoke all on public.elo_developer_donation_events from public,anon,authenticated;
