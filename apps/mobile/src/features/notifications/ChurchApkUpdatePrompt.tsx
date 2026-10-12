@@ -87,6 +87,10 @@ export function ChurchApkUpdatePrompt() {
         p_organization_id: organizationId,
         p_android_package: androidPackage,
         p_version_code: installedCode,
+      }).then(({ error: reportError }) => {
+        if (reportError) {
+          console.warn("Elo: falha ao registrar a versao instalada", reportError);
+        }
       });
 
       const { data, error } = await supabase.rpc("get_church_app_update", {
