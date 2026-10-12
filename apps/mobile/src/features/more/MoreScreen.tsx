@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  DeviceEventEmitter,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +11,7 @@ import {
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import * as Phosphor from "phosphor-react-native";
+import Constants from "expo-constants";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { EloLogo } from "../../branding/EloBrand";
@@ -219,6 +221,16 @@ export function MoreScreen() {
                 description="Central de alertas do Elo"
                 onPress={() => navigation.navigate("Notificacoes")}
               />
+
+              {Constants.expoConfig?.extra?.whiteLabel === true &&
+                Constants.expoConfig?.extra?.eloOrganizationId === activeOrganization?.id ? (
+                <ActionRow
+                  icon="ArrowClockwiseIcon"
+                  title="Verificar atualizações"
+                  description="Conferir se há uma nova versão do app da igreja"
+                  onPress={() => DeviceEventEmitter.emit("elo:check-church-update")}
+                />
+              ) : null}
 
               {canManage ? (
                 <ActionRow
