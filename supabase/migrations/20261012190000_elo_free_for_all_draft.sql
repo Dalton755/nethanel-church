@@ -195,6 +195,9 @@ begin
 end;
 $$;
 
+-- Igrejas novas também devem nascer com todas as identidades habilitadas.
+alter table public.organizations alter column white_label_enabled set default true;
+
 update public.organizations set white_label_enabled=true,
  updated_at=now() where white_label_enabled is distinct from true;
 
