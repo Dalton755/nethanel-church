@@ -26,6 +26,10 @@ if (!key) {
   logSummary("Adicione **somente uma chave da conta Sandbox** em Settings → Secrets and variables → Actions → New repository secret.");
   process.exit(0);
 }
+if (!key.startsWith("$aact_hmlg_")) {
+  fail("Chave recusada: utilize exclusivamente uma API Key do Asaas Sandbox (prefixo $aact_hmlg_). Nenhuma requisição foi enviada.");
+  process.exit(1);
+}
 const runId = (process.env.GITHUB_RUN_ID || String(Date.now())).replace(/[^0-9]/g, "");
 const payload = {
   name: "Elo · Oferta única · Teste Sandbox",
