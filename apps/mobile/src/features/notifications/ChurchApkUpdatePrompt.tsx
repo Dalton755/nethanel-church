@@ -81,7 +81,15 @@ export function ChurchApkUpdatePrompt() {
       lastCheck.current = now;
 
       try {
-        const { data, error } = await supabase.rpc("get_church_app_update", {
+        // Telemetria por conta autenticada: apenas versao informada pelo APK
+      // da propria igreja. A falha desta consulta nao bloqueia atualizacoes.
+      void supabase.rpc("report_church_app_version", {
+        p_organization_id: organizationId,
+        p_android_package: androidPackage,
+        p_version_code: installedCode,
+      });
+
+      const { data, error } = await supabase.rpc("get_church_app_update", {
           p_organization_id: organizationId,
           p_android_package: androidPackage,
           p_installed_version_code: installedCode,
