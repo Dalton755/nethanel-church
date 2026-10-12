@@ -9,6 +9,13 @@ on:
       - "apps/mobile/src/features/management/PlatformAppDistributionPlanner.tsx"
       - "apps/mobile/src/features/management/PlatformAdminScreen.tsx"
       - "apps/mobile/src/features/notifications/ChurchApkUpdatePrompt.tsx"
+      - "apps/mobile/src/features/more/MoreScreen.tsx"
+      - "apps/mobile/src/features/more/DeveloperOfferingScreen.tsx"
+      - "apps/mobile/src/features/management/ChurchManagementScreen.tsx"
+      - "apps/mobile/src/features/management/ChurchPersonalizationScreen.tsx"
+      - "apps/mobile/src/features/management/PlatformAdminScreen.tsx"
+      - "supabase/migrations/20261012190000_elo_free_for_all_draft.sql"
+      - "supabase/migrations/20261012190100_elo_voluntary_developer_donations_draft.sql"
       - "supabase/migrations/20261012050442_elo_platform_updates_console_v58.sql"
       - "supabase/migrations/20261012165154_elo_platform_rollout_simulation_v59.sql"
   workflow_dispatch:
