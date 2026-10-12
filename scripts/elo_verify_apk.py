@@ -43,17 +43,22 @@ def inspect_apk(path):
         [sdk_tool("apksigner"), "verify", "--print-certs", apk],
         capture_output=True, text=True, check=True
     ).stdout
-    matches = re.findall(r"Signer #\d+ certificate SHA-256 digest:\s*([a-fA-F0-9:]+)", signed)
-    if len(matches) != 1:
-        # Nao imprimir valores, DN, caminhos, credenciais ou APK nos logs.
-        # Somente os nomes dos campos e a contagem para diagnostico Android.
+    # apksigner moderno usa "V2 Signer" / "V3 Signer", e pode apresentar
+    # o MESMO certificado mais de uma vez para esquemas de assinatura distintos.
+    matches = re.findall(
+        r"(?im)^\\s*(?:v[0-9]+\\s+)?signer\\s*#\\d+\\s+certificate\\s+SHA-256\\s+digest:\\s*([a-fA-F0-9:]+)",
+        signed,
+    )
+    fingerprints = sorted(set(value.replace(":", "").lower() for value in matches))
+    if len(fingerprints) != 1:
+        # Somente labels, nunca identidades ou credenciais, nos logs.
         labels = [line.split(":", 1)[0].strip() for line in signed.splitlines()
                   if "SHA-256" in line and "digest" in line]
         raise RuntimeError(
-            f"APK exige exatamente um certificado: encontrou {len(matches)}; "
+            f"APK exige exatamente um certificado: encontrou {len(fingerprints)}; "
             f"cabecalhos apksigner: {labels[:8]}"
         )
-    fingerprint = matches[0].replace(":", "").lower()
+    fingerprint = fingerprints[0]
     if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
         raise RuntimeError("Fingerprint invalido.")
     return {
