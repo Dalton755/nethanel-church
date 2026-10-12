@@ -30,12 +30,6 @@ type OrganizationExtra = {
   join_code: string | null;
 };
 
-type Subscription = {
-  plan_code: string;
-  status: string;
-  current_period_end: string | null;
-};
-
 export function MoreScreen() {
   const {
     profile,
@@ -50,7 +44,6 @@ export function MoreScreen() {
     useNavigation<BottomTabNavigationProp<MainTabParamList>>();
 
   const [extra, setExtra] = useState<OrganizationExtra | null>(null);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [platformAdminOpen, setPlatformAdminOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
@@ -79,25 +72,14 @@ export function MoreScreen() {
         !adminResponse.error && adminResponse.data === true
       );
       setExtra(null);
-      setSubscription(null);
       setLoading(false);
       return;
     }
 
-    const [adminResponse, orgResponse, planResponse] = await Promise.all([
+    const [adminResponse, orgResponse] = await Promise.all([
       adminRequest,
-
-      supabase
-        .from("organizations")
-        .select("join_code")
-        .eq("id", activeOrganization.id)
-        .maybeSingle(),
-
-      supabase
-        .from("organization_subscriptions")
-        .select("plan_code,status,current_period_end")
-        .eq("organization_id", activeOrganization.id)
-        .maybeSingle(),
+      supabase.from("organizations").select("join_code")
+        .eq("id", activeOrganization.id).maybeSingle(),
     ]);
 
     setIsPlatformAdmin(
@@ -106,10 +88,6 @@ export function MoreScreen() {
 
     if (!orgResponse.error) {
       setExtra((orgResponse.data ?? null) as OrganizationExtra | null);
-    }
-
-    if (!planResponse.error) {
-      setSubscription((planResponse.data ?? null) as Subscription | null);
     }
 
     setLoading(false);
