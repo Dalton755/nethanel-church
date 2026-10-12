@@ -10,6 +10,7 @@ import {
 import * as Phosphor from "phosphor-react-native";
 
 import { supabase } from "../../lib/supabase";
+import { PlatformAppUpdatesScreen } from "./PlatformAppUpdatesScreen";
 import {
   EloActionButton,
   EloCard,
@@ -176,6 +177,7 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatesOpen, setUpdatesOpen] = useState(false);
   const [blessingOrganizationId, setBlessingOrganizationId] = useState<string | null>(null);
   const [assigningPlanOrganizationId, setAssigningPlanOrganizationId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -310,6 +312,10 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
 
   const summary = dashboard?.summary;
 
+  if (updatesOpen) {
+    return <PlatformAppUpdatesScreen onBack={() => setUpdatesOpen(false)} />;
+  }
+
   return (
     <EloScreen
       title="Painel Nethanel"
@@ -330,6 +336,20 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
         <EloState icon="LockKeyIcon" title="Acesso não disponível" description={errorMessage} />
       ) : dashboard && summary ? (
         <>
+          <Text style={eloSharedStyles.sectionTitle}>Aplicativos das igrejas</Text>
+          <EloCard style={{ gap: 12 }}>
+            <Text style={styles.cardHeadline}>Central de Atualizações</Text>
+            <Text style={styles.cardCopy}>
+              Cadastre versões, acompanhe APKs exclusivos e contas que reportaram sua versão.
+              Publique somente após aprovar os testes.
+            </Text>
+            <EloActionButton
+              icon="ArrowsClockwiseIcon"
+              label="Gerenciar atualizações"
+              onPress={() => setUpdatesOpen(true)}
+            />
+          </EloCard>
+
           <Text style={eloSharedStyles.sectionTitle}>Visão geral</Text>
           <View style={styles.metricsGrid}>
             <MetricCard label="Clientes" value={String(summary.clients)} caption="igrejas ativas" />
