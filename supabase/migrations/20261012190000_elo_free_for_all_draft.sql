@@ -170,7 +170,7 @@ begin
 
   return v_result;
 end;
-$function$
+$function$;
 
 create or replace function app_private.organization_effective_plan_code(p_organization_id uuid)
  returns text language sql stable security definer set search_path to ''
