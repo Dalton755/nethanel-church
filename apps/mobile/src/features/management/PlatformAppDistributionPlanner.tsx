@@ -1,9 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Pressable,
   StyleSheet,
+  TextInput,
   Text,
   View,
 } from "react-native";
@@ -46,6 +47,16 @@ type DistributionRow = {
   in_progress_status: string | null;
 };
 
+type SavedDraft = {
+  id: string;
+  name: string;
+  created_at: string;
+  status: string;
+  organization_count: number;
+  organization_ids: string[];
+  execution_enabled: false;
+};
+
 type PreviewResponse = {
   items: DistributionRow[];
   eligible_for_preflight: number;
@@ -78,6 +89,27 @@ export function PlatformAppDistributionPlanner({
   const [selected, setSelected] = useState<string[]>([]);
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [simulating, setSimulating] = useState(false);
+  const [draftName, setDraftName] = useState(`Plano Elo ${release.version_name}`);
+  const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
+  const [loadingSaved, setLoadingSaved] = useState(true);
+  const [savingDraft, setSavingDraft] = useState(false);
+
+  const loadSaved = useCallback(async () => {
+    setLoadingSaved(true);
+    const { data, error } = await supabase.rpc("platform_admin_list_distribution_drafts", {
+      p_release_id: release.id,
+    });
+    if (error) {
+      console.warn("Elo: nao foi possivel carregar planejamento", error);
+    } else {
+      setSavedDrafts((data ?? []) as SavedDraft[]);
+    }
+    setLoadingSaved(false);
+  }, [release.id]);
+
+  useEffect(() => {
+    void loadSaved();
+  }, [loadSaved]);
 
   const allowed = useCallback((church: DistributionChurch) =>
     release.channel === "production" || church.id === DEMO_ID,
@@ -120,6 +152,39 @@ export function PlatformAppDistributionPlanner({
       return;
     }
     setPreview(data as PreviewResponse);
+  }
+
+  async function saveDraft() {
+    if (!preview || selected.length===0 ||
+        (release.status !== "draft" && release.status !== "testing")) return;
+    if (draftName.trim().length < 3 || draftName.trim().length > 100) {
+      Alert.alert("Nome inválido", "Use um nome entre 3 e 100 caracteres.");
+      return;
+    }
+    setSavingDraft(true);
+    const { error } = await supabase.rpc("platform_admin_save_distribution_draft", {
+      p_release_id: release.id,
+      p_name: draftName.trim(),
+      p_organization_ids: selected,
+    });
+    setSavingDraft(false);
+    if (error) {
+      Alert.alert("Não foi possível salvar", error.message);
+      return;
+    }
+    await loadSaved();
+    Alert.alert("Planejamento salvo",
+      "Somente o rascunho foi salvo. Nenhuma atualização foi enviada ou compilada.");
+  }
+
+  function confirmSaveDraft() {
+    if (savingDraft) return;
+    Alert.alert("Salvar planejamento?",
+      `Versão Elo ${release.version_name}: ${selected.length} igreja(s). Isso não autoriza nenhuma publicação nem gera APK.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Salvar rascunho", onPress: () => void saveDraft() },
+      ]);
   }
 
   return (
@@ -226,6 +291,29 @@ export function PlatformAppDistributionPlanner({
               </EloCard>
             );
           })}
+          {release.status === "draft" || release.status === "testing" ? (
+            <EloCard style={styles.saveSection}>
+              <Text style={styles.saveTitle}>Guardar este planejamento</Text>
+              <Text style={styles.muted}>
+                Salve a seleção para continuar depois. Nenhum APK será gerado.
+              </Text>
+              <TextInput
+                accessibilityLabel="Nome do plano de distribuição"
+                style={styles.nameInput}
+                value={draftName}
+                onChangeText={setDraftName}
+                placeholder="Ex.: Teste inicial"
+                maxLength={100}
+              />
+              <EloActionButton
+                label="Salvar planejamento"
+                icon="FloppyDiskIcon"
+                loading={savingDraft}
+                disabled={savingDraft}
+                onPress={confirmSaveDraft}
+              />
+            </EloCard>
+          ) : null}
           <View style={styles.finalNote}>
             <P.LockKeyIcon size={18} color="#8A5B00" weight="duotone" />
             <Text style={styles.finalText}>
@@ -235,6 +323,34 @@ export function PlatformAppDistributionPlanner({
           </View>
         </>
       ) : null}
+
+      <Text style={eloSharedStyles.sectionTitle}>Planejamentos salvos</Text>
+      {loadingSaved ? (
+        <ActivityIndicator color={eloColors.blue} />
+      ) : savedDrafts.length === 0 ? (
+        <Text style={styles.muted}>
+          Nenhuma seleção salva para esta versão.
+        </Text>
+      ) : savedDrafts.map((item) => (
+        <EloCard key={item.id} style={styles.savedItem}>
+          <Text style={styles.saveTitle}>{item.name}</Text>
+          <Text style={styles.muted}>
+            {item.organization_count} igreja(s) • Rascunho • Não executado
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setSelected(item.organization_ids.filter(id =>
+                selectableChurches.some(church => church.id === id)));
+              setPreview(null);
+            }}
+            style={styles.restoreButton}
+          >
+            <P.ArrowCounterClockwiseIcon size={17} color={eloColors.blue} />
+            <Text style={styles.restoreLabel}>Recarregar seleção</Text>
+          </Pressable>
+        </EloCard>
+      ))}
     </EloScreen>
   );
 }
@@ -300,4 +416,14 @@ const styles = StyleSheet.create({
     flexDirection: "row", gap: 10,
   },
   finalText: { flex: 1, fontSize: 12, lineHeight: 18, color: "#8A5B00" },
+  saveSection: { marginTop: 16, gap: 11 },
+  saveTitle: { fontSize: 14, fontWeight: "900", color: eloColors.ink },
+  nameInput: {
+    minHeight: 46, borderColor: eloColors.line, borderWidth: 1,
+    borderRadius: 12, paddingHorizontal: 12, backgroundColor: "#FFFFFF",
+    fontSize: 14, color: eloColors.ink,
+  },
+  savedItem: { marginTop: 9, gap: 7 },
+  restoreButton: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 9 },
+  restoreLabel: { fontSize: 12, fontWeight: "800", color: eloColors.blue },
 });
