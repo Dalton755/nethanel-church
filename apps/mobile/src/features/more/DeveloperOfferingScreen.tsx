@@ -210,9 +210,10 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
       </View>
       {frequency === "monthly" ? (
         <Text style={styles.notice}>
-          Na opção mensal, o Asaas criará uma recorrência. Pix ou boleto
-          poderão exigir pagamento manual a cada mês, conforme as regras do Asaas.
-          Você poderá solicitar o cancelamento das próximas cobranças.
+          Na opção mensal, o Asaas criará uma recorrência.
+          Para Pix, será gerado boleto com QR Pix, pago manualmente a cada mês.
+          No cartão, a cobrança poderá ocorrer automaticamente.
+          Você poderá cancelar as próximas cobranças.
         </Text>
       ) : null}
       {!loaded ? <ActivityIndicator style={styles.loading} color={eloColors.blue} /> : null}
