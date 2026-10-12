@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
 
   const status = (() => {
     if (["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"].includes(eventName)) return "paid";
-    if (["PAYMENT_REFUNDED", "PAYMENT_PARTIALLY_REFUNDED"].includes(eventName)) return "refunded";
+    if (eventName === "PAYMENT_REFUNDED") return "refunded";
     if (eventName === "PAYMENT_OVERDUE") return "overdue";
     if (eventName === "PAYMENT_DELETED") return "canceled";
     return "pending";
@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     return json({ ok: false, message: "Valor divergente." }, 422);
   }
 
-  const env = (Deno.env.get("ASAAS_API_URL") ?? "").includes("sandbox")
+  const env = (Deno.env.get("ASAAS_API_URL") ?? "https://api-sandbox.asaas.com/v3").includes("sandbox")
     ? "sandbox" : "production";
   if (donation.environment !== env) {
     return json({ ok: false, message: "Ambiente divergente." }, 422);
@@ -82,6 +82,23 @@ Deno.serve(async (req) => {
   if (error) {
     console.error("Falha conciliação de oferta", { code: error.code, event: eventName });
     return json({ ok: false, message: "Falha ao registrar pagamento." }, 500);
+  }
+
+  // Um link de doação não deve gerar múltiplas assinaturas por engano.
+  // Após o primeiro pagamento recebido, desative apenas o link.
+  // Cancelar o link NAO cancela a assinatura mensal já criada no Asaas.
+  if (status === "paid" && donation.payment_link_id) {
+    const apiKey = (Deno.env.get("ASAAS_API_KEY") ?? "").trim();
+    const base = (Deno.env.get("ASAAS_API_URL") ?? "https://api-sandbox.asaas.com/v3").replace(/\\/$/, "");
+    const liveAllowed = Deno.env.get("ELO_DONATIONS_LIVE_ENABLED") === "true";
+    if (apiKey && (env === "sandbox" || liveAllowed)) {
+      const disabled = await fetch(`${base}/paymentLinks/${encodeURIComponent(donation.payment_link_id)}`, {
+        method: "PUT",
+        headers: { "access_token": apiKey, "content-type": "application/json", "User-Agent": "Nethanel-Elo/1.0" },
+        body: JSON.stringify({ active: false }),
+      }).catch(() => null);
+      if (!disabled?.ok) console.warn("Não foi possível desativar link de oferta após pagamento.");
+    }
   }
 
   return json({ ok: true });
