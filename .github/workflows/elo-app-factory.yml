@@ -109,6 +109,24 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
         run: python scripts/elo_app_factory.py prepare
 
+      - name: Preservar versao Android aprovada por igreja
+        if: steps.claim.outputs.pending == 'true'
+        run: |
+          # Nos builds de release white-label a fonte da versao e o
+          # catalogo Elo, nao o contador remoto global do projeto Expo.
+          if test -n "${ELO_VERSION_CODE:-}"; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("apps/mobile/eas.json")
+          config = json.loads(path.read_text(encoding="utf-8"))
+          config["cli"]["appVersionSource"] = "local"
+          config["build"]["preview"].pop("autoIncrement", None)
+          path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+          print("Build release: versionCode local por igreja.")
+          PY
+          fi
+
       - name: Gerar arte nativa com ícone de push
         if: steps.claim.outputs.pending == 'true'
         run: |
@@ -138,6 +156,12 @@ jobs:
         if: steps.claim.outputs.pending == 'true'
         working-directory: apps/mobile
         run: eas build --platform android --profile preview --local --non-interactive --output ./elo-church-app.apk
+
+      - name: Conferir versao Android e certificado historico da igreja
+        if: success() && steps.claim.outputs.pending == 'true'
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.ELO_SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/elo_verify_apk.py
 
       # Save the successfully compiled APK before any remote storage upload.
       # If Supabase rejects the size, the customer test APK still survives.
