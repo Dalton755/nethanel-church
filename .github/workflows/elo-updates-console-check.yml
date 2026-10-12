@@ -6,9 +6,11 @@ on:
     paths:
       - ".github/workflows/elo-updates-console-check.yml"
       - "apps/mobile/src/features/management/PlatformAppUpdatesScreen.tsx"
+      - "apps/mobile/src/features/management/PlatformAppDistributionPlanner.tsx"
       - "apps/mobile/src/features/management/PlatformAdminScreen.tsx"
       - "apps/mobile/src/features/notifications/ChurchApkUpdatePrompt.tsx"
       - "supabase/migrations/20261012050442_elo_platform_updates_console_v58.sql"
+      - "supabase/migrations/20261012165154_elo_platform_rollout_simulation_v59.sql"
   workflow_dispatch:
 
 permissions:
