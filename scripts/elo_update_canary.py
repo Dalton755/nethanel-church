@@ -26,7 +26,7 @@ def latest_demo_build():
         "GET",
         "/rest/v1/church_apk_builds"
         f"?organization_id=eq.{DEMO_ORGANIZATION_ID}&status=eq.ready"
-        "&artifact_path=not.is.null&order=finished_at.desc&limit=1&select=*",
+        "&artifact_path=not.is.null&release_id=is.null&order=finished_at.desc&limit=1&select=*",
     ) or []
     if len(rows) != 1:
         raise RuntimeError("Nenhum APK do Elo Church Demo pronto no Supabase.")
