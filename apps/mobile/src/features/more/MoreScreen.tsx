@@ -21,6 +21,7 @@ import type { MainTabParamList } from "../../navigation/MainTabs";
 import { unregisterCurrentPushDevice } from "../notifications/PushNotificationRegistration";
 import { PlatformAdminScreen } from "../management/PlatformAdminScreen";
 import { AccountPrivacyScreen } from "./AccountPrivacyScreen";
+import { DeveloperOfferingScreen } from "./DeveloperOfferingScreen";
 import { eloColors } from "../elo/EloUi";
 
 const P = Phosphor as any;
@@ -53,7 +54,12 @@ export function MoreScreen() {
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [platformAdminOpen, setPlatformAdminOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [developerOfferingOpen, setDeveloperOfferingOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const canOffer = (activeOrganization?.roles ?? []).some(role =>
+    ["owner", "admin", "pastor", "tesoureiro"].includes(role.role_key.toLowerCase())
+  );
 
   const canManage =
     canAtOrganization("security.manage") ||
@@ -128,6 +134,10 @@ export function MoreScreen() {
     );
   }
 
+  if (developerOfferingOpen) {
+    return <DeveloperOfferingScreen onBack={() => setDeveloperOfferingOpen(false)} />;
+  }
+
   if (privacyOpen) {
     return (
       <AccountPrivacyScreen
@@ -184,19 +194,12 @@ export function MoreScreen() {
                 <View style={styles.infoCard}>
                   <View style={styles.infoRow}>
                     <View style={styles.infoIcon}>
-                      <P.CrownIcon size={21} color={eloColors.yellow} weight="duotone" />
+                      <P.HeartIcon size={21} color={eloColors.green} weight="duotone" />
                     </View>
-
                     <View style={styles.infoCopy}>
-                      <Text style={styles.infoLabel}>Plano Elo</Text>
-                      <Text style={styles.planValue}>
-                        {subscription?.plan_code ?? "Elo"}
-                      </Text>
-                      <Text style={styles.infoHint}>
-                        {subscription
-                          ? `Status: ${subscription.status}`
-                          : "Sua igreja está usando o Elo."}
-                      </Text>
+                      <Text style={styles.infoLabel}>Nethanel Elo</Text>
+                      <Text style={styles.planValue}>Gratuito para todas as igrejas</Text>
+                      <Text style={styles.infoHint}>Recursos completos sem mensalidade obrigatória.</Text>
                     </View>
                   </View>
                 </View>
@@ -210,8 +213,17 @@ export function MoreScreen() {
                 <ActionRow
                   icon="ChartLineUpIcon"
                   title="Painel Nethanel"
-                  description="Clientes, receita, planos e cobrança da plataforma"
+                  description="Igrejas, atualizações e manutenção da plataforma"
                   onPress={() => setPlatformAdminOpen(true)}
+                />
+              ) : null}
+
+              {canOffer ? (
+                <ActionRow
+                  icon="HandHeartIcon"
+                  title="Ofertar para o desenvolvedor"
+                  description="Apoio voluntário aos custos de servidores e banco de dados"
+                  onPress={() => setDeveloperOfferingOpen(true)}
                 />
               ) : null}
 
