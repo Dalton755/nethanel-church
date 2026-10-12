@@ -1,0 +1,38 @@
+name: Elo - Asaas Sandbox Pix (apenas teste, sem deploy)
+
+on:
+  push:
+    branches: [feature/elo-updates-foundation]
+    paths:
+      - ".github/workflows/elo-asaas-sandbox-pix-smoke.yml"
+      - "scripts/elo_asaas_sandbox_pix_smoke.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: elo-asaas-sandbox-smoke
+  cancel-in-progress: false
+
+jobs:
+  sandbox-only:
+    name: Ofertar R$5 somente no Sandbox Asaas
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Garantir que nao existe acesso a producao
+        run: |
+          node --check scripts/elo_asaas_sandbox_pix_smoke.mjs
+          grep -q 'https://api-sandbox.asaas.com/v3' scripts/elo_asaas_sandbox_pix_smoke.mjs
+          ! grep -q 'https://api.asaas.com/v3' scripts/elo_asaas_sandbox_pix_smoke.mjs
+      - name: Gerar somente link Pix de teste
+        env:
+          ASAAS_SANDBOX_API_KEY: ${{ secrets.ASAAS_SANDBOX_API_KEY }}
+        run: node scripts/elo_asaas_sandbox_pix_smoke.mjs
