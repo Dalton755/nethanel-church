@@ -53,3 +53,10 @@ IMPORTANTE: hoje ha um unico `extra.eas.projectId` compartilhado pelos APKs whit
 
 ## Arquivos
 - `supabase/migrations/20261012013054_elo_app_updates_v56.sql`: registro de versoes, identidade e download por membro, RPC com isolamento. Aplicada no Supabase em 11/10/2026 (horario Brasil).\n- `scripts/elo_verify_apk.py`: confere APK novo com APK anterior, versao crescente e certificado.\n- `apps/mobile/src/features/notifications/ChurchApkUpdatePrompt.tsx`: interface de atualizacao autenticada por igreja.\n- No momento da estruturacao: **0 releases publicados**, **1 solicitação de APK existente na fila**; nenhuma distribuicao ativada.
+
+## Canary de atualizacao dentro do app (Demo v2 -> v3, sem producao)
+- O APK v2 do Elo Church Demo foi instalado sobre o v1, sem perda de login ou dados (teste manual confirmado).
+- Migration `20261012024254_elo_demo_preview_update_v57.sql`: somente o solicitante que possui um APK Demo legadamente pronto, com cadastro ativo na mesma igreja, pode receber release `preview/testing`. O helper de Storage valida o mesmo escopo antes de emitir URL assinada. Nenhuma outra igreja ou membro Demo sem esse requisito ve esse release.
+- Workflow `.github/workflows/elo-update-demo-in-app-preview.yml`: baixa o v2 aprovado do GitHub Actions, compara com a assinatura do APK legado do Supabase, compila versionCode 3, verifica APK e somente entao grava release `preview/testing` e artefato privado da igreja. Nenhuma release `production/published` e criada.
+- No aplicativo v2 ja instalado existe `ChurchApkUpdatePrompt`; ao reabrir o app autenticado ele consulta a RPC. Se houver release 1.0.3 pronto, deve exibir o aviso com `Abrir download seguro`. O Android ainda solicita a confirmacao de instalacao; nenhuma instalacao silenciosa.
+- Nao validar experiencia real do aviso apenas com sucesso de compilacao: tester precisa confirmar abertura da mensagem e download no proprio app, atualizacao sobreposta para v3 e persistencia de login, marca e Push.
