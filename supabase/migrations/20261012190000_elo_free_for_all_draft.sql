@@ -214,42 +214,42 @@ create or replace function public.billing_prepare_checkout(
  p_organization_id uuid,p_plan_code text
 ) returns jsonb language plpgsql security definer
 set search_path to ''
-as $
+as $$
 begin
  raise exception 'Nethanel Elo agora é gratuito. Não há assinatura obrigatória.'
  using errcode='42501';
 end;
-$;
+$$;
 create or replace function public.billing_prepare_checkout_v2(
  p_organization_id uuid,p_plan_code text,p_payer_email text default null
 ) returns jsonb language plpgsql security definer
 set search_path to ''
-as $
+as $$
 begin
  raise exception 'Nethanel Elo agora é gratuito. Não há assinatura obrigatória.'
  using errcode='42501';
 end;
-$;
+$$;
 create or replace function public.billing_prepare_invoice(
  p_organization_id uuid,p_plan_code text,p_payment_method text,
  p_provider text default 'asaas'
 ) returns jsonb language plpgsql security definer
 set search_path to ''
-as $
+as $$
 begin
  raise exception 'Nethanel Elo agora é gratuito. Não há mensalidade de acesso.'
  using errcode='42501';
 end;
-$;
+$$;
 create or replace function public.platform_admin_assign_plan(
  p_organization_id uuid,p_plan_code text
 ) returns jsonb language plpgsql security definer
 set search_path to ''
-as $
+as $$
 begin
  raise exception 'Planos comerciais encerrados. Todas as igrejas têm acesso completo.'
  using errcode='42501';
 end;
-$;
+$$;
 
 notify pgrst,'reload schema';
