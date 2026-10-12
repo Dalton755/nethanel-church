@@ -18,6 +18,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const brandLogoUrl = process.env.ELO_LOGO_URL?.trim() || null;
   const organizationId = process.env.ELO_ORGANIZATION_ID?.trim() || null;
   const brandedPush = process.env.ELO_BRANDED_PUSH === "true";
+  const versionName = process.env.ELO_VERSION_NAME?.trim() || config.version || "1.0.0";
+  const requestedCode = process.env.ELO_VERSION_CODE?.trim();
+  const versionCode = requestedCode ? Number(requestedCode) : config.android?.versionCode;
+  if (requestedCode && (!Number.isSafeInteger(versionCode) || !versionCode || versionCode < 1)) {
+    throw new Error("ELO_VERSION_CODE invalido para APK white-label");
+  }
   const appIconPath =
     process.env.ELO_APP_ICON_PATH || "./assets/white-label/icon.png";
   const adaptiveIconPath =
@@ -85,6 +91,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     ...(config as ExpoConfig),
     name: appName,
+    version: versionName,
+    // O runtime nunca deve ser compartilhado entre APKs personalizados.
+    // OTA so sera habilitado apos isolamento completo de canal por igreja.
+    runtimeVersion: organizationId
+      ? `elo${organizationId.replace(/-/g, "")}-${versionName}`
+      : versionName,
     icon: appIconPath,
     scheme,
     ios: {
@@ -95,6 +107,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     android: {
       ...config.android,
       package: androidPackage,
+      ...(versionCode ? { versionCode } : {}),
       googleServicesFile,
       adaptiveIcon: {
         ...config.android?.adaptiveIcon,
@@ -112,6 +125,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       whiteLabel: true,
       whiteLabelAppName: appName,
       whiteLabelAndroidPackage: androidPackage,
+      whiteLabelVersionCode: versionCode ?? null,
+      whiteLabelVersionName: versionName,
       whiteLabelScheme: scheme,
       eloOrganizationId: organizationId,
       eloBrandName: appName,
