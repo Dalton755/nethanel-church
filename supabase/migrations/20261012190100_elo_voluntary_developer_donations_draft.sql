@@ -134,4 +134,55 @@ end;
 $$;
 revoke all on function public.list_my_elo_developer_donations(uuid) from public,anon;
 grant execute on function public.list_my_elo_developer_donations(uuid) to authenticated;
+create or replace function public.elo_apply_developer_donation_event(
+  p_donation_id uuid,
+  p_event_key text,
+  p_provider_payment_id text,
+  p_status text,
+  p_amount_cents integer,
+  p_provider_subscription_id text default null
+) returns boolean
+language plpgsql security definer
+set search_path to pg_catalog,public,app_private
+as $
+declare v_donation public.elo_developer_donations%rowtype; v_added uuid;
+begin
+ if length(coalesce(p_event_key,'')) not between 5 and 250 or
+ length(coalesce(p_provider_payment_id,'')) not between 5 and 150 or
+ p_status not in ('pending','paid','overdue','refunded','canceled') then
+   raise exception 'Evento Asaas invalido.' using errcode='22023';
+ end if;
+ select * into v_donation from public.elo_developer_donations
+ where id=p_donation_id for update;
+ if not found or v_donation.status not in ('pending','paid','canceled','refunded') or
+    v_donation.amount_cents<>p_amount_cents then
+   raise exception 'Oferta, valor ou status nao coincidem.' using errcode='22023';
+ end if;
+ insert into public.elo_developer_donation_events(
+ donation_id,event_key,provider_payment_id,amount_cents,status,provider_subscription_id
+ ) values (
+ p_donation_id,p_event_key,p_provider_payment_id,p_amount_cents,p_status,p_provider_subscription_id
+ ) on conflict (event_key) do nothing
+ returning id into v_added;
+ if v_added is null then return false; end if;
+
+ update public.elo_developer_donations d
+ set status=case
+   when d.status='canceled' then 'canceled'
+   when p_status='paid' then 'paid'
+   when p_status='refunded' and d.frequency='once' then 'refunded'
+   else d.status
+ end,
+ provider_subscription_id=coalesce(d.provider_subscription_id,nullif(p_provider_subscription_id,'')),
+ last_payment_at=case when p_status='paid' then now() else d.last_payment_at end,
+ updated_at=now()
+ where d.id=p_donation_id;
+ return true;
+end;
+$;
+revoke all on function public.elo_apply_developer_donation_event(uuid,text,text,text,integer,text)
+ from public,anon,authenticated;
+grant execute on function public.elo_apply_developer_donation_event(uuid,text,text,text,integer,text)
+ to service_role;
+
 notify pgrst,'reload schema';
