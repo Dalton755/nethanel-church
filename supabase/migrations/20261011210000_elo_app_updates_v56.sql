@@ -150,4 +150,109 @@ using (
   bucket_id='elo-church-apks'
   and app_private.can_download_church_release(name)
 );
+-- Permite solicitar a compilacao para release APROVADO em teste/publicacao.
+-- A identidade anterior permanece fixa e a fila atual continua com no maximo
+-- uma solicitacao ativa por igreja (indice partial legado).
+create or replace function public.request_church_app_update(
+  p_organization_id uuid,
+  p_release_id uuid
+) returns jsonb
+language plpgsql security definer
+set search_path = pg_catalog, public, app_private
+as $
+declare
+  v_release public.church_app_releases%rowtype;
+  v_prev public.church_apk_builds%rowtype;
+  v_existing public.church_apk_builds%rowtype;
+  v_brand public.organizations%rowtype;
+  v_snapshot jsonb;
+  v_build public.church_apk_builds%rowtype;
+  v_plan jsonb;
+begin
+  if (select auth.uid()) is null or not
+    app_private.has_permission(p_organization_id,'organization.manage',null) then
+      raise exception 'Somente administradores podem solicitar a atualizacao.'
+        using errcode='42501';
+  end if;
+
+  v_plan := public.get_organization_plan_context(p_organization_id);
+  if coalesce((v_plan->'features'->>'standalone_apk')::boolean,false)
+       is distinct from true then
+    raise exception 'Seu plano nao permite APK exclusivo.' using errcode='42501';
+  end if;
+
+  select * into v_release from public.church_app_releases
+  where id=p_release_id and update_kind='apk'
+    and status in ('testing','published');
+  if not found then raise exception 'Release nao autorizado para build.'; end if;
+
+  select * into v_prev from public.church_apk_builds
+  where organization_id=p_organization_id and status='ready'
+    and artifact_path is not null
+  order by finished_at desc limit 1;
+  if not found then
+    raise exception 'Instale primeiro o APK inicial da sua igreja.';
+  end if;
+
+  select * into v_existing from public.church_apk_builds
+  where organization_id=p_organization_id and release_id=p_release_id
+    and status in ('queued','building','ready')
+  order by created_at desc limit 1;
+  if found then
+    return jsonb_build_object('id',v_existing.id,'status',v_existing.status,'existing',true);
+  end if;
+
+  select * into v_existing from public.church_apk_builds
+  where organization_id=p_organization_id and status in ('queued','building')
+  order by created_at desc limit 1;
+  if found then
+    return jsonb_build_object('id',v_existing.id,'status',v_existing.status,'existing',true);
+  end if;
+
+  if exists (
+    select 1 from public.church_apk_builds b
+    where b.organization_id=p_organization_id and b.status='ready'
+      and b.version_code is not null and b.version_code>=v_release.version_code
+  ) then
+    raise exception 'Este release nao e mais recente que o APK da igreja.';
+  end if;
+
+  select * into v_brand from public.organizations
+  where id=p_organization_id and status='active';
+  if not found then raise exception 'Igreja indisponivel.'; end if;
+
+  -- Preserva o tenant, estrutura, package e esquema ja instalados.
+  -- Atualiza somente identificacao visual editavel dentro do snapshot.
+  v_snapshot := v_prev.snapshot || jsonb_build_object(
+    'app_name',coalesce(nullif(trim(v_brand.app_name),''),v_brand.name),
+    'church_name',v_brand.name,
+    'logo_url',coalesce(v_brand.logo_url,v_prev.snapshot->>'logo_url'),
+    'app_icon_url',coalesce(v_brand.app_icon_url,v_brand.logo_url,v_prev.snapshot->>'app_icon_url'),
+    'splash_url',coalesce(v_brand.splash_url,v_brand.logo_url,v_prev.snapshot->>'splash_url'),
+    'primary_color',v_brand.primary_color,
+    'secondary_color',v_brand.secondary_color,
+    'background_color',v_brand.background_color
+  );
+
+  insert into public.church_apk_builds(
+    organization_id,unit_id,requested_by,status,android_package,app_scheme,
+    branded_push,snapshot,release_id,version_name,version_code
+  ) values (
+    p_organization_id,v_prev.unit_id,(select auth.uid()),'queued',
+    v_prev.android_package,v_prev.app_scheme,v_prev.branded_push,
+    v_snapshot,p_release_id,v_release.version_name,v_release.version_code
+  ) returning * into v_build;
+
+  perform app_private.write_audit(
+    p_organization_id,v_prev.unit_id,'organization.apk_update_requested',
+    'church_apk_builds',v_build.id,
+    jsonb_build_object('release_id',p_release_id,
+                       'version_code',v_release.version_code)
+  );
+  return jsonb_build_object('id',v_build.id,'status',v_build.status,'existing',false);
+end;
+$;
+revoke all on function public.request_church_app_update(uuid,uuid) from public, anon;
+grant execute on function public.request_church_app_update(uuid,uuid) to authenticated;
+
 notify pgrst, 'reload schema';
