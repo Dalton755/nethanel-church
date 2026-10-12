@@ -7,7 +7,7 @@ Preparar um unico motor de codigo para varias igrejas com marca propria, mantend
 - fingerprint SHA-256 do certificado por igreja e verificacao antes de distribuir;
 - versionCode inteiro monotonicamente crescente em cada pacote Android;
 - releases inicialmente em `draft`/`testing`, nunca publicacao automatica.
-Esta fase adiciona catalogo e leitura segura. **Nao dispara compilacao nem distribui atualizacoes**, nao muda a fila de APK atual e nao publica releases.
+Esta fase adiciona catalogo, leitura segura, fluxo de solicitacao e verificacao de assinatura. **Nao dispara compilacao nem distribui atualizacoes por conta propria**, nao muda a fila de APK atual e nao publica releases. A tela de aviso ja foi preparada, mas permanece inativa ate existir um release publicado e testado.
 
 ## Estados / fluxo
 1. Nethanel prepara release central `draft` -> `testing`.
@@ -38,7 +38,7 @@ IMPORTANTE: hoje ha um unico `extra.eas.projectId` compartilhado pelos APKs whit
 ## Integracao planejada (etapa seguinte)
 - Factory: adaptar `scripts/elo_app_factory.py` para reservar versao de forma atomica, verificar fingerprint e persistir release_id; segregar jobs para nao recompilar centenas de igrejas a cada deploy.
 - EAS build: `appVersionSource=local` somente no perfil de APK white label, para respeitar versionCode por igreja, preservando o perfil generico. Confirmar credenciais Android persistentes por pacote.
-- Mobile: instalar `expo-application`, checar RPC por igreja ao abrir/retomar o app, criar Signed URL Storage e abrir instalador Android. Exibir modal nao intrusivo (normal) e tela de bloqueio apenas se release mandatory.
+- Mobile: aviso de release APK ja adicionado, usa versionCode nativo Android via Constants.platform como etapa transitoria e Signed URL por igreja. Em uma iteracao posterior instalar `expo-application` e substituir API depreciada, validar instalacao real e interacao com o alerta do Elo Kids.
 - Painel Nethanel: criar `Central de atualizacoes` com versoes, status de builds, canary, aprovar publicacao, pausar, logs, progresso por igreja. Nenhum deploy Vercel ou EAS production sem autorizacao.
 
 ## Testes obrigatorios
@@ -52,4 +52,4 @@ IMPORTANTE: hoje ha um unico `extra.eas.projectId` compartilhado pelos APKs whit
 8. Release forcada so ativa apos teste de download e instalacao funcionando.
 
 ## Arquivos
-- `supabase/migrations/20261012013054_elo_app_updates_v56.sql`: registro de versoes, identidade e download por membro, RPC com isolamento.
+- `supabase/migrations/20261012013054_elo_app_updates_v56.sql`: registro de versoes, identidade e download por membro, RPC com isolamento. Aplicada no Supabase em 11/10/2026 (horario Brasil).\n- `scripts/elo_verify_apk.py`: confere APK novo com APK anterior, versao crescente e certificado.\n- `apps/mobile/src/features/notifications/ChurchApkUpdatePrompt.tsx`: interface de atualizacao autenticada por igreja.\n- No momento da estruturacao: **0 releases publicados**, **1 solicitação de APK existente na fila**; nenhuma distribuicao ativada.
