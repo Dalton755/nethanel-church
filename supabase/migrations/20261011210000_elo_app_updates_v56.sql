@@ -125,7 +125,7 @@ grant execute on function public.get_church_app_update(uuid,text,integer)
 create or replace function app_private.can_download_church_release(p_artifact_path text)
 returns boolean language sql stable security definer
 set search_path = pg_catalog, public, app_private
-as $
+as $$
   select (select auth.uid()) is not null
     and exists (
       select 1
@@ -138,7 +138,7 @@ as $
         and r.update_kind='apk'
         and app_private.is_org_member(b.organization_id)
     );
-$;
+$$;
 revoke all on function app_private.can_download_church_release(text) from public, anon;
 grant execute on function app_private.can_download_church_release(text) to authenticated;
 
@@ -159,7 +159,7 @@ create or replace function public.request_church_app_update(
 ) returns jsonb
 language plpgsql security definer
 set search_path = pg_catalog, public, app_private
-as $
+as $$
 declare
   v_release public.church_app_releases%rowtype;
   v_prev public.church_apk_builds%rowtype;
@@ -251,7 +251,7 @@ begin
   );
   return jsonb_build_object('id',v_build.id,'status',v_build.status,'existing',false);
 end;
-$;
+$$;
 revoke all on function public.request_church_app_update(uuid,uuid) from public, anon;
 grant execute on function public.request_church_app_update(uuid,uuid) to authenticated;
 
