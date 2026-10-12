@@ -50,7 +50,7 @@ def inspect_apk(path):
         labels = [line.split(":", 1)[0].strip() for line in signed.splitlines()
                   if "SHA-256" in line and "digest" in line]
         raise RuntimeError(
-            f"APK exige um unico certificado: encontrou {len(matches)}; "
+            f"APK exige exatamente um certificado: encontrou {len(matches)}; "
             f"cabecalhos apksigner: {labels[:8]}"
         )
     fingerprint = matches[0].replace(":", "").lower()
