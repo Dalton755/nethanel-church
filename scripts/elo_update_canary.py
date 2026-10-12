@@ -62,7 +62,19 @@ def prepare():
     if not os.environ.get("GITHUB_ENV"):
         raise RuntimeError("Somente permitido no GitHub Actions de canary.")
     record = latest_demo_build()
-    installed = download_baseline(record)
+    historical = download_baseline(record)
+    path = os.environ.get("ELO_BASELINE_APK_PATH")
+    if path:
+        candidate_path = Path(path)
+        if not candidate_path.is_file():
+            raise RuntimeError("APK atualizado anteriormente nao encontrado para o canary.")
+        installed = inspect_apk(candidate_path)
+        if installed["signing_certificate_sha256"] != historical["signing_certificate_sha256"]:
+            raise RuntimeError("A assinatura do APK anteriormente instalado nao coincide com o historico.")
+        if installed["version_code"] < historical["version_code"]:
+            raise RuntimeError("APK anterior mais antigo que a versao historica.")
+    else:
+        installed = historical
     if installed["android_package"] != record["android_package"]:
         raise RuntimeError("Pacote no arquivo historico difere do Supabase.")
     next_code = installed["version_code"] + 1
@@ -102,11 +114,101 @@ def verify():
         raise RuntimeError("FALHA: versionName do APK nao corresponde a versao do teste.")
     print("CANARY OK: mesmo pacote, mesma assinatura, versionCode crescente.")
     print("Build seguro para o teste de instalacao por cima do Elo Church Demo.")
-    print("Sem gravacoes em Supabase, sem deploy, sem envio de Push.")
+    print("Sem publicacao em producao nem envio de Push.")
 
+
+def stage_preview():
+    """Disponibiliza SOMENTE o APK canary no canal testing do Elo Church Demo.
+
+    Confere novamente a assinatura, exige que a linha de base seja o
+    versionCode 2 instalado e impede republicacao silenciosa.
+    """
+    import uuid
+    verify()
+    if os.environ.get("ELO_STAGE_DEMO_PREVIEW") != "true":
+        raise RuntimeError("Staging de preview deve ser explicitamente habilitado no workflow.")
+    baseline = json.loads(BASELINE_FILE.read_text(encoding="utf-8"))
+    original = json.loads(CLAIM_FILE.read_text(encoding="utf-8"))
+    candidate = inspect_apk(APK_FILE)
+    if baseline["organization_id"] != DEMO_ORGANIZATION_ID:
+        raise RuntimeError("Somente Demo permitido.")
+    if baseline["previous_apk"]["version_code"] != 2 or candidate["version_code"] != 3:
+        raise RuntimeError("Este teste exige migracao da versao 2 para a versao 3.")
+
+    releases = request(
+        "GET", "/rest/v1/church_app_releases"
+        "?channel=eq.preview&version_code=eq.3&select=id,status,version_name,update_kind"
+    ) or []
+    if releases:
+        if len(releases) != 1 or releases[0]["status"] != "testing" or releases[0]["version_name"] != "1.0.3":
+            raise RuntimeError("Release preview 3 ja esta reservado por outra execucao.")
+        release_id = releases[0]["id"]
+    else:
+        created = request("POST", "/rest/v1/church_app_releases", {
+            "channel": "preview",
+            "version_name": "1.0.3",
+            "version_code": 3,
+            "minimum_supported_version_code": 1,
+            "update_kind": "apk",
+            "runtime_version": "elo" + DEMO_ORGANIZATION_ID.replace("-", "") + "-1.0.3",
+            "release_notes": "Teste interno: atualizacao pelo proprio Elo. Personalizacao, login e dados preservados.",
+            "status": "testing",
+        })
+        if not created or len(created) != 1:
+            raise RuntimeError("Nao foi possivel reservar release de preview.")
+        release_id = created[0]["id"]
+
+    existing = request("GET", "/rest/v1/church_apk_builds"
+        f"?organization_id=eq.{DEMO_ORGANIZATION_ID}&version_code=eq.3"
+        "&status=eq.ready&select=id,release_id") or []
+    if existing:
+        if len(existing) != 1 or existing[0]["release_id"] != release_id:
+            raise RuntimeError("Versao 3 pronta divergente do release de preview.")
+        print("Preview ja preparado anteriormente e disponivel apenas para solicitante do APK Demo.")
+        return
+
+    build_id = str(uuid.uuid4())
+    artifact_path = f"{DEMO_ORGANIZATION_ID}/{build_id}.apk"
+    data = APK_FILE.read_bytes()
+    if not 1_000_000 < len(data) < 200_000_000 or data[:2] != b"PK":
+        raise RuntimeError("APK nao atende limites de tamanho/integridade.")
+    uploaded = request(
+        "POST", f"/storage/v1/object/{BUCKET}/{artifact_path}",
+        data, content_type="application/vnd.android.package-archive"
+    )
+    if not uploaded or not uploaded.get("Key"):
+        raise RuntimeError("Storage nao confirmou o APK Demo.")
+    now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+    created = request("POST", "/rest/v1/church_apk_builds", {
+        "id": build_id,
+        "organization_id": DEMO_ORGANIZATION_ID,
+        "unit_id": original["unit_id"],
+        "requested_by": original["requested_by"],
+        "status": "ready",
+        "android_package": original["android_package"],
+        "app_scheme": original["app_scheme"],
+        "branded_push": original["branded_push"],
+        "snapshot": original["snapshot"],
+        "artifact_path": artifact_path,
+        "version_name": candidate["version_name"],
+        "version_code": candidate["version_code"],
+        "release_id": release_id,
+        "signing_certificate_sha256": candidate["signing_certificate_sha256"],
+        "created_at": now,
+        "started_at": now,
+        "finished_at": now,
+        "build_url": os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+                    + "/" + os.environ.get("GITHUB_REPOSITORY", "Dalton755/nethanel-church")
+                    + "/actions/runs/" + os.environ.get("GITHUB_RUN_ID", ""),
+    })
+    if not created or len(created) != 1:
+        raise RuntimeError("Nao foi possivel indexar o APK Demo apos upload.")
+    print("CANARY v3 STAGED: apenas release preview/testing e solicitante do Demo.")
+    print("Nenhum release production/published alterado.")
+    
 
 if __name__ == "__main__":
-    actions = {"prepare": prepare, "verify": verify}
+    actions = {"prepare": prepare, "verify": verify, "stage-preview": stage_preview}
     if len(sys.argv) != 2 or sys.argv[1] not in actions:
-        raise SystemExit("Uso: elo_update_canary.py prepare|verify")
+        raise SystemExit("Uso: elo_update_canary.py prepare|verify|stage-preview")
     actions[sys.argv[1]]()
