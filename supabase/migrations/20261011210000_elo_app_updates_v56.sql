@@ -1,0 +1,141 @@
+-- Elo Updates v56: catalogo central e distribuicao segura de APKs por igreja.
+-- Adicao retrocompativel: nao altera solicitacoes ou instalacoes existentes.
+
+create table if not exists public.church_app_releases (
+  id uuid primary key default gen_random_uuid(),
+  channel text not null check (channel in ('preview','production')),
+  version_name text not null check (version_name ~ '^[0-9]+[.][0-9]+[.][0-9]+$'),
+  version_code integer not null check (version_code > 0),
+  minimum_supported_version_code integer not null default 1
+    check (minimum_supported_version_code > 0 and minimum_supported_version_code <= version_code),
+  update_kind text not null check (update_kind in ('apk','ota')),
+  runtime_version text not null check (length(runtime_version) between 1 and 100),
+  release_notes text not null default '',
+  status text not null default 'draft'
+    check (status in ('draft','testing','published','paused','rolled_back')),
+  created_at timestamptz not null default now(),
+  published_at timestamptz,
+  unique(channel,version_code),
+  constraint published_releases_require_timestamp check
+    (status <> 'published' or published_at is not null)
+);
+create index if not exists church_app_releases_live_idx
+ on public.church_app_releases(channel,version_code desc)
+ where status = 'published';
+
+-- Assinatura fixa por igreja. Nunca armazenar a keystore ou segredo no banco.
+create table if not exists public.church_app_identities (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  android_package text not null unique
+    check (android_package ~ '^br[.]com[.]nethanel[.]elo[.]c[a-f0-9]{32}$'),
+  app_scheme text not null unique
+    check (app_scheme ~ '^elo[a-f0-9]{20}$'),
+  signing_certificate_sha256 text
+    check (signing_certificate_sha256 ~ '^[a-f0-9]{64}$'),
+  last_verified_version_code integer not null default 0
+    check (last_verified_version_code >= 0),
+  updated_at timestamptz not null default now()
+);
+comment on column public.church_app_identities.signing_certificate_sha256 is
+  'Fingerprint publico do certificado, nunca a chave privada. Deve corresponder ao APK anteriormente distribuido.';
+
+alter table public.church_apk_builds
+  add column if not exists release_id uuid references public.church_app_releases(id),
+  add column if not exists version_name text,
+  add column if not exists version_code integer,
+  add column if not exists signing_certificate_sha256 text;
+create index if not exists church_apk_builds_release_idx
+ on public.church_apk_builds(release_id,organization_id,status);
+create unique index if not exists church_apk_builds_one_code_per_org_idx
+ on public.church_apk_builds(organization_id,version_code)
+ where version_code is not null and status='ready';
+
+-- Catalogo/identidade privados. Somente o backend de distribuicao gerencia.
+alter table public.church_app_releases enable row level security;
+alter table public.church_app_identities enable row level security;
+revoke all on public.church_app_releases from public, anon, authenticated;
+revoke all on public.church_app_identities from public, anon, authenticated;
+grant select, insert, update, delete on public.church_app_releases to service_role;
+grant select, insert, update, delete on public.church_app_identities to service_role;
+
+-- Leitura de atualizacao: autenticacao + pertinencia a propria igreja +
+-- identificador Android correto. Nenhum link temporario ou APK de teste e exposto.
+create or replace function public.get_church_app_update(
+  p_organization_id uuid,
+  p_android_package text,
+  p_installed_version_code integer
+) returns jsonb
+language plpgsql security definer
+set search_path = pg_catalog, public, app_private
+as $$
+declare
+  v_release record;
+  v_expected text;
+begin
+  if (select auth.uid()) is null
+     or not app_private.is_org_member(p_organization_id) then
+    raise exception 'Acesso nao autorizado.' using errcode='42501';
+  end if;
+  v_expected := 'br.com.nethanel.elo.c'||replace(p_organization_id::text,'-','');
+  if p_android_package is distinct from v_expected
+     or p_installed_version_code is null
+     or p_installed_version_code < 0 then
+    raise exception 'Identidade ou versao invalida.' using errcode='22023';
+  end if;
+
+  select r.id, r.version_name, r.version_code, r.minimum_supported_version_code,
+         r.release_notes, r.runtime_version, b.artifact_path
+    into v_release
+  from public.church_app_releases r
+  join public.church_apk_builds b
+    on b.release_id=r.id
+   and b.organization_id=p_organization_id
+   and b.android_package=p_android_package
+   and b.status='ready'
+   and b.version_code=r.version_code
+   and b.artifact_path is not null
+  where r.channel='production'
+    and r.status='published'
+    and r.update_kind='apk'
+    and r.version_code>p_installed_version_code
+  order by r.version_code desc
+  limit 1;
+
+  if not found then return jsonb_build_object('available',false); end if;
+
+  return jsonb_build_object(
+    'available',true,
+    'release_id',v_release.id,
+    'version_name',v_release.version_name,
+    'version_code',v_release.version_code,
+    'runtime_version',v_release.runtime_version,
+    'mandatory',p_installed_version_code < v_release.minimum_supported_version_code,
+    'release_notes',v_release.release_notes,
+    'artifact_path',v_release.artifact_path
+  );
+end;
+$$;
+revoke all on function public.get_church_app_update(uuid,text,integer)
+ from public, anon;
+grant execute on function public.get_church_app_update(uuid,text,integer)
+ to authenticated;
+
+-- Permitir que apenas membros ativos baixem APK publicado da PROPRIA igreja.
+-- Testes, builds em fila e arquivos de outras igrejas continuam privados.
+create policy church_apk_published_download_member on storage.objects
+for select to authenticated
+using (
+  bucket_id='elo-church-apks'
+  and exists (
+    select 1
+    from public.church_apk_builds b
+    join public.church_app_releases r on r.id=b.release_id
+    where b.artifact_path=name
+      and b.status='ready'
+      and r.status='published'
+      and r.channel='production'
+      and r.update_kind='apk'
+      and app_private.is_org_member(b.organization_id)
+  )
+);
+notify pgrst, 'reload schema';
