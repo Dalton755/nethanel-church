@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useOrganization } from "../../contexts/OrganizationContext";
 
 import { AccessRolesScreen } from "./AccessRolesScreen";
-import { ChurchBillingScreen } from "./ChurchBillingScreen";
 import { ChurchPersonalizationScreen } from "./ChurchPersonalizationScreen";
 import { ChurchStructureScreen } from "./ChurchStructureScreen";
 import { PeopleAccessScreen } from "./PeopleAccessScreen";
@@ -12,7 +11,7 @@ type Props = {
   onBack: () => void;
 };
 
-type Section = "home" | "roles" | "people" | "branding" | "billing" | "structure";
+type Section = "home" | "roles" | "people" | "branding" | "structure";
 
 export function ChurchManagementScreen({ onBack }: Props) {
   const [section, setSection] = useState<Section>("home");
@@ -45,22 +44,18 @@ export function ChurchManagementScreen({ onBack }: Props) {
     );
   }
 
-  if (section === "billing") {
-    return <ChurchBillingScreen onBack={() => setSection("home")} />;
-  }
-
   return (
     <EloScreen
       title="Administração Elo"
       eyebrow="GESTÃO • SEGURANÇA"
-      subtitle="Controle acessos, identidade da igreja e a contratação do Nethanel Elo."
+      subtitle="Controle acessos e a identidade da igreja. Os recursos do Elo são gratuitos."
       onBack={onBack}
     >
       <EloModuleCard
         icon="TreeStructureIcon"
         title="Estrutura da igreja"
         description="Defina departamentos, equipes, cargos ministeriais e modelos de escala. Pode mudar quando quiser."
-        badge="Todos os planos"
+        badge="Gratuito"
         onPress={() => setSection("structure")}
       />
 
@@ -73,17 +68,9 @@ export function ChurchManagementScreen({ onBack }: Props) {
       />
 
       <EloModuleCard
-        icon="CreditCardIcon"
-        title="Plano e assinatura"
-        description="Acompanhe o teste, compare planos e gerencie a cobrança do Elo."
-        badge="ADM"
-        onPress={() => setSection("billing")}
-      />
-
-      <EloModuleCard
         icon="PaletteIcon"
         title="Personalização da igreja"
-        description="Nome, logo, cores e recursos de marca liberados pelo plano."
+        description="Personalize nome, logo, cores, ícone e abertura do aplicativo da sua igreja."
         badge="ADM"
         onPress={() => setSection("branding")}
       />
