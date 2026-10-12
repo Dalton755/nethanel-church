@@ -23,6 +23,7 @@ import {
   unregisterCurrentPushDevice,
 } from "../notifications/PushNotificationRegistration";
 import { KidsGuardianEmergencyOverlay } from "../elo/KidsGuardianEmergencyOverlay";
+import { ChurchApkUpdatePrompt } from "../notifications/ChurchApkUpdatePrompt";
 
 const PENDING_JOIN_CODE_KEY =
   "@elo/pending-join-code";
@@ -287,6 +288,7 @@ export function AuthenticatedScreen() {
     <>
       <PushNotificationRegistration />
       <KidsGuardianEmergencyOverlay />
+      <ChurchApkUpdatePrompt />
       <MainTabs />
     </>
   );
