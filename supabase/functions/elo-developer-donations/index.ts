@@ -137,7 +137,8 @@ Deno.serve(async (req) => {
     name: frequency === "once" ? "Oferta voluntária ao Nethanel Elo" : "Oferta mensal voluntária ao Nethanel Elo",
     description: "Apoio espontâneo aos custos de infraestrutura do Nethanel Elo. Não é pagamento por acesso.",
     value: cents / 100,
-    billingType: types[method],
+    // Para Pix mensal, o Asaas usa boleto com QR Pix em cada vencimento.
+    billingType: frequency === "monthly" && method === "pix" ? "BOLETO" : types[method],
     chargeType: frequency === "once" ? "DETACHED" : "RECURRENT",
     ...(frequency === "monthly" ? { subscriptionCycle: "MONTHLY" } : {}),
     ...(method === "boleto" ? { dueDateLimitDays: 3 } : {}),
