@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
   // Cancelar o link NAO cancela a assinatura mensal já criada no Asaas.
   if (status === "paid" && donation.payment_link_id) {
     const apiKey = (Deno.env.get("ASAAS_API_KEY") ?? "").trim();
-    const base = (Deno.env.get("ASAAS_API_URL") ?? "https://api-sandbox.asaas.com/v3").replace(/\\/$/, "");
+    const base = (Deno.env.get("ASAAS_API_URL") ?? "https://api-sandbox.asaas.com/v3").replace(/\/$/, "");
     const liveAllowed = Deno.env.get("ELO_DONATIONS_LIVE_ENABLED") === "true";
     if (apiKey && (env === "sandbox" || liveAllowed)) {
       const disabled = await fetch(`${base}/paymentLinks/${encodeURIComponent(donation.payment_link_id)}`, {
