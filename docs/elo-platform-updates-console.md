@@ -27,3 +27,21 @@ Criar no **Perfil > Painel Nethanel > Central de Atualizações** uma gestão ce
 3. Implementar aprovação explícita de promoção a produção (auditoria de quem aprovou), rollout gradual por igreja e reversão.
 4. Integrar push ao catálogo de release publicado para os destinatários escolhidos.
 5. Confirmar o fluxo Android em aparelho real; sem instalação silenciosa.
+
+
+## Nova etapa: Simular distribuição por igreja (v59)
+- Cada card de versão apresenta "Simular distribuição por igreja", acessível somente no Painel Nethanel.
+- A tela permite escolher uma ou várias igrejas, sem enviar avisos nem iniciar builds.
+- A RPC `platform_admin_update_distribution_preview` é somente leitura e só atende administradores ativos da plataforma.
+- A simulação considera: igreja ativa, plano efetivo incluindo Elo Abençoar, APK pronto anterior, fila/compilação em andamento, pacote Android e monotonicidade do versionCode.
+- Versões `preview` **nunca** incluem outras igrejas além do Elo Church Demo. O usuário visualiza destinos bloqueados como indisponíveis.
+- `eligible_for_preflight` **não** é autorização para publicar nem confirmação de compatibilidade: ainda é necessário verificar o APK anterior e o certificado.
+- Releases pausados/retirados são bloqueados. Um APK já instalado não pode sofrer downgrade.
+- Não há botão de enfileirar, publicar, aprovar produção ou enviar Push nesta etapa.
+- A rotina permanece no branch de desenvolvimento, e o novo APK de prévia do Elo principal valida sua assinatura e versionCode em relação ao APK instalado anteriormente.
+
+### Casos testados
+- Preview 1.0.7: Elo Church Demo = APK já preparado; demais 4 igrejas = restritas a Demo; execução desativada.
+- Existe 1 APK pendente em outra igreja que permanece inalterado.
+- Nenhum release `production/published` foi criado.
+- Validação TypeScript e Expo no GitHub executada sem deploy.
