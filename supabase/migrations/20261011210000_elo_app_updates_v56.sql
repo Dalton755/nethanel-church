@@ -120,22 +120,34 @@ revoke all on function public.get_church_app_update(uuid,text,integer)
 grant execute on function public.get_church_app_update(uuid,text,integer)
  to authenticated;
 
--- Permitir que apenas membros ativos baixem APK publicado da PROPRIA igreja.
--- Testes, builds em fila e arquivos de outras igrejas continuam privados.
+-- A policy de Storage e executada como usuario; a consulta as tabelas
+-- privadas deve ocorrer num helper restrito do schema nao exposto.
+create or replace function app_private.can_download_church_release(p_artifact_path text)
+returns boolean language sql stable security definer
+set search_path = pg_catalog, public, app_private
+as $
+  select (select auth.uid()) is not null
+    and exists (
+      select 1
+      from public.church_apk_builds b
+      join public.church_app_releases r on r.id=b.release_id
+      where b.artifact_path=p_artifact_path
+        and b.status='ready'
+        and r.status='published'
+        and r.channel='production'
+        and r.update_kind='apk'
+        and app_private.is_org_member(b.organization_id)
+    );
+$;
+revoke all on function app_private.can_download_church_release(text) from public, anon;
+grant execute on function app_private.can_download_church_release(text) to authenticated;
+
+-- Somente membros da propria igreja baixam APK publicado; arquivos de teste
+-- e APKs historicos nao publicados continuam restritos ao administrador.
 create policy church_apk_published_download_member on storage.objects
 for select to authenticated
 using (
   bucket_id='elo-church-apks'
-  and exists (
-    select 1
-    from public.church_apk_builds b
-    join public.church_app_releases r on r.id=b.release_id
-    where b.artifact_path=name
-      and b.status='ready'
-      and r.status='published'
-      and r.channel='production'
-      and r.update_kind='apk'
-      and app_private.is_org_member(b.organization_id)
-  )
+  and app_private.can_download_church_release(name)
 );
 notify pgrst, 'reload schema';
