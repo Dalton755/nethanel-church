@@ -1,0 +1,74 @@
+name: Elo - Validar acesso gratuito e ofertas (sem deploy)
+
+on:
+  push:
+    branches: [feature/elo-updates-foundation]
+    paths:
+      - ".github/workflows/elo-donations-preview-check.yml"
+      - "apps/mobile/src/features/more/DeveloperOfferingScreen.tsx"
+      - "apps/mobile/src/features/more/MoreScreen.tsx"
+      - "apps/mobile/src/features/management/ChurchManagementScreen.tsx"
+      - "apps/mobile/src/features/management/ChurchPersonalizationScreen.tsx"
+      - "apps/mobile/src/features/management/PlatformAdminScreen.tsx"
+      - "supabase/functions/elo-developer-donations/**"
+      - "supabase/functions/elo-developer-donations-webhook/**"
+      - "supabase/migrations/20261012190000_elo_free_for_all_draft.sql"
+      - "supabase/migrations/20261012190100_elo_voluntary_developer_donations_draft.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - name: TypeScript mobile
+        run: |
+          npm ci
+          npm run typecheck --workspace=mobile
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Deno Edge Functions (verificação estática sem deploy)
+        run: |
+          deno check --config supabase/functions/elo-developer-donations/deno.json supabase/functions/elo-developer-donations/index.ts
+          deno check --config supabase/functions/elo-developer-donations-webhook/deno.json supabase/functions/elo-developer-donations-webhook/index.ts
+      - name: Sintaxe das migrations SQL sem conectar à produção
+        run: |
+          python -m pip install --disable-pip-version-check pglast
+          python - <<'PY'
+          from pathlib import Path
+          from pglast import parse_sql
+          paths=[
+            "supabase/migrations/20261012190000_elo_free_for_all_draft.sql",
+            "supabase/migrations/20261012190100_elo_voluntary_developer_donations_draft.sql",
+          ]
+          for path in paths:
+            source=Path(path).read_text(encoding="utf-8")
+            parse_sql(source)
+            print("SQL analisado:", path)
+          PY
+      - name: Proteções de cobrança
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          migration=Path("supabase/migrations/20261012190000_elo_free_for_all_draft.sql").read_text()
+          assert "ELO_REDE" in migration
+          for required in ("billing_prepare_checkout(", "billing_prepare_checkout_v2(",
+                           "billing_prepare_invoice(", "list_public_elo_plans()"):
+            assert required in migration, required
+          donate=Path("supabase/functions/elo-developer-donations/index.ts").read_text()
+          assert "ELO_DONATIONS_LIVE_ENABLED" in donate
+          assert 'environment === "production" && !enabledProduction' in donate
+          assert "expectedMethods" in donate and "paymentLinks" in donate
+          print("Nenhum pagamento em producao e gerado por esta verificacao.")
+          PY
