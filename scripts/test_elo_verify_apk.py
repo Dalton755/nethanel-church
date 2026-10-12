@@ -15,7 +15,7 @@ class ApkVerificationTests(unittest.TestCase):
             file = Path(tmp) / "church.apk"
             file.write_bytes(b"PK fake test only")
             manifest = "package: name='br.com.nethanel.elo.c" + "a"*32 + "' versionCode='2' versionName='1.0.1'"
-            cert = ("V2 Signer #1 certificate SHA-256 digest: " + "fa"*32 + "\n"
+            cert = ("V2 Signer: SHA-256 digest: " + "fa"*32 + "\n"
                     + "V3 Signer #1 certificate SHA-256 digest: " + "fa"*32)
             with patch.object(apk, "sdk_tool", side_effect=lambda name: name), patch.object(
                 apk.subprocess, "run",
