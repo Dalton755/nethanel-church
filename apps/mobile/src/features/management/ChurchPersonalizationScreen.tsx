@@ -80,15 +80,14 @@ export function ChurchPersonalizationScreen({
     activeOrganization,
     planContext,
     canAtOrganization,
-    hasPlanFeature,
     refreshContext,
   } = useOrganization();
 
   const canManage = canAtOrganization("organization.manage");
-  const canCustomColors = hasPlanFeature("custom_colors");
-  const canCustomAppName = hasPlanFeature("custom_app_name");
-  const canCustomIcon = hasPlanFeature("custom_launcher_icon");
-  const canCustomSplash = hasPlanFeature("custom_splash");
+  const canCustomColors = true;
+  const canCustomAppName = true;
+  const canCustomIcon = true;
+  const canCustomSplash = true;
 
   const [name, setName] = useState(activeOrganization?.name ?? "");
   const [appName, setAppName] = useState(
@@ -375,9 +374,7 @@ export function ChurchPersonalizationScreen({
 
       Alert.alert(
         "Personalização salva",
-        activeOrganization.white_label_enabled
-          ? "A identidade foi salva e também ficará disponível para a versão exclusiva da igreja."
-          : "A identidade permitida pelo seu plano já foi aplicada dentro do Elo."
+        "A identidade foi salva e ficará disponível também para o aplicativo exclusivo da igreja."
       );
     } catch (error) {
       Alert.alert(
@@ -398,29 +395,21 @@ export function ChurchPersonalizationScreen({
     <EloScreen
       title="Personalização da igreja"
       eyebrow="IDENTIDADE • ELO"
-      subtitle="A identidade disponível acompanha automaticamente o plano da igreja."
+      subtitle="Personalize a identidade da igreja. Os recursos são gratuitos."
       onBack={onBack}
     >
-      {planContext ? (
-        <View style={styles.planContextCard}>
-          <View style={styles.planContextIcon}>
-            {planContext.is_trial ? (
-              <P.GiftIcon size={21} color={eloColors.blue} weight="duotone" />
-            ) : (
-              <P.CrownSimpleIcon size={21} color={eloColors.blue} weight="duotone" />
-            )}
-          </View>
-          <View style={styles.planContextCopy}>
-            <Text style={styles.planContextEyebrow}>PLANO ATUAL</Text>
-            <Text style={styles.planContextName}>{planContext.name}</Text>
-            <Text style={styles.planContextText}>
-              {planContext.is_trial && trialEnd
-                ? `Teste completo disponível até ${trialEnd}.`
-                : `Recursos de identidade liberados conforme ${planContext.base_plan_name}.`}
-            </Text>
-          </View>
+      <View style={styles.planContextCard}>
+        <View style={styles.planContextIcon}>
+          <P.HeartIcon size={21} color={eloColors.green} weight="duotone" />
         </View>
-      ) : null}
+        <View style={styles.planContextCopy}>
+          <Text style={styles.planContextEyebrow}>NETHANEL ELO</Text>
+          <Text style={styles.planContextName}>Todos os recursos liberados</Text>
+          <Text style={styles.planContextText}>
+            Personalize sua igreja sem contratar qualquer plano.
+          </Text>
+        </View>
+      </View>
 
       <Text style={eloSharedStyles.sectionTitle}>Prévia</Text>
 
@@ -464,7 +453,7 @@ export function ChurchPersonalizationScreen({
       <EloCard>
         <BrandAssetEditor
           title="Logo da igreja"
-          description="Disponível em todos os planos. Usada no cabeçalho e na identificação da igreja."
+          description="Usada no cabeçalho e na identificação da igreja."
           imageUrl={displayLogo}
           onPick={() => void pickAsset("logo")}
           onRemove={() => {
@@ -627,7 +616,7 @@ export function ChurchPersonalizationScreen({
           <Text style={styles.noticeText}>
             {activeOrganization.white_label_enabled
               ? "Nome, ícone e imagem de abertura podem ser usados para gerar a versão exclusiva desta igreja."
-              : "A igreja usa o aplicativo Nethanel Elo. Os recursos visuais disponíveis seguem automaticamente o plano contratado."}
+              : "Sua igreja pode personalizar cores, logo e identidade gratuitamente."}
           </Text>
         </View>
       </View>
