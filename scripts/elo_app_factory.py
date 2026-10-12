@@ -139,9 +139,19 @@ def claim():
                 {"status": "failed", "failure_reason": str(error)[:250],
                  "finished_at": datetime.now(timezone.utc).isoformat()})
         raise
+    build_details = {"status": "building", "started_at": datetime.now(timezone.utc).isoformat()}
+    if record.get("release_id"):
+        releases = request(
+            "GET", f"/rest/v1/church_app_releases?id=eq.{record['release_id']}"
+            "&select=id,status,update_kind,version_code,version_name,runtime_version"
+        )
+        if not releases or releases[0]["status"] not in ("testing", "published") or releases[0]["update_kind"] != "apk":
+            raise RuntimeError("Release ainda nao liberado para compilacao de APK.")
+        build_details.update(version_name=releases[0]["version_name"],
+                             version_code=releases[0]["version_code"])
     changed = request(
         "PATCH", f"/rest/v1/church_apk_builds?id=eq.{record['id']}&status=eq.queued",
-        {"status": "building", "started_at": datetime.now(timezone.utc).isoformat()})
+        build_details)
     if not changed:
         print("Outro executor assumiu o build.")
         return
@@ -168,6 +178,9 @@ def prepare():
         "ELO_SPLASH_URL": brand["splash_url"],
         "ELO_BRANDED_PUSH": "true" if record["branded_push"] else "false",
     }
+    if record.get("version_code") and record.get("version_name"):
+        values["ELO_VERSION_CODE"] = str(record["version_code"])
+        values["ELO_VERSION_NAME"] = record["version_name"]
     if record["branded_push"]:
         # Busca apenas identificadores públicos, associados ao tenant, via service_role.
         # Nunca colocar credenciais privadas do Firebase no banco ou no APK.
@@ -236,15 +249,46 @@ def complete():
     data = APK_FILE.read_bytes()
     if len(data) < 1_000_000 or not data.startswith(b"PK"):
         raise RuntimeError("Arquivo Android inválido ou incompleto.")
-    path = f"{record['organization_id']}/{record['id']}.apk"
+    verified = record.get("verification")
+    if not verified or verified["android_package"] != record["android_package"]:
+        raise RuntimeError("APK nao passou pela verificacao de assinatura e versionCode.")
+    org = record["organization_id"]
+    identities = request(
+        "GET", f"/rest/v1/church_app_identities?organization_id=eq.{org}"
+        "&select=organization_id,android_package,app_scheme,signing_certificate_sha256"
+    ) or []
+    identity_data = {
+        "android_package": record["android_package"],
+        "app_scheme": record["app_scheme"],
+        "signing_certificate_sha256": verified["signing_certificate_sha256"],
+        "last_verified_version_code": verified["version_code"],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if identities:
+        original = identities[0]
+        if (original["android_package"] != record["android_package"]
+            or original["app_scheme"] != record["app_scheme"]
+            or (original["signing_certificate_sha256"] and
+                original["signing_certificate_sha256"] != verified["signing_certificate_sha256"])):
+            raise RuntimeError("Assinatura ou identidade divergente do registro permanente.")
+    path = f"{org}/{record['id']}.apk"
     result = request(
         "POST", f"/storage/v1/object/{BUCKET}/{path}",
         data, content_type="application/vnd.android.package-archive")
     if not result or not result.get("Key"):
         raise RuntimeError("Armazenamento não confirmou o APK.")
+    if identities:
+        request("PATCH", f"/rest/v1/church_app_identities?organization_id=eq.{org}",
+                identity_data)
+    else:
+        request("POST", "/rest/v1/church_app_identities",
+                {"organization_id": org, **identity_data})
     request("PATCH",
         f"/rest/v1/church_apk_builds?id=eq.{record['id']}&status=eq.building",
         {"status": "ready", "artifact_path": path,
+         "version_name": verified["version_name"],
+         "version_code": verified["version_code"],
+         "signing_certificate_sha256": verified["signing_certificate_sha256"],
          "finished_at": datetime.now(timezone.utc).isoformat(),
          "build_url": os.environ.get("GITHUB_SERVER_URL", "https://github.com")
                         + "/" + os.environ.get("GITHUB_REPOSITORY", "Dalton755/nethanel-church")
