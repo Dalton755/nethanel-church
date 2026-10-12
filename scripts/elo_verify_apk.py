@@ -45,7 +45,14 @@ def inspect_apk(path):
     ).stdout
     matches = re.findall(r"Signer #\d+ certificate SHA-256 digest:\s*([a-fA-F0-9:]+)", signed)
     if len(matches) != 1:
-        raise RuntimeError("APK nao tem exatamente um certificado de assinatura verificado.")
+        # Nao imprimir valores, DN, caminhos, credenciais ou APK nos logs.
+        # Somente os nomes dos campos e a contagem para diagnostico Android.
+        labels = [line.split(":", 1)[0].strip() for line in signed.splitlines()
+                  if "SHA-256" in line and "digest" in line]
+        raise RuntimeError(
+            f"APK exige um unico certificado: encontrou {len(matches)}; "
+            f"cabecalhos apksigner: {labels[:8]}"
+        )
     fingerprint = matches[0].replace(":", "").lower()
     if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
         raise RuntimeError("Fingerprint invalido.")
