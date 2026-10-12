@@ -1,4 +1,4 @@
-name: Elo Principal - Central de Atualizacoes (APK de previa seguro)
+name: Elo Principal - Simulacao de distribuicao (APK de previa seguro)
 
 # Roda SOMENTE na branch de testes. Nao faz merge nem deploy.
 on:
@@ -27,12 +27,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Recuperar tres APKs do Elo principal anteriormente distribuidos
+      - name: Comparar a ultima previa instalada com os tres APKs historicos
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p /tmp/elo-generic-historic/{latest,previous,earliest}
+          mkdir -p /tmp/elo-generic-historic/{last-preview,latest,previous,earliest}
+          gh run download 38238423583 --repo "$GITHUB_REPOSITORY" \
+            --name nethanel-elo-principal-central-atualizacoes-preview \
+            --dir /tmp/elo-generic-historic/last-preview
+          test -s /tmp/elo-generic-historic/last-preview/nethanel-elo-platform-preview.apk
           gh run download 37397162273 --repo "$GITHUB_REPOSITORY" \
             --name nethanel-elo-generic-apk --dir /tmp/elo-generic-historic/latest
           gh run download 37383797310 --repo "$GITHUB_REPOSITORY" \
@@ -116,13 +120,13 @@ jobs:
         working-directory: apps/mobile
         run: eas build --platform android --profile preview --local --non-interactive --output ./nethanel-elo-platform-preview.apk
 
-      - name: Comparar assinatura, versao e package com os 3 APKs anteriores
+      - name: Comparar assinatura e versao com a previa instalada e 3 historicos
         run: python scripts/elo_verify_generic_preview.py verify
 
       - name: Disponibilizar somente APK aprovado para teste no GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: nethanel-elo-principal-central-atualizacoes-preview
+          name: nethanel-elo-principal-distribuicao-preview
           path: apps/mobile/nethanel-elo-platform-preview.apk
           retention-days: 7
           if-no-files-found: error
