@@ -31,6 +31,18 @@ jobs:
         run: |
           deno test --no-check --config supabase/functions/elo-asaas-sandbox-webhook/deno.json \
             supabase/functions/elo-asaas-sandbox-webhook/parse-event.test.ts
+      - name: Verificar que receptor publicado rejeita requisicoes nao autorizadas
+        run: |
+          set -eu
+          URL="https://esukjhuyooppxgfmltkb.supabase.co/functions/v1/elo-asaas-sandbox-webhook"
+          method_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$URL")
+          [ "$method_status" = "405" ] || { echo "GET esperado HTTP 405, recebido $method_status"; exit 1; }
+          without_secret=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 \
+            -X POST -H 'content-type: application/json' --data '{"event":"PAYMENT_RECEIVED"}' "$URL")
+          case "$without_secret" in
+            401|503) echo "Receptor seguro: requisicao sem token foi bloqueada ($without_secret)" ;;
+            *) echo "FALHA: endpoint permitiu POST sem token: HTTP $without_secret"; exit 1 ;;
+          esac
       - name: Verificar isolamento de dados financeiros de igrejas
         run: |
           python - <<'PY'
