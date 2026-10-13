@@ -1,4 +1,4 @@
-import { getOrCreateMonthlyPix } from "./monthly-flow.ts";
+import { getOrCreateMonthlyPix, cancelMonthlyManualPix } from "./monthly-flow.ts";
 const check=(value:unknown,message:string)=>{if(!value)throw new Error(message)};
 const user=(reservation:unknown)=>({
   rpc:async (name:string,args:any)=>{
@@ -36,4 +36,29 @@ Deno.test("mensal: geração concorrente avisa sem criar duplicidade",async()=>{
  const result=await getOrCreateMonthlyPix(user({state:"processing"}),{},
    "$aact_hmlg_test_only",id);
  check(result.ok===false && !("pixPayload" in result),"gerou QR concorrente");
+});
+
+Deno.test("cancelamento mensal impede gerações futuras sem transação financeira",async()=>{
+  let called=false;
+  const auth={rpc:async(name:string,args:any)=>{
+    check(name==="cancel_elo_monthly_pix_pledge","Chamada de cancelamento incorreta");
+    check(args?.p_donation_id===id,"ID trocado");
+    called=true;
+    return {data:{canceled:true,alreadyCanceled:false,qrIds:[]},error:null};
+  }};
+  const result=await cancelMonthlyManualPix(auth,"$aact_hmlg_test_only",{
+    id,organization_id:"101212c5-6e81-4915-ae9a-fbde5b42bb04",
+    environment:"sandbox",frequency:"monthly",payment_method:"pix",checkout_url:null,
+  });
+  check(called && result.ok && result.canceled,
+    "Cancelamento da intenção mensal não confirmado");
+});
+
+Deno.test("cancelamento não pode afetar igreja fora da Demo",async()=>{
+  const auth={rpc:async()=>{throw new Error("Não deveria chamar RPC");}};
+  const result=await cancelMonthlyManualPix(auth,"$aact_hmlg_test_only",{
+    id,organization_id:"00000000-0000-4000-8000-000000000001",
+    environment:"sandbox",frequency:"monthly",payment_method:"pix",checkout_url:null,
+  });
+  check(!result.ok,"Outra igreja foi aceita");
 });
