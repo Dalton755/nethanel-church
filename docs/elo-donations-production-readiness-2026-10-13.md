@@ -64,3 +64,7 @@ A aprovação para preparar auditoria **não** concede (b), (c) ou (d).
 - RPCs para criar checkout comercial e faturas bloqueadas, inclusive para APKs antigos que as invoquem; histórico e webhooks antigos não foram excluídos.
 - Uma fatura antiga classificada como **overdue** no banco de produção (R$ 49,90) permanece em aberto no histórico. É necessário conciliar o estado do boleto/Pix antigo diretamente no Asaas antes de cancelar ou encerrar a cobrança externa. Não afirmar que não há meios de pagamento históricos ainda válidos.
 - Migração efetiva foi registrada pelo Supabase como versão `20261013182943`; arquivos de rascunho anteriores foram movidos para `supabase/drafts/` por segurança.
+
+## Confirmação sobre cobrança legada — 13/10/2026
+
+O responsável pelo projeto informou expressamente que a fatura legada de R$ 49,90, vencida em 07/10/2026, referente à Adoradores Church, **era apenas um teste** e solicitou que fosse desconsiderada para o planejamento da integração de ofertas. Portanto, **não bloqueia a preparação de novas ofertas voluntárias**. Essa classificação é informação fornecida pelo responsável, não uma confirmação obtida no Asaas. **Não apagar, cancelar, dar baixa nem alterar** o registro ou a cobrança externa sem uma instrução específica. A restrição de não ativar cobranças reais permanece vigente até autorização adicional.
