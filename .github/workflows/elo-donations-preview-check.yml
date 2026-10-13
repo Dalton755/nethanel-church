@@ -14,6 +14,7 @@ on:
       - "supabase/functions/elo-developer-donations-webhook/**"
       - "supabase/migrations/20261012190000_elo_free_for_all_draft.sql"
       - "supabase/migrations/20261012190100_elo_voluntary_developer_donations_draft.sql"
+      - "supabase/migrations/20261013004655_elo_donations_sandbox_demo_v62.sql"
   workflow_dispatch:
 
 permissions:
@@ -55,6 +56,7 @@ jobs:
           paths=[
             "supabase/migrations/20261012190000_elo_free_for_all_draft.sql",
             "supabase/migrations/20261012190100_elo_voluntary_developer_donations_draft.sql",
+            "supabase/migrations/20261013004655_elo_donations_sandbox_demo_v62.sql",
           ]
           for path in paths:
             source=Path(path).read_text(encoding="utf-8")
@@ -71,8 +73,10 @@ jobs:
                            "billing_prepare_invoice(", "list_public_elo_plans()"):
             assert required in migration, required
           donate=Path("supabase/functions/elo-developer-donations/index.ts").read_text()
-          assert "ELO_DONATIONS_LIVE_ENABLED" in donate
-          assert 'environment === "production" && !enabledProduction' in donate
-          assert "expectedMethods" in donate and "paymentLinks" in donate
+          assert 'ELO_ASAAS_SANDBOX_API_KEY' in donate
+          assert 'const environment = "sandbox"' in donate
+          assert 'const base = SANDBOX_URL' in donate
+          assert 'DEMO_ORG_ID' in donate and 'paymentLinks' in donate
+          assert 'https://api.asaas.com/v3' not in donate
           print("Nenhum pagamento em producao e gerado por esta verificacao.")
           PY
