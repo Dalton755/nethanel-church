@@ -1,6 +1,6 @@
 # Nethanel Elo — gratuidade e ofertas voluntárias
 
-**Atualizado em outubro de 2026 — HOMOLOGAÇÃO**. A implementação do Sandbox está isolada na `feature/elo-updates-foundation`, sem merge em `main`, sem publicar APK em loja ou ativar cobranças reais. A migração de acesso gratuito para todas as igrejas continua em rascunho e NÃO foi aplicada.
+**Atualizado em outubro de 2026 — HOMOLOGAÇÃO**. A implementação do Sandbox está isolada na `feature/elo-updates-foundation`, sem merge em `main`, sem publicar APK em loja ou ativar cobranças reais. A migração segura para acesso integral gratuito foi aplicada no Supabase em 13/10/2026 (versão 20261013182943). O fluxo de ofertas continua restrito à igreja Demo e ao Asaas Sandbox; não existem ofertas reais habilitadas.
 
 ## Ofertas no app de prévia
 
@@ -9,7 +9,7 @@
 - Valores sugeridos R$ 20/50/100/200 e campo livre a partir de R$ 5. Oferta opcional sem conceder recursos extras.
 - **Pix avulso:** o servidor consulta `GET /pix/addressKeys?status=ACTIVE` do Asaas Sandbox, cria QR **estático de uso único** `POST /pix/qrCodes/static` (value, externalReference, `allowsMultiplePayments:false`, expiração) e devolve o `payload` Pix ao app. O app gera o QR localmente com `react-native-qrcode-svg` e permite **Pix Copia e Cola** com `expo-clipboard`. Não há formulário Asaas ou criação de cadastro de pagador nesta modalidade.
 - **Pré-requisito:** a conta Asaas Sandbox deve possuir ao menos uma chave Pix ativa. Chave API de Sandbox `ELO_ASAAS_SANDBOX_API_KEY` fica exclusivamente no Supabase (nunca no app). Uma chave ausente/inválida ou sem Pix ativo retorna uma mensagem, sem gerar QR falso.
-- **Pix mensal:** até implementação específica de recorrência Pix, mantém-se o fluxo anterior de Payment Link com pagamento mensal manual, via Asaas. Cartão/boleto também continuam hospedados, em Sandbox. Não chamar QR Pix mensal de assinatura automática.
+- **Pix mensal:** QR Code Pix mensal MANUAL gerado dentro do Elo, sem formulário externo, com competência por mês, histórico, proteção contra duplicidade e cancelamento. O teste de pagamento de outubro/2026 foi confirmado no Sandbox e a oferta mensal de teste foi cancelada. Não é Pix Automático nem débito automático. Cartão e boleto continuam no checkout Sandbox.
 - Os dados da oferta ficam na tabela de acesso restrito `elo_developer_donations` com `provider_pix_qr_id` e `pix_payload`; o histórico mostra pendência ou pagamento confirmado.
 - Eventos de QR são conciliados por `payment.pixQrCodeId` ou referência externa `elo-donation:<id>`, conferindo organização, ambiente e valor em centavos. Webhook com token Asaas, idempotência por evento; não registra CPF nem número de cartão.
 - Nunca atualizar `organization_subscriptions`, planos ou dados contábeis das igrejas como efeito de uma oferta.
@@ -20,17 +20,17 @@
 - `20261013004655_elo_donations_sandbox_demo_v62.sql`: apenas ofertas Sandbox da Elo Church Demo, funções RPC com validação de perfil.
 - `20261013020602_elo_sandbox_inline_pix_qr_v63.sql`: colunas de QR Pix e restrições de uso único na Demo.
 - Edge Functions `elo-developer-donations` (`verify_jwt=true`) e `elo-asaas-sandbox-webhook` (token exclusivo com `verify_jwt=false`), ambas limitadas ao Sandbox e à Demo.
-- Não implantar `20261012190000_elo_free_for_all_draft.sql` sem autorização explícita.
+- Acesso gratuito aplicado: `20261013182943_elo_free_access_preserve_legacy_billing_v65.sql`. Os rascunhos antigos de gratuidade e ofertas foram arquivados fora da pasta executável, em `supabase/drafts/`. Histórico comercial preservado; 1 fatura antiga de R$ 49,90 em atraso continua aguardando conferência do provedor.
 
-## Pix mensal manual — implementação em prévia, SEM ativação no backend
+## Pix mensal manual — implementação validada no Sandbox, sem produção
 
 - O usuário pode optar por "Oferta mensal" + "Pix". Cada mês gera um Pix **por solicitação**, dentro do app, sem criar checkout externo e **sem débito automático**.
 - O compromisso não é uma assinatura financeira automática. Um mês já pago não gera nova cobrança; a próxima competência terá outro QR próprio. Não há juros, multas nem bloqueios por não ofertar.
 - Os períodos ficam em `elo_developer_monthly_pix_cycles`, com unicidade por oferta/mês, histórico por competência, eventos idempotentes e acesso restrito à Demo.
 - O cancelamento impede a criação de novos Pix; QR já emitido pode existir até expirar e é tentado revogar no Sandbox. Pagamentos confirmados permanecem no histórico.
-- Migração preparada: `20261013110000_elo_monthly_pix_sandbox_draft.sql`. **NÃO APLICADA no Supabase**; somente depois de autorização explícita para alterar o banco compartilhado em homologação.
-- Funções `elo-developer-donations` e `elo-asaas-sandbox-webhook` modificadas no GitHub, **SEM deploy** nesta fase.
-- Testes estáticos de SQL, Deno, 4 cenários de ciclo mensal e UI React Native passaram; build de APK de prévia em execução. Todas as formas de contribuição continuam sendo apenas Sandbox.
+- Banco de dados da funcionalidade mensal aplicado manualmente e verificado no Supabase. O fluxo foi testado de ponta a ponta no Asaas Sandbox.
+- Edge Functions `elo-developer-donations` e `elo-asaas-sandbox-webhook` implantadas somente para fluxo de Sandbox, com credenciais separadas. Não ativar produção sem aprovação.
+- Testes estáticos SQL/Deno/React Native aprovados, APK de prévia compilado, Pix mensal pago e cancelado no Sandbox. Todas as formas de contribuição continuam sendo apenas Sandbox.
 
 ## Homologação pendente
 
