@@ -1,4 +1,4 @@
-name: Elo Principal - Corrigir oferta Sandbox por igreja (APK de previa)
+name: Elo Principal - Pix QR direto no app (APK Sandbox)
 
 # Roda SOMENTE na branch de testes. Nao faz merge nem deploy.
 on:
@@ -33,8 +33,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/elo-generic-historic/{last-preview,latest,previous,earliest}
-          gh run download 38329227141 --repo "$GITHUB_REPOSITORY" \
-            --name nethanel-elo-principal-asaas-sandbox-preview \
+          gh run download 38332547285 --repo "$GITHUB_REPOSITORY" \
+            --name nethanel-elo-principal-asaas-demo-corrigido-preview \
             --dir /tmp/elo-generic-historic/last-preview
           test -s /tmp/elo-generic-historic/last-preview/nethanel-elo-platform-preview.apk
           gh run download 37397162273 --repo "$GITHUB_REPOSITORY" \
@@ -126,7 +126,7 @@ jobs:
       - name: Disponibilizar somente APK aprovado para teste no GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: nethanel-elo-principal-asaas-demo-corrigido-preview
+          name: nethanel-elo-principal-pix-qrcode-sandbox-preview
           path: apps/mobile/nethanel-elo-platform-preview.apk
           retention-days: 7
           if-no-files-found: error
