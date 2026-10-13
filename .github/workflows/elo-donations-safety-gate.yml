@@ -1,0 +1,28 @@
+name: Elo - Auditoria de seguranca das ofertas (sem deploy)
+
+on:
+  push:
+    branches:
+      - feature/elo-updates-foundation
+    paths:
+      - "scripts/elo_donations_safety_gate.py"
+      - ".github/workflows/elo-donations-safety-gate.yml"
+      - "supabase/functions/elo-developer-donations/**"
+      - "supabase/functions/elo-asaas-sandbox-webhook/**"
+      - "supabase/migrations/20261013110000_elo_monthly_pix_sandbox_draft.sql"
+      - "supabase/migrations/20261013004655_elo_donations_sandbox_demo_v62.sql"
+      - "apps/mobile/src/features/more/DeveloperOfferingScreen.tsx"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  readonly-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Somente ler codigo na branch de testes
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Testes de isolamento do Sandbox e prevencao de cobranças reais
+        run: python3 scripts/elo_donations_safety_gate.py
