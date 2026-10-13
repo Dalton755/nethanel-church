@@ -62,11 +62,12 @@ Deno.serve(async (request) => {
   const extref = typeof payment?.externalReference === "string" ?
     payment.externalReference : "";
   const refId = /^elo-donation:([0-9a-f-]{36})$/i.exec(extref)?.[1] ?? null;
+  const monthlyRefId = /^elo-monthly:([0-9a-f-]{36})$/i.exec(extref)?.[1] ?? null;
 
   const receipt=parseSandboxPixEvent(body);
   // Demais eventos são ignorados antes de sequer abrir conexão com o banco.
   if (!receipt && (!payment || !Object.hasOwn(DONATION_PAYMENT_EVENTS, eventName) ||
-      (!paymentLink && !subscriptionId && !refId && !pixQrCodeId))) return reply({ok:true,ignored:true});
+      (!paymentLink && !subscriptionId && !refId && !pixQrCodeId && !monthlyRefId))) return reply({ok:true,ignored:true});
 
   const base=Deno.env.get("SUPABASE_URL") ?? "";
   const key=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -77,6 +78,60 @@ Deno.serve(async (request) => {
   // Novas ofertas da igreja DEMO: valor livre >= R$ 5 e recorrência.
   // Evita interceptar outros pagamentos Asaas e preserva o antigo teste Pix.
   const DEMO_ORG_ID="101212c5-6e81-4915-ae9a-fbde5b42bb04";
+
+  // Pix mensal manual: o QR de CADA mês tem seu próprio identificador.
+  // O vínculo com a oferta é verificado antes da conciliação.
+  if(payment && Object.hasOwn(DONATION_PAYMENT_EVENTS,eventName) &&
+      (monthlyRefId || pixQrCodeId)) {
+    const selectors: {field:string;value:string}[] = [];
+    if(monthlyRefId) selectors.push({field:"id",value:monthlyRefId});
+    if(pixQrCodeId) selectors.push({field:"provider_qr_id",value:pixQrCodeId});
+    let cycle:Record<string,any>|null=null;
+    for(const target of selectors){
+      const {data,error}=await db.from("elo_developer_monthly_pix_cycles")
+        .select("id,donation_id,provider_qr_id,amount_cents,status")
+        .eq(target.field,target.value).maybeSingle();
+      if(error) return reply({ok:false,message:"Erro ao localizar Pix mensal."},500);
+      if(data){cycle=data;break;}
+    }
+    if(cycle){
+      // Bloqueio de eventos que misturam QR de um mês com a referência de outro.
+      if((monthlyRefId && cycle.id !== monthlyRefId) ||
+          (pixQrCodeId && cycle.provider_qr_id !== pixQrCodeId))
+        return reply({ok:false,message:"Identificação do período Pix inválida."},422);
+      const {data:d,error:dError}=await db.from("elo_developer_donations")
+        .select("id,amount_cents,environment,frequency,payment_link_id,provider_subscription_id")
+        .eq("id",cycle.donation_id).eq("organization_id",DEMO_ORG_ID)
+        .eq("environment","sandbox").eq("frequency","monthly")
+        .eq("payment_method","pix").is("checkout_url",null).maybeSingle();
+      if(dError || !d)return reply({ok:false,message:"Oferta mensal não localizada."},422);
+      let v;
+      try{
+        v=prepareDonationEvent(body,{
+          ...(d as DonationRecord),provider_pix_qr_id:cycle.provider_qr_id,
+          provider_monthly_cycle_id:cycle.id,
+        },"sandbox");
+        if(v && v.amount_cents !== cycle.amount_cents)
+          throw new Error("Valor do mês divergente");
+      }catch{
+        return reply({ok:false,message:"Evento de Pix mensal inválido."},422);
+      }
+      if(!v)return reply({ok:true,ignored:true});
+      const {error}=await db.rpc("elo_apply_developer_monthly_pix_event",{
+        p_cycle_id:cycle.id,p_event_key:v.event_key,
+        p_provider_payment_id:v.provider_payment_id,
+        p_status:v.status,p_amount_cents:v.amount_cents,
+      });
+      if(error){
+        console.error("Falha de conciliação do Pix mensal",error.code);
+        return reply({ok:false,message:"Falha ao conciliar Pix mensal."},500);
+      }
+      console.log("Elo Sandbox: Pix mensal conciliado",{
+        type:eventName,status:v.status,
+      });
+      return reply({ok:true,monthly:true});
+    }
+  }
   let donation: DonationRecord | null = null;
   if (payment && Object.hasOwn(DONATION_PAYMENT_EVENTS, eventName)) {
     const filters: {column: string; value: string}[] = [];
