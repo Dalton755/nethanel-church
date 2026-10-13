@@ -1,6 +1,6 @@
 # Elo — Asaas PRODUÇÃO: endpoints pré-instalados, cobranças DESATIVADAS
 
-**Estado em 13/10/2026:** autorização expressa somente para preparar infraestrutura REAL **inativa**.
+**Estado em 13/10/2026:** autorização expressa somente para preparar infraestrutura REAL **inativa**. **Implantação confirmada no Supabase:** `elo-developer-donations-production` v1 (`verify_jwt=true`) e `elo-asaas-production-webhook` v1 (`verify_jwt=false`), ambas com comportamento fail-closed `503`. O Asaas de produção NÃO foi conectado e as credenciais reais ainda NÃO foram configuradas. O CI de bloqueio teve sucesso na execução `38466726474`.
 A branch `feature/elo-updates-foundation` não foi mesclada nem publicada em Play Store, nenhum pagamento real foi iniciado.
 
 ## Isolamento funcional
