@@ -186,6 +186,9 @@ Deno.serve(async (req) => {
         signal:AbortSignal.timeout(18000),
       });
       const keysJson = await keysResult.json().catch(() => ({}));
+      if(keysResult.status === 401) throw new Error(
+        "A chave de API do Asaas Sandbox foi recusada. Atualize ELO_ASAAS_SANDBOX_API_KEY no Supabase."
+      );
       if(!keysResult.ok) throw new Error("Não foi possível consultar as chaves Pix do Sandbox.");
       const activeKey = Array.isArray(keysJson.data)
         ? keysJson.data.find((k: any) =>
