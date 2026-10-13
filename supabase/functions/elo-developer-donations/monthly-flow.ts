@@ -38,13 +38,11 @@ export async function getOrCreateMonthlyPix(
   try {
     pix=await createSandboxManualPix(apiKey,Number(reservation.amountCents),
       `elo-monthly:${cycleId}`,"Oferta voluntária mensal Nethanel Elo (Pix manual, teste)");
-    const {data:saved,error:saveError}=await admin
-      .from("elo_developer_monthly_pix_cycles").update({
-        status:"pending",provider_qr_id:pix.id,pix_payload:pix.payload,
-        pix_expires_at:pix.expiresAt,updated_at:new Date().toISOString(),
-      }).eq("id",cycleId).eq("donation_id",donationId).eq("status","processing")
-      .select("id").maybeSingle();
-    if(saveError || !saved) {
+    const {data:saved,error:saveError}=await admin.rpc("elo_commit_monthly_pix_qr",{
+      p_cycle_id:cycleId,p_donation_id:donationId,p_provider_qr_id:pix.id,
+      p_pix_payload:pix.payload,p_expires_at:pix.expiresAt,
+    });
+    if(saveError || saved !== true) {
       await tryDisableSandboxPix(apiKey,pix.id);
       throw new Error("Não foi possível registrar o Pix mensal.");
     }
@@ -63,39 +61,32 @@ export async function getOrCreateMonthlyPix(
 }
 
 export async function cancelMonthlyManualPix(
-  admin: any, apiKey: string, donation: any,
+  user: any, apiKey: string, donation: any,
 ) {
   if(donation.organization_id!==sandboxDemoOrg || donation.environment!=="sandbox" ||
      donation.frequency!=="monthly" || donation.payment_method!=="pix" ||
      donation.checkout_url) {
     return {ok:false,message:"Esta oferta não utiliza Pix mensal manual."};
   }
-  const {data:active,error:listError}=await admin
-    .from("elo_developer_monthly_pix_cycles").select("id,provider_qr_id")
-    .eq("donation_id",donation.id).eq("status","pending");
-  if(listError) return {ok:false,message:"Não foi possível consultar os Pix pendentes."};
-
-  // Cancelar a escolha mensal impede novos códigos; um código já emitido
-  // ainda pode ser liquidado até expirar se o provedor recusar a revogação.
-  const failedQr: string[]=[];
-  for(const cycle of active ?? []){
-    if(cycle.provider_qr_id && !await tryDisableSandboxPix(apiKey,cycle.provider_qr_id))
-      failedQr.push(String(cycle.id));
+  // O banco trava a mesma linha que a gravação do QR. Assim, nenhum
+  // Pix novo pode nascer depois do cancelamento, mesmo com cliques simultâneos.
+  const {data:closed,error}=await user.rpc("cancel_elo_monthly_pix_pledge",{
+    p_donation_id:donation.id,
+  });
+  if(error || !closed?.canceled) {
+    return {ok:false,message:error?.message ??
+      "Não foi possível cancelar a contribuição mensal."};
   }
-  const {error:updateError}=await admin.from("elo_developer_donations")
-    .update({status:"canceled",updated_at:new Date().toISOString()})
-    .eq("id",donation.id).eq("organization_id",sandboxDemoOrg)
-    .eq("frequency","monthly").eq("payment_method","pix");
-  if(updateError) return {ok:false,message:"Não foi possível cancelar a oferta mensal."};
-  if((active??[]).length>0){
-    await admin.from("elo_developer_monthly_pix_cycles")
-      .update({status:"canceled",updated_at:new Date().toISOString()})
-      .eq("donation_id",donation.id).eq("status","pending");
+  let unrevoked=0;
+  const qrIds=Array.isArray(closed.qrIds) ? closed.qrIds : [];
+  for(const code of qrIds) {
+    if(typeof code==="string" && !await tryDisableSandboxPix(apiKey,code))
+      unrevoked++;
   }
   return {
-    ok:true,canceled:true,
-    warning:failedQr.length ?
-      "Cancelada. Um Pix emitido antes do cancelamento ainda pode ser pago até expirar." :
+    ok:true,canceled:true,alreadyCanceled:Boolean(closed.alreadyCanceled),
+    warning:unrevoked ?
+      "A oferta foi cancelada e não haverá novos QR Codes mensais. Um Pix já emitido poderá permanecer válido até expirar." :
       null,
   };
 }
