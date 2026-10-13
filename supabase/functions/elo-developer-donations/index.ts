@@ -56,6 +56,29 @@ Deno.serve(async (req) => {
   if (!configured) return json({ ok: false,
     message: "Chave do Asaas Sandbox ainda não configurada no Supabase." }, 503);
 
+  // Leitura segura do Pix criado anteriormente. Nunca expõe chaves de API.
+  if (body.action === "pix") {
+    const donationId = typeof body.id === "string" ? body.id : "";
+    if (!/^[a-f0-9-]{36}$/i.test(donationId))
+      return json({ ok:false, message:"Identificador de oferta inválido." },400);
+    const { data: list, error: listError } = await user.rpc(
+      "list_my_elo_developer_donations", { p_organization_id: DEMO_ORG_ID },
+    );
+    if (listError || !Array.isArray(list) || !list.some((row: any) => row.id === donationId))
+      return json({ok:false,message:"Sem acesso a esta oferta."},403);
+    const { data:d, error } = await admin.from("elo_developer_donations")
+      .select("id,status,amount_cents,payment_method,frequency,environment,organization_id,requested_by,pix_payload,pix_expires_at")
+      .eq("id",donationId).eq("organization_id",DEMO_ORG_ID)
+      .eq("requested_by",userInfo.user.id).eq("environment","sandbox")
+      .maybeSingle();
+    if(error || !d || d.payment_method !== "pix" || d.frequency !== "once" || !d.pix_payload)
+      return json({ok:false,message:"Pix de teste não encontrado."},404);
+    if(d.pix_expires_at && Date.parse(d.pix_expires_at) < Date.now() && d.status !== "paid")
+      return json({ok:false,message:"Este Pix expirou. Gere uma nova oferta."},410);
+    return json({ok:true,sandbox:true,id:d.id,status:d.status,
+      amountCents:d.amount_cents,pixPayload:d.pix_payload,expiresAt:d.pix_expires_at});
+  }
+
   if (body.action === "cancel") {
     if (typeof body.id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.id))
       return json({ ok: false, message: "Identificador inválido." }, 400);
@@ -125,8 +148,24 @@ Deno.serve(async (req) => {
   }, 403);
 
   const id = String(intent.id);
-  if (intent.checkout_url && trustedAsaasLink(String(intent.checkout_url)))
-    return json({ ok: true, id, checkoutUrl: intent.checkout_url, reused: true, sandbox: environment === "sandbox" });
+  if (intent.checkout_url && trustedAsaasLink(String(intent.checkout_url))) {
+    if (method === "pix" && frequency === "once") {
+      return json({ok:false,message:"Uma oferta anterior ainda está aberta no Asaas. Aguarde alguns minutos para gerar o Pix diretamente no Elo."},409);
+    }
+    return json({ ok: true, id, checkoutUrl: intent.checkout_url, reused: true, sandbox: true });
+  }
+  // Se uma tentativa anterior já gerou QR, reutilize-o sem nova cobrança.
+  if (method === "pix" && frequency === "once" && intent.status === "pending") {
+    const {data:d} = await admin.from("elo_developer_donations")
+      .select("pix_payload,pix_expires_at,status")
+      .eq("id",id).eq("organization_id",DEMO_ORG_ID)
+      .eq("requested_by",userInfo.user.id).eq("environment","sandbox").maybeSingle();
+    if (typeof d?.pix_payload === "string" && d.pix_payload.length > 30) {
+      if (d.pix_expires_at && Date.parse(d.pix_expires_at) < Date.now())
+        return json({ok:false,message:"O Pix anterior expirou. Tente gerar uma nova oferta após alguns minutos."},409);
+      return json({ok:true,id,pixPayload:d.pix_payload,expiresAt:d.pix_expires_at,reused:true,sandbox:true});
+    }
+  }
   if (intent.status !== "draft") return json({
     ok: false, message: "Essa cobrança está sendo preparada. Aguarde um instante e tente novamente."
   }, 409);
@@ -136,6 +175,72 @@ Deno.serve(async (req) => {
     .eq("id", id).eq("status", "draft").eq("requested_by", userInfo.user.id)
     .select("id").maybeSingle();
   if (claimError || !claimed) return json({ ok: false, message: "Cobrança já está em preparação." }, 409);
+
+  if (method === "pix" && frequency === "once") {
+    try {
+      // QR estático de pagamento ÚNICO evita criar cadastro de pagador.
+      // Consulta somente chaves ATIVAS na conta Asaas Sandbox (sem criar uma).
+      const keysResult = await fetch(`${base}/pix/addressKeys?status=ACTIVE&limit=20`,{
+        headers:{"access_token":asaasKey,"accept":"application/json",
+          "User-Agent":"Nethanel-Elo-Sandbox-Pix/1.0"},
+        signal:AbortSignal.timeout(18000),
+      });
+      const keysJson = await keysResult.json().catch(() => ({}));
+      if(!keysResult.ok) throw new Error("Não foi possível consultar as chaves Pix do Sandbox.");
+      const activeKey = Array.isArray(keysJson.data)
+        ? keysJson.data.find((k: any) =>
+          k?.status === "ACTIVE" && typeof k?.key === "string" && k.key.length >= 8)
+        : null;
+      if(!activeKey) throw new Error(
+        "O Asaas Sandbox ainda não tem uma chave Pix ATIVA. Cadastre uma chave Pix na conta Sandbox para gerar o QR Code dentro do Elo."
+      );
+      const qrResp = await fetch(`${base}/pix/qrCodes/static`, {
+        method:"POST",
+        headers:{"access_token":asaasKey,"accept":"application/json",
+          "content-type":"application/json","User-Agent":"Nethanel-Elo-Sandbox-Pix/1.0"},
+        body:JSON.stringify({
+          addressKey:activeKey.key,
+          description:"Oferta única voluntária Nethanel Elo (simulação)",
+          value:cents/100,
+          format:"PAYLOAD",
+          allowsMultiplePayments:false,
+          expirationSeconds:86400,
+          externalReference:`elo-donation:${id}`,
+        }),
+        signal:AbortSignal.timeout(22000),
+      });
+      const qr=await qrResp.json().catch(() => ({}));
+      if(!qrResp.ok || typeof qr?.id!=="string" || typeof qr?.payload!=="string" ||
+          qr.payload.length < 30 || qr.payload.length > 2000) {
+        const providerMessage = qr?.errors?.[0]?.description;
+        throw new Error(String(providerMessage ??
+          "O Asaas Sandbox não retornou um QR Code Pix válido.").slice(0,260));
+      }
+      const expiresAt = new Date(Date.now()+86400000).toISOString();
+      const {data:stored,error:storeError}=await admin.from("elo_developer_donations").update({
+        status:"pending",provider_pix_qr_id:qr.id,
+        pix_payload:qr.payload,pix_expires_at:expiresAt,
+        updated_at:new Date().toISOString(),
+      }).eq("id",id).eq("organization_id",DEMO_ORG_ID)
+        .eq("requested_by",userInfo.user.id).eq("status","processing")
+        .select("id").maybeSingle();
+      if(storeError || !stored) {
+        // QR remoto nunca pode permanecer ativo sem conciliação local.
+        await fetch(`${base}/pix/qrCodes/static/${encodeURIComponent(qr.id)}`,{
+          method:"DELETE",
+          headers:{"access_token":asaasKey,"User-Agent":"Nethanel-Elo-Sandbox-Pix/1.0"},
+        }).catch(()=>null);
+        throw new Error("Não foi possível salvar o QR Code de teste.");
+      }
+      return json({ok:true,id,sandbox:true,pixPayload:qr.payload,expiresAt});
+    }catch(error) {
+      await admin.from("elo_developer_donations").update({
+        status:"failed",updated_at:new Date().toISOString(),
+      }).eq("id",id).eq("status","processing");
+      return json({ok:false,message:error instanceof Error ? error.message :
+        "Não foi possível gerar o QR Pix no Sandbox."},502);
+    }
+  }
 
   const types: Record<string, string> = { pix: "PIX", card: "CREDIT_CARD", boleto: "BOLETO" };
   const payload = {
