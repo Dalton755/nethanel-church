@@ -22,6 +22,16 @@
 - Edge Functions `elo-developer-donations` (`verify_jwt=true`) e `elo-asaas-sandbox-webhook` (token exclusivo com `verify_jwt=false`), ambas limitadas ao Sandbox e à Demo.
 - Não implantar `20261012190000_elo_free_for_all_draft.sql` sem autorização explícita.
 
+## Pix mensal manual — implementação em prévia, SEM ativação no backend
+
+- O usuário pode optar por "Oferta mensal" + "Pix". Cada mês gera um Pix **por solicitação**, dentro do app, sem criar checkout externo e **sem débito automático**.
+- O compromisso não é uma assinatura financeira automática. Um mês já pago não gera nova cobrança; a próxima competência terá outro QR próprio. Não há juros, multas nem bloqueios por não ofertar.
+- Os períodos ficam em `elo_developer_monthly_pix_cycles`, com unicidade por oferta/mês, histórico por competência, eventos idempotentes e acesso restrito à Demo.
+- O cancelamento impede a criação de novos Pix; QR já emitido pode existir até expirar e é tentado revogar no Sandbox. Pagamentos confirmados permanecem no histórico.
+- Migração preparada: `20261013110000_elo_monthly_pix_sandbox_draft.sql`. **NÃO APLICADA no Supabase**; somente depois de autorização explícita para alterar o banco compartilhado em homologação.
+- Funções `elo-developer-donations` e `elo-asaas-sandbox-webhook` modificadas no GitHub, **SEM deploy** nesta fase.
+- Testes estáticos de SQL, Deno, 4 cenários de ciclo mensal e UI React Native passaram; build de APK de prévia em execução. Todas as formas de contribuição continuam sendo apenas Sandbox.
+
 ## Homologação pendente
 
 1. APK de prévia com QR nativo e botão “Copiar código Pix” deve ser compilado, instalado e testado.
