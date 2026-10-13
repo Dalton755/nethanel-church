@@ -220,4 +220,73 @@ revoke all on function public.elo_apply_developer_monthly_pix_event(uuid,text,te
  from public,anon,authenticated;
 grant execute on function public.elo_apply_developer_monthly_pix_event(uuid,text,text,text,integer)
  to service_role;
+-- Commit atômico: cancelamento concorrente nunca deixa um novo QR ativo sem compromisso.
+create or replace function public.elo_commit_monthly_pix_qr(
+ p_cycle_id uuid,p_donation_id uuid,p_provider_qr_id text,
+ p_pix_payload text,p_expires_at timestamptz
+) returns boolean
+language plpgsql security definer set search_path to pg_catalog,public,app_private
+as $
+declare d public.elo_developer_donations%rowtype;
+ v_id uuid;
+begin
+ if p_expires_at<=now() or length(coalesce(p_provider_qr_id,'')) not between 5 and 150
+    or length(coalesce(p_pix_payload,'')) not between 30 and 2000 then
+   raise exception 'Código Pix inválido.' using errcode='22023';
+ end if;
+ select * into d from public.elo_developer_donations
+ where id=p_donation_id and organization_id='101212c5-6e81-4915-ae9a-fbde5b42bb04'::uuid
+ and environment='sandbox' and frequency='monthly'
+ and payment_method='pix' and checkout_url is null for update;
+ if not found or d.status not in ('draft','processing','pending','paid')
+ then return false; end if;
+ update public.elo_developer_monthly_pix_cycles
+ set provider_qr_id=p_provider_qr_id,pix_payload=p_pix_payload,
+ pix_expires_at=p_expires_at,status='pending',updated_at=now()
+ where id=p_cycle_id and donation_id=p_donation_id and status='processing'
+ returning id into v_id;
+ return v_id is not null;
+end;
+$;
+revoke all on function public.elo_commit_monthly_pix_qr(uuid,uuid,text,text,timestamptz)
+ from public,anon,authenticated;
+grant execute on function public.elo_commit_monthly_pix_qr(uuid,uuid,text,text,timestamptz)
+ to service_role;
+
+-- Cancelamento atômico, trava mesma oferta que grava o QR.
+-- Nenhum saldo, Pix pago ou histórico anterior é apagado.
+create or replace function public.cancel_elo_monthly_pix_pledge(p_donation_id uuid)
+returns jsonb language plpgsql security definer
+set search_path to pg_catalog,public,app_private
+as $
+declare d public.elo_developer_donations%rowtype;
+ v_codes jsonb;
+begin
+ select * into d from public.elo_developer_donations
+ where id=p_donation_id and requested_by=(select auth.uid())
+   and organization_id='101212c5-6e81-4915-ae9a-fbde5b42bb04'::uuid
+   and environment='sandbox' and frequency='monthly'
+   and payment_method='pix' and checkout_url is null for update;
+ if not found or not app_private.can_manage_elo_donation(d.organization_id)
+ then raise exception 'Oferta mensal não autorizada.' using errcode='42501'; end if;
+ if d.status='canceled' then
+  return jsonb_build_object('canceled',true,'alreadyCanceled',true,
+   'qrIds','[]'::jsonb);
+ end if;
+ if d.status not in ('draft','processing','pending','paid') then
+  raise exception 'Oferta mensal indisponível.' using errcode='22023'; end if;
+
+ select coalesce(jsonb_agg(provider_qr_id),'[]'::jsonb) into v_codes
+ from public.elo_developer_monthly_pix_cycles
+ where donation_id=d.id and status='pending' and provider_qr_id is not null;
+ update public.elo_developer_donations set status='canceled',updated_at=now()
+ where id=d.id;
+ update public.elo_developer_monthly_pix_cycles set status='canceled',updated_at=now()
+ where donation_id=d.id and status in ('pending','processing');
+ return jsonb_build_object('canceled',true,'alreadyCanceled',false,'qrIds',v_codes);
+end;
+$;
+revoke all on function public.cancel_elo_monthly_pix_pledge(uuid) from public,anon;
+grant execute on function public.cancel_elo_monthly_pix_pledge(uuid) to authenticated;
+
 notify pgrst,'reload schema';
