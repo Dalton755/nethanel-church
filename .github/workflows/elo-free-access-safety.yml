@@ -1,0 +1,27 @@
+name: Elo - Revisar acesso gratuito sem alterar banco
+
+on:
+  push:
+    branches: [feature/elo-updates-foundation]
+    paths:
+      - "supabase/migrations/20261013180000_elo_free_access_preserve_legacy_billing.sql"
+      - "scripts/elo_free_access_safety_check.py"
+      - ".github/workflows/elo-free-access-safety.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Ler somente branch de testes
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Preparar analisador PostgreSQL
+        run: python -m pip install --disable-pip-version-check pglast
+      - name: Sintaxe e guardas da migração gratuita
+        run: python scripts/elo_free_access_safety_check.py
