@@ -15,6 +15,7 @@ on:
       - "supabase/migrations/20261012190000_elo_free_for_all_draft.sql"
       - "supabase/migrations/20261012190100_elo_voluntary_developer_donations_draft.sql"
       - "supabase/migrations/20261013004655_elo_donations_sandbox_demo_v62.sql"
+      - "supabase/migrations/20261013110000_elo_monthly_pix_sandbox_draft.sql"
   workflow_dispatch:
 
 permissions:
@@ -42,6 +43,7 @@ jobs:
       - name: Deno Edge Functions (verificação estática sem deploy)
         run: |
           deno check --config supabase/functions/elo-developer-donations/deno.json supabase/functions/elo-developer-donations/index.ts
+          deno check --config supabase/functions/elo-developer-donations/deno.json supabase/functions/elo-developer-donations/monthly-flow.ts
           deno check --config supabase/functions/elo-developer-donations-webhook/deno.json supabase/functions/elo-developer-donations-webhook/index.ts
       - name: Homologar webhook de Pix Asaas com eventos simulados, sem rede
         run: |
@@ -57,6 +59,7 @@ jobs:
             "supabase/migrations/20261012190000_elo_free_for_all_draft.sql",
             "supabase/migrations/20261012190100_elo_voluntary_developer_donations_draft.sql",
             "supabase/migrations/20261013004655_elo_donations_sandbox_demo_v62.sql",
+            "supabase/migrations/20261013110000_elo_monthly_pix_sandbox_draft.sql",
           ]
           for path in paths:
             source=Path(path).read_text(encoding="utf-8")
@@ -87,6 +90,13 @@ jobs:
           assert "react-native-qrcode-svg" in mobile and "expo-clipboard" in mobile
           assert 'method === "pix" && frequency === "once"' in mobile
           assert "Copiar código Pix" in mobile
+          assert 'request_elo_monthly_pix_pledge' in donate
+          assert 'getOrCreateMonthlyPix' in donate
+          assert 'cancelMonthlyManualPix' in donate
+          assert 'monthly_pix' in donate
+          monthly=Path("supabase/functions/elo-developer-donations/monthly-flow.ts").read_text()
+          assert 'createSandboxManualPix' in monthly and 'reserve_elo_monthly_pix_cycle' in monthly
+          assert 'https://api.asaas.com/v3' not in monthly
 
           print("Nenhum pagamento em producao e gerado por esta verificacao.")
           PY
