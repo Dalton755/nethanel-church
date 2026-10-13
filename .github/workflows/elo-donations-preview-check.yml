@@ -101,6 +101,8 @@ jobs:
           assert 'monthly_pix' in donate
           monthly=Path("supabase/functions/elo-developer-donations/monthly-flow.ts").read_text()
           assert 'createSandboxManualPix' in monthly and 'reserve_elo_monthly_pix_cycle' in monthly
+          assert 'elo_commit_monthly_pix_qr' in monthly
+          assert 'cancel_elo_monthly_pix_pledge' in monthly
           assert 'https://api.asaas.com/v3' not in monthly
 
           print("Nenhum pagamento em producao e gerado por esta verificacao.")
