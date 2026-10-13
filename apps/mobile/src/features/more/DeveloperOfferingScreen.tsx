@@ -12,7 +12,11 @@ import { EloActionButton, EloCard, EloScreen, eloColors, eloSharedStyles } from 
 const P = Phosphor as any;
 type Frequency = "once" | "monthly";
 type Method = "pix" | "card" | "boleto";
-type PixDisplay = { id: string; payload: string; amountCents: number; expiresAt: string | null };
+type PixDisplay = {
+  id: string; payload: string; amountCents: number; expiresAt: string | null;
+  month?: string | null;
+};
+type MonthlyCycle = { month:string;status:string;paid_at:string|null };
 
 type Contribution = {
   id: string;
@@ -23,10 +27,17 @@ type Contribution = {
   created_at: string;
   checkout_url: string | null;
   can_cancel: boolean;
+  monthly_cycles?: MonthlyCycle[];
 };
 
 const brl = (cents: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
+const monthLabel = (period: string) => {
+  const date = new Date(period.slice(0, 10) + "T12:00:00");
+  return Number.isNaN(date.getTime()) ? period : new Intl.DateTimeFormat("pt-BR",{
+    month:"long",year:"numeric",
+  }).format(date);
+};
 const safeLink = (url: string) => {
   try {
     const u = new URL(url);
@@ -154,15 +165,23 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
     setLoadingPixId(item.id);
     try {
       const {data,error} = await supabase.functions.invoke("elo-developer-donations",{
-        body:{action:"pix",id:item.id},
+        body:{action:item.frequency==="monthly" ? "monthly_pix" : "pix",id:item.id},
       });
-      if(error || !data?.ok || typeof data.pixPayload !== "string" ||
-          data.pixPayload.length < 30) throw new Error(
-            data?.message ?? error?.message ?? "Não foi possível recuperar o QR Code Pix."
-          );
+      if(error || !data?.ok) throw new Error(
+        data?.message ?? error?.message ?? "Não foi possível recuperar o QR Code Pix."
+      );
+      if(data.alreadyPaid){
+        await reload();
+        Alert.alert("Oferta deste mês confirmada",
+          `O Pix de ${monthLabel(data.month)} já foi pago. Um novo Pix ficará disponível no próximo mês.`);
+        return;
+      }
+      if(typeof data.pixPayload!=="string" || data.pixPayload.length<30)
+        throw new Error("O Pix do mês não está disponível.");
       setPixCopied(false);
       setPixDisplay({id:item.id,payload:data.pixPayload,
-        amountCents:data.amountCents,expiresAt:data.expiresAt ?? null});
+        amountCents:data.amountCents,expiresAt:data.expiresAt ?? null,
+        month:data.month ?? null});
     }catch(error){
       Alert.alert("Pix indisponível",error instanceof Error ? error.message :
         "Tente novamente mais tarde.");
@@ -175,15 +194,17 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
       Alert.alert("Valor inválido", "Digite um valor entre R$ 5,00 e R$ 50.000,00.");
       return;
     }
-    const frequencyText = frequency === "monthly"
-      ? "Esta é uma contribuição mensal recorrente até que seja cancelada. "
+    const frequencyText = frequency === "monthly" && method === "pix"
+      ? "Esta é uma intenção de ofertar mensalmente, com um Pix manual diferente por mês. Não existe débito automático. "
+      : frequency === "monthly"
+      ? "Esta opção cria uma cobrança mensal gerenciada pelo Asaas até o cancelamento. "
       : "Esta é uma contribuição única. ";
     Alert.alert(
       "Confirmar oferta voluntária?",
       `${frequencyText}Valor: ${brl(cents)}. Esta é uma SIMULAÇÃO no Asaas Sandbox: não realize transferência real. Os recursos da igreja não dependem da oferta.`,
       [
         { text: "Voltar", style: "cancel" },
-        { text: method === "pix" && frequency === "once" ?
+        { text: method === "pix" ?
             "Gerar QR Code no Elo" : "Continuar no Asaas",
           onPress: () => void startOffering() },
       ],
@@ -206,12 +227,18 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
       if (error || !data?.ok) throw new Error(
         data?.message ?? error?.message ?? "Não foi possível preparar a oferta."
       );
-      if(method === "pix" && frequency === "once") {
+      if(method === "pix") {
+        if(data.alreadyPaid) {
+          await reload();
+          Alert.alert("Oferta deste mês confirmada",
+            "Este mês já está pago. O próximo Pix poderá ser gerado no mês seguinte.");
+          return;
+        }
         if(typeof data.pixPayload !== "string" || data.pixPayload.length < 30)
           throw new Error("O Asaas Sandbox não retornou um Pix válido.");
         setPixCopied(false);
         setPixDisplay({id:data.id,payload:data.pixPayload,amountCents:cents,
-          expiresAt:data.expiresAt ?? null});
+          expiresAt:data.expiresAt ?? null,month:data.month ?? null});
         await reload();
         return;
       }
@@ -232,7 +259,9 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
 
   function confirmCancel(item: Contribution) {
     Alert.alert("Cancelar oferta mensal?",
-      "As próximas cobranças da contribuição voluntária serão encerradas no Asaas. O acesso da igreja continuará gratuito.",
+      item.payment_method==="pix" && !item.checkout_url
+        ? "O compromisso voluntário mensal será encerrado e o Elo não gerará novos Pix. Um QR Code já emitido pode permanecer válido até expirar. O acesso continuará gratuito."
+        : "As próximas cobranças da contribuição voluntária serão encerradas no Asaas. O acesso da igreja continuará gratuito.",
       [
         { text: "Manter contribuição", style: "cancel" },
         { text: "Cancelar contribuição", style: "destructive",
@@ -253,7 +282,8 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
       return;
     }
     await reload();
-    Alert.alert("Contribuição cancelada", "As próximas ofertas mensais foram encerradas.");
+    Alert.alert("Contribuição cancelada",
+      data.warning ?? "O Elo não gerará novas ofertas mensais. O acesso continuará gratuito.");
   }
 
   return (
@@ -332,11 +362,9 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
       </View>
       {frequency === "monthly" ? (
         <Text style={styles.notice}>
-          Para oferta mensal, o Asaas gerencia a recorrência.
-          Pix mensal exige confirmação manual a cada mês e,
-          nesta etapa de testes, ainda abre o checkout do Asaas.
-          Na oferta única por Pix, o QR Code aparece diretamente no Elo.
-          Você poderá cancelar as próximas cobranças mensais.
+          {method==="pix"
+            ? "Pix mensal voluntário: o QR Code aparece aqui no Elo. Cada mês terá um código próprio, gerado quando você solicitar. Sem débito automático, multa ou obrigação de pagar. Você pode cancelar quando quiser."
+            : "Cartão ou boleto mensal: nesta etapa de testes, o Asaas gerencia a recorrência pelo checkout seguro. Você poderá cancelar as próximas cobranças."}
         </Text>
       ) : null}
       {!loaded ? <ActivityIndicator style={styles.loading} color={eloColors.blue} /> : null}
@@ -380,7 +408,7 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
       ) : null}
       <View style={styles.payButton}>
         <EloActionButton
-          label={method === "pix" && frequency === "once"
+          label={method === "pix"
             ? "Gerar QR Code Pix" : "Gerar teste no Asaas"}
           icon="HeartIcon"
           disabled={!enabled || !isDemo || cents < 500 || cents > 5000000}
@@ -412,11 +440,18 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
               icon="ArrowSquareOutIcon" onPress={() => void WebBrowser.openBrowserAsync(item.checkout_url!)} />
           ) : null}
           {!item.checkout_url && item.payment_method === "pix" &&
-            item.frequency === "once" && item.status === "pending" ? (
-            <EloActionButton label="Ver QR Code Pix" variant="secondary"
-              icon="QrCodeIcon" loading={loadingPixId===item.id}
+            (item.frequency==="monthly" ? item.status!=="canceled" : item.status==="pending") ? (
+            <EloActionButton label={item.frequency==="monthly"
+                ? "Ver ou gerar Pix deste mês" : "Ver QR Code Pix"}
+              variant="secondary" icon="QrCodeIcon" loading={loadingPixId===item.id}
               onPress={() => void openSavedPix(item)} />
           ) : null}
+          {item.frequency==="monthly" && item.payment_method==="pix" && !item.checkout_url ?
+            (item.monthly_cycles ?? []).slice(0,4).map(cycle => (
+              <Text key={cycle.month} style={styles.smallNote}>
+                {monthLabel(cycle.month)} • {statusName[cycle.status] ?? cycle.status}
+              </Text>
+            )) : null}
           {item.can_cancel ? (
             <EloActionButton label="Cancelar oferta mensal" variant="danger"
               loading={workingCancel===item.id} onPress={() => confirmCancel(item)} />
@@ -432,7 +467,10 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
               <View style={styles.pixHeader}>
                 <View style={styles.pixHeaderText}>
                   <Text style={styles.pixTitle}>Oferta por Pix</Text>
-                  <Text style={styles.pixSubtitle}>Código gerado no Asaas Sandbox</Text>
+                  <Text style={styles.pixSubtitle}>
+                    {pixDisplay?.month ? `Pix de ${monthLabel(pixDisplay.month)} • ` : ""}
+                    Código gerado no Asaas Sandbox
+                  </Text>
                 </View>
                 <Pressable accessibilityRole="button" accessibilityLabel="Fechar Pix"
                   onPress={() => setPixDisplay(null)} style={styles.pixClose}>
