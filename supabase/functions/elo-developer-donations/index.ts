@@ -84,8 +84,13 @@ Deno.serve(async (req) => {
     const id = typeof body.id === "string" ? body.id : "";
     if (!/^[0-9a-f-]{36}$/i.test(id))
       return json({ok:false,message:"Identificador da oferta mensal inválido."},400);
-    const result = await getOrCreateMonthlyPix(user,admin,asaasKey,id);
-    return json(result, result.ok ? 200 : 409);
+    try {
+      const result = await getOrCreateMonthlyPix(user,admin,asaasKey,id);
+      return json(result, result.ok ? 200 : 409);
+    } catch(error) {
+      return json({ok:false,message:error instanceof Error ? error.message :
+        "Não foi possível gerar o Pix deste mês."},403);
+    }
   }
 
   if (body.action === "cancel") {
@@ -158,8 +163,13 @@ Deno.serve(async (req) => {
     if(pledgeError || !pledge?.id) return json({
       ok:false,message:pledgeError?.message ?? "Não foi possível criar a oferta mensal."
     },403);
-    const result=await getOrCreateMonthlyPix(user,admin,asaasKey,String(pledge.id));
-    return json(result,result.ok?200:409);
+    try {
+      const result=await getOrCreateMonthlyPix(user,admin,asaasKey,String(pledge.id));
+      return json(result,result.ok?200:409);
+    } catch(error) {
+      return json({ok:false,message:error instanceof Error ? error.message :
+        "Não foi possível gerar a oferta mensal."},403);
+    }
   }
 
   const { data: intent, error: intentError } = await user.rpc("request_elo_developer_donation", {
