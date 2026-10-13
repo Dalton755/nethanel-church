@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import * as Phosphor from "phosphor-react-native";
 
@@ -32,6 +32,7 @@ const safeLink = (url: string) => {
   } catch { return false; }
 };
 const SUGGESTED_AMOUNTS_CENTS = [2000, 5000, 10000, 20000] as const;
+const TEST_ORG_ID = "101212c5-6e81-4915-ae9a-fbde5b42bb04";
 
 const statusName: Record<string, string> = {
   draft: "Preparando",
@@ -65,10 +66,17 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
   const [sandbox, setSandbox] = useState(true);
   const [history, setHistory] = useState<Contribution[]>([]);
   const [workingCancel, setWorkingCancel] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const isDemo = activeOrganization?.id === TEST_ORG_ID;
 
   const cents = Number(centsText || "0");
   const reload = useCallback(async () => {
-    if (!activeOrganization) return;
+    if (!activeOrganization || activeOrganization.id !== TEST_ORG_ID) {
+      setEnabled(false);
+      setHistory([]);
+      setLoaded(true);
+      return;
+    }
     const [capability, list] = await Promise.all([
       supabase.functions.invoke("elo-developer-donations", {
         body: { action: "capabilities" },
@@ -78,16 +86,29 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
       }),
     ]);
     setEnabled(!capability.error && capability.data?.ok === true &&
-      capability.data?.configured === true);
+      capability.data?.configured === true && capability.data?.sandbox === true);
     setSandbox(capability.data?.sandbox !== false);
     if (!list.error && Array.isArray(list.data)) setHistory(list.data as Contribution[]);
     setLoaded(true);
   }, [activeOrganization?.id]);
 
   useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    const listener = AppState.addEventListener("change", (state) => {
+      if (state === "active") void reload();
+    });
+    return () => listener.remove();
+  }, [reload]);
+
+  const refreshHistory = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try { await reload(); }
+    finally { setRefreshing(false); }
+  };
 
   function confirmCreate() {
-    if (!activeOrganization || !Number.isSafeInteger(cents) ||
+    if (!activeOrganization || !isDemo || !Number.isSafeInteger(cents) ||
         cents < 500 || cents > 5000000) {
       Alert.alert("Valor inválido", "Digite um valor entre R$ 5,00 e R$ 50.000,00.");
       return;
@@ -97,7 +118,7 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
       : "Esta é uma contribuição única. ";
     Alert.alert(
       "Confirmar oferta voluntária?",
-      `${frequencyText}Valor: ${brl(cents)}. O pagamento será realizado na página segura do Asaas e não altera os recursos gratuitos da sua igreja.`,
+      `${frequencyText}Valor: ${brl(cents)}. Esta é uma SIMULAÇÃO no Asaas Sandbox: não realize transferência real. Os recursos da igreja não dependem da oferta.`,
       [
         { text: "Voltar", style: "cancel" },
         { text: "Continuar no Asaas", onPress: () => void startOffering() },
@@ -106,7 +127,7 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
   }
 
   async function startOffering() {
-    if (!activeOrganization || creating) return;
+    if (!activeOrganization || !isDemo || creating) return;
     setCreating(true);
     try {
       const { data, error } = await supabase.functions.invoke("elo-developer-donations", {
@@ -123,8 +144,8 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
       await reload();
       await WebBrowser.openBrowserAsync(data.checkoutUrl);
       await reload();
-      Alert.alert("Obrigado pelo apoio!",
-        "O pagamento ainda precisa ser confirmado pelo Asaas. Você poderá acompanhar a situação nesta tela. Todos os recursos continuam gratuitos.");
+      Alert.alert("Cobrança de teste preparada!",
+        "Acesse o Asaas Sandbox para simular a confirmação. Ao retornar, toque em Atualizar histórico. Nenhum dinheiro real será cobrado.");
     } catch (error) {
       Alert.alert("Oferta não gerada",
         error instanceof Error ? error.message : "Tente novamente mais tarde.");
@@ -144,6 +165,7 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
   }
 
   async function cancelMonthly(item: Contribution) {
+    if (!isDemo) return;
     setWorkingCancel(item.id);
     const { data, error } = await supabase.functions.invoke("elo-developer-donations", {
       body: { action: "cancel", id: item.id },
@@ -246,18 +268,33 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
           description="A integração segura com o Asaas ainda está sendo ativada. O Elo continua totalmente gratuito."
           icon="InfoIcon" />
       ) : null}
-      {enabled && sandbox ? <Text style={styles.preview}>Ambiente de teste: nenhum valor real será cobrado.</Text> : null}
+      {isDemo && <Text style={styles.preview}>
+        SIMULAÇÃO • ASAAS SANDBOX — Nenhum valor real será cobrado.
+      </Text>}
+      {!isDemo && <EloState title="Teste restrito à igreja Demo"
+        description="A geração de ofertas está em homologação. Nas demais igrejas, o recurso será ativado somente após aprovação."
+        icon="InfoIcon" />}
       <View style={styles.payButton}>
         <EloActionButton
-          label="Gerar oferta pelo Asaas"
+          label={sandbox ? "Gerar teste no Asaas" : "Gerar oferta pelo Asaas"}
           icon="HeartIcon"
-          disabled={!enabled || !activeOrganization || cents < 500 || cents > 5000000}
+          disabled={!enabled || !isDemo || cents < 500 || cents > 5000000}
           loading={creating}
           onPress={confirmCreate}
         />
       </View>
 
-      <Text style={eloSharedStyles.sectionTitle}>Minhas ofertas</Text>
+      <View style={styles.historyHeader}>
+        <Text style={eloSharedStyles.sectionTitle}>Minhas ofertas</Text>
+        {isDemo ? (
+          <Pressable accessibilityRole="button" onPress={() => void refreshHistory()}
+            disabled={refreshing} style={styles.refreshButton}>
+            {refreshing ? <ActivityIndicator size="small" color={eloColors.blue} /> :
+              <P.ArrowClockwiseIcon size={17} color={eloColors.blue} />}
+            <Text style={styles.refreshText}>Atualizar histórico</Text>
+          </Pressable>
+        ) : null}
+      </View>
       {history.length === 0 ? (
         <Text style={styles.smallNote}>Nenhuma oferta registrada. Contribuir é sempre opcional.</Text>
       ) : history.map(item => (
@@ -315,6 +352,11 @@ const styles=StyleSheet.create({
   loading:{ marginVertical:18 },
   preview:{ marginTop:12,fontWeight:"800",fontSize:12,color:"#9A6700" },
   payButton:{ marginTop:16 },
+  historyHeader:{ marginTop:16, flexDirection:"row",flexWrap:"wrap",
+    justifyContent:"space-between",alignItems:"center",gap:8 },
+  refreshButton:{ flexDirection:"row",alignItems:"center",gap:6,
+    paddingHorizontal:10,minHeight:40,borderRadius:12,backgroundColor:eloColors.surfaceSoft },
+  refreshText:{ fontSize:12,fontWeight:"800",color:eloColors.blue },
   history:{ marginTop:10,gap:8 },
   historyTitle:{ fontSize:15,fontWeight:"800",color:eloColors.ink },
 });
