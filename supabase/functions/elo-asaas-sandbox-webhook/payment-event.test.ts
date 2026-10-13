@@ -127,3 +127,32 @@ Deno.test("QR de outra oferta não pode confirmar esta", () => {
   } catch { denied=true; }
   ensure(denied, "QR de outra oferta foi aceito");
 });
+
+Deno.test("Pix mensal do período reconhecido pelo QR mesmo sem dados de pagador", () => {
+  const cycle: DonationRecord = {
+    ...baseDonation,frequency:"monthly",payment_link_id:null,
+    provider_pix_qr_id:"pixqr_month_202610",
+    provider_monthly_cycle_id:"06e05a26-aa13-424e-9136-5f20b38c78f1",
+  };
+  const payload=event({paymentLink:null,pixQrCodeId:"pixqr_month_202610",
+    externalReference:"elo-monthly:06e05a26-aa13-424e-9136-5f20b38c78f1"});
+  const result=prepareDonationEvent(payload,cycle,"sandbox");
+  ensure(result?.status==="paid" && result?.amount_cents===500,
+    "O Pix mensal manual não foi conciliado.");
+});
+
+Deno.test("Pix mensal não pode ser creditado a ciclo de outra oferta", () => {
+  const cycle: DonationRecord = {
+    ...baseDonation,frequency:"monthly",payment_link_id:null,
+    provider_pix_qr_id:"pixqr_month_202610",
+    provider_monthly_cycle_id:"06e05a26-aa13-424e-9136-5f20b38c78f1",
+  };
+  let denied=false;
+  try {
+    prepareDonationEvent(event({
+      paymentLink:null,pixQrCodeId:"pixqr_outro",
+      externalReference:"elo-monthly:ff5d665c-fb0e-47e1-aa8b-0be9a40fb008",
+    }),cycle,"sandbox");
+  } catch {denied=true;}
+  ensure(denied,"QR de outro mês foi aceito.");
+});
