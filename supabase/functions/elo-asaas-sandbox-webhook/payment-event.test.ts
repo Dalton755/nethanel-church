@@ -98,3 +98,32 @@ Deno.test("evento sem identificador não pode entrar no histórico", () => {
   } catch { rejected = true; }
   ensure(rejected, "Evento sem ID não foi bloqueado");
 });
+
+Deno.test("Pix gerado dentro do Elo concilia por pixQrCodeId sem formulário", () => {
+  const qrDonation: DonationRecord = {
+    ...baseDonation, payment_link_id: null,
+    provider_pix_qr_id: "pixqrcode_test_001",
+  };
+  const p = event({
+    paymentLink:null,
+    pixQrCodeId:"pixqrcode_test_001",
+    externalReference:undefined,
+  });
+  const out = prepareDonationEvent(p, qrDonation, "sandbox");
+  ensure(out?.status === "paid" && out.amount_cents === 500,
+    "Pagamento feito pelo QR do app não foi conciliado.");
+});
+
+Deno.test("QR de outra oferta não pode confirmar esta", () => {
+  const qrDonation: DonationRecord = {
+    ...baseDonation, payment_link_id:null,provider_pix_qr_id:"pixqrcode_outro_id",
+  };
+  let denied=false;
+  try {
+    prepareDonationEvent(event({
+      paymentLink:null,pixQrCodeId:"pixqrcode_estranho",
+      externalReference:null,
+    }),qrDonation,"sandbox");
+  } catch { denied=true; }
+  ensure(denied, "QR de outra oferta foi aceito");
+});
