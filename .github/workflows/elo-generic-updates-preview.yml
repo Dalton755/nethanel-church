@@ -1,4 +1,4 @@
-name: Elo Principal - Asaas Sandbox integrado (APK preview)
+name: Elo Principal - Corrigir oferta Sandbox por igreja (APK de previa)
 
 # Roda SOMENTE na branch de testes. Nao faz merge nem deploy.
 on:
@@ -33,8 +33,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/elo-generic-historic/{last-preview,latest,previous,earliest}
-          gh run download 38309209436 --repo "$GITHUB_REPOSITORY" \
-            --name nethanel-elo-principal-valores-oferta-preview \
+          gh run download 38329227141 --repo "$GITHUB_REPOSITORY" \
+            --name nethanel-elo-principal-asaas-sandbox-preview \
             --dir /tmp/elo-generic-historic/last-preview
           test -s /tmp/elo-generic-historic/last-preview/nethanel-elo-platform-preview.apk
           gh run download 37397162273 --repo "$GITHUB_REPOSITORY" \
@@ -126,7 +126,7 @@ jobs:
       - name: Disponibilizar somente APK aprovado para teste no GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: nethanel-elo-principal-asaas-sandbox-preview
+          name: nethanel-elo-principal-asaas-demo-corrigido-preview
           path: apps/mobile/nethanel-elo-platform-preview.apk
           retention-days: 7
           if-no-files-found: error
