@@ -12,8 +12,8 @@ on:
       - "apps/mobile/src/features/management/PlatformAdminScreen.tsx"
       - "supabase/functions/elo-developer-donations/**"
       - "supabase/functions/elo-developer-donations-webhook/**"
-      - "supabase/migrations/20261012190000_elo_free_for_all_draft.sql"
-      - "supabase/migrations/20261012190100_elo_voluntary_developer_donations_draft.sql"
+      - "supabase/drafts/20261012190000_elo_free_for_all_draft.sql"
+      - "supabase/drafts/20261012190100_elo_voluntary_developer_donations_draft.sql"
       - "supabase/migrations/20261013004655_elo_donations_sandbox_demo_v62.sql"
       - "supabase/migrations/20261013110000_elo_monthly_pix_sandbox_draft.sql"
   workflow_dispatch:
@@ -60,8 +60,8 @@ jobs:
           from pathlib import Path
           from pglast import parse_sql
           paths=[
-            "supabase/migrations/20261012190000_elo_free_for_all_draft.sql",
-            "supabase/migrations/20261012190100_elo_voluntary_developer_donations_draft.sql",
+            "supabase/drafts/20261012190000_elo_free_for_all_draft.sql",
+            "supabase/drafts/20261012190100_elo_voluntary_developer_donations_draft.sql",
             "supabase/migrations/20261013004655_elo_donations_sandbox_demo_v62.sql",
             "supabase/migrations/20261013110000_elo_monthly_pix_sandbox_draft.sql",
           ]
@@ -74,7 +74,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          migration=Path("supabase/migrations/20261012190000_elo_free_for_all_draft.sql").read_text()
+          migration=Path("supabase/migrations/20261013182943_elo_free_access_preserve_legacy_billing_v65.sql").read_text()
           assert "ELO_REDE" in migration
           for required in ("billing_prepare_checkout(", "billing_prepare_checkout_v2(",
                            "billing_prepare_invoice(", "list_public_elo_plans()"):
