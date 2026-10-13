@@ -1,35 +1,33 @@
-# Nethanel Elo — gratuito para todas as igrejas e ofertas voluntárias
+# Nethanel Elo — gratuidade e ofertas voluntárias
 
-**Estado:** apenas na branch `feature/elo-updates-foundation`, aguardando aprovação para migração/deploy da integração financeira. Não gerar cobranças reais antes da aprovação.
+**Atualizado em outubro de 2026 — HOMOLOGAÇÃO**. A implementação do Sandbox está isolada na `feature/elo-updates-foundation`, sem merge em `main`, sem publicar APK em loja ou ativar cobranças reais. A migração de acesso gratuito para todas as igrejas continua em rascunho e NÃO foi aplicada.
 
-## Acesso
-- Não há mais planos comerciais nem requisitos de pagamento para continuar usando o Elo.
-- Servidor devolve `ELO_REDE` como conjunto de recursos completo, nome `Nethanel Elo • Gratuito` e limites ilimitados.
-- Todos os cadastros de igreja recebem personalização completa, incluindo ícone, splash e APK por igreja. Custos operacionais de gerar APKs continuam controlados pela plataforma, sem cobrança de uso.
-- Checkout legado Asaas/Mercado Pago é bloqueado **após a aplicação da migração**. Históricos financeiros são preservados e webhooks/cancelamento legados não são removidos.
-- Assinaturas previamente estabelecidas em provedores externos não podem ser canceladas por apenas esconder a UI. Identificar e encerrar tais recorrências separadamente antes da migração.
+## Ofertas no app de prévia
 
-## Ofertar para o desenvolvedor
-- Acesso no `Perfil` somente para perfis `owner`, `admin`, `pastor` ou `tesoureiro`. Backend valida o vínculo ativo e a atribuição ativa de função.
-- A mensagem do app deixa claro: o Elo foi criado para ajudar as igrejas, recursos são gratuitos e a oferta é opcional para custos de banco/servidor/segurança. Contribuição não dá privilégios.
-- Periodicidade avulsa `once` ou recorrente `monthly`. O campo mostra moeda brasileira. Valor entre R$ 5,00 e R$ 50.000,00, com validação no cliente e servidor.
-- Método: Pix, Cartão de crédito ou Boleto. A geração de link é feita por **Asaas Payment Links** (`POST /paymentLinks`), com pagador informado somente na página externa do Asaas.
-- Modal confirma expressamente recorrência mensal. Não há cobrança ao apenas tocar em um botão; precisa concluir na página externa do Asaas.
-- Os links de pagamento são registrados em `elo_developer_donations`; eventos financeiros em tabela separada com idempotência, valor conferido e webhook `elo-developer-donations-webhook`.
-- A reconciliação de pagamento **não altera** `organization_subscriptions` nem `get_organization_plan_context`.
-- A API de cancelamento precisa identificar o ID da assinatura Asaas confirmado antes de permitir cancelamento. Desabilitar o link sozinho **não** cancela assinatura recorrente.
-- O usuário pode acompanhar sua oferta e cancelar a recorrência em seu próprio Perfil quando o identificador da assinatura tiver sido recebido. Deve haver suporte para cancelamento manual em caso de webhook perdido.
+- A tela “Ofertar ao desenvolvedor” está disponível para perfis autorizados (owner/admin/pastor/tesoureiro).
+- Somente a organização `101212c5-6e81-4915-ae9a-fbde5b42bb04` (Elo Church Demo) está liberada para ofertas Sandbox.
+- Valores sugeridos R$ 20/50/100/200 e campo livre a partir de R$ 5. Oferta opcional sem conceder recursos extras.
+- **Pix avulso:** o servidor consulta `GET /pix/addressKeys?status=ACTIVE` do Asaas Sandbox, cria QR **estático de uso único** `POST /pix/qrCodes/static` (value, externalReference, `allowsMultiplePayments:false`, expiração) e devolve o `payload` Pix ao app. O app gera o QR localmente com `react-native-qrcode-svg` e permite **Pix Copia e Cola** com `expo-clipboard`. Não há formulário Asaas ou criação de cadastro de pagador nesta modalidade.
+- **Pré-requisito:** a conta Asaas Sandbox deve possuir ao menos uma chave Pix ativa. Chave API de Sandbox `ELO_ASAAS_SANDBOX_API_KEY` fica exclusivamente no Supabase (nunca no app). Uma chave ausente/inválida ou sem Pix ativo retorna uma mensagem, sem gerar QR falso.
+- **Pix mensal:** até implementação específica de recorrência Pix, mantém-se o fluxo anterior de Payment Link com pagamento mensal manual, via Asaas. Cartão/boleto também continuam hospedados, em Sandbox. Não chamar QR Pix mensal de assinatura automática.
+- Os dados da oferta ficam na tabela de acesso restrito `elo_developer_donations` com `provider_pix_qr_id` e `pix_payload`; o histórico mostra pendência ou pagamento confirmado.
+- Eventos de QR são conciliados por `payment.pixQrCodeId` ou referência externa `elo-donation:<id>`, conferindo organização, ambiente e valor em centavos. Webhook com token Asaas, idempotência por evento; não registra CPF nem número de cartão.
+- Nunca atualizar `organization_subscriptions`, planos ou dados contábeis das igrejas como efeito de uma oferta.
 
-## Fase segura / Configuração
-1. Validar telas e copy via APK **de prévia do Elo principal**; backend financeiro ainda não está disponibilizado.
-2. Validar migrations SQL e Deno/React Native com GitHub Actions, sem acesso de escrita ao banco de produção.
-3. Configurar secrets `ASAAS_API_KEY`, `ASAAS_API_URL` **sandbox**, `ASAAS_DONATIONS_WEBHOOK_TOKEN` (diferente da senha de usuário), `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_ANON_KEY` apenas no servidor.
-4. Implementar webhook de evento PAYMENT_* exclusivo com `asaas-access-token`. A rota deve permanecer `verify_jwt=false` no webhook e `verify_jwt=true` no endpoint de checkout (identidade de login conferida por `auth.getUser`). Registrar URL de webhook na conta Asaas e testar entrega.
-5. Rodar ciclo de teste em sandbox: nova oferta, Pix avulso pago, cartão, boleto, recorrente, cancelamento mensal, duplicação/retry de webhook e recusa de usuário sem privilégio.
-6. Após **aprovação explícita**, aplicar migrações e publicar as novas Edge Functions com `ELO_DONATIONS_LIVE_ENABLED=false`, validar em sandbox e só ativar produção em autorização posterior.
-7. Auditar assinaturas comerciais preexistentes no MP/Asaas antes de desativar assinaturas externas; bloqueio de novos checkouts não extingue débitos existentes.
+## Migrações e funções efetivamente aplicadas no Supabase
 
-## Importante
-- O Asaas permite links recorrentes ou únicos, cobrados com método escolhido; Pix mensal pode ser manual (sem débito automático), conforme possibilidade da modalidade no provedor.
-- Nunca guardar número de cartão ou CPF de doador no Nethanel Elo: checkout hospedado no Asaas.
-- Caso um boleto ou Pix esteja pendente, isso não altera permissões nem bloqueia recursos do aplicativo.
+- `20261013002628_elo_asaas_sandbox_webhook_receipts_v61.sql`: registros de teste antigos, isolados.
+- `20261013004655_elo_donations_sandbox_demo_v62.sql`: apenas ofertas Sandbox da Elo Church Demo, funções RPC com validação de perfil.
+- `20261013020602_elo_sandbox_inline_pix_qr_v63.sql`: colunas de QR Pix e restrições de uso único na Demo.
+- Edge Functions `elo-developer-donations` (`verify_jwt=true`) e `elo-asaas-sandbox-webhook` (token exclusivo com `verify_jwt=false`), ambas limitadas ao Sandbox e à Demo.
+- Não implantar `20261012190000_elo_free_for_all_draft.sql` sem autorização explícita.
+
+## Homologação pendente
+
+1. APK de prévia com QR nativo e botão “Copiar código Pix” deve ser compilado, instalado e testado.
+2. Validar chave API de Sandbox atual e **chave Pix ativa** no Asaas Sandbox. Um smoke automatizado com a chave guardada no GitHub encontrou HTTP 401, sugerindo que aquela chave no GitHub está desatualizada/revogada; isso não comprova o estado do segredo distinto no Supabase.
+3. Gerar QR Pix avulso por dentro do app, confirmar que o código é aceito por uma conta pagadora Sandbox e que o webhook muda o histórico para “Pagamento confirmado”.
+4. Testar duplicidade de evento, expiração do QR, bloqueio fora da Demo, cartões, boletos, recorrência mensal e cancelamento antes de considerar liberação.
+5. Qualquer implantação em produção ou liberação para outras igrejas exige autorização específica.
+
+**Segurança:** não compartilhar tokens, não fazer pagamentos reais, não enviar CPF/CEP/cartão para ChatGPT ou para o app de homologação.
