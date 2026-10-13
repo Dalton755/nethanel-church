@@ -1,0 +1,30 @@
+name: Elo - Pix QR direto no app (Asaas Sandbox, sem deploy)
+on:
+  push:
+    branches: [feature/elo-updates-foundation]
+    paths:
+      - ".github/workflows/elo-asaas-inline-pix-smoke.yml"
+      - "scripts/elo_asaas_sandbox_inline_pix_smoke.mjs"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Garantir isolamento Sandbox
+        run: |
+          node --check scripts/elo_asaas_sandbox_inline_pix_smoke.mjs
+          grep -q 'https://api-sandbox.asaas.com/v3' scripts/elo_asaas_sandbox_inline_pix_smoke.mjs
+          ! grep -q 'https://api.asaas.com/v3' scripts/elo_asaas_sandbox_inline_pix_smoke.mjs
+      - name: Testar QR Pix e Copia e Cola sem checkout
+        env:
+          ASAAS_SANDBOX_API_KEY: ${{ secrets.ASAAS_SANDBOX_API_KEY }}
+        run: node scripts/elo_asaas_sandbox_inline_pix_smoke.mjs
