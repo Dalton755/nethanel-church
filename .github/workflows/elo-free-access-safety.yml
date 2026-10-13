@@ -1,10 +1,10 @@
-name: Elo - Revisar acesso gratuito sem alterar banco
+name: Elo - Validar migration de acesso gratuito (somente CI)
 
 on:
   push:
     branches: [feature/elo-updates-foundation]
     paths:
-      - "supabase/migrations/20261013180000_elo_free_access_preserve_legacy_billing.sql"
+      - "supabase/migrations/20261013182943_elo_free_access_preserve_legacy_billing_v65.sql"
       - "scripts/elo_free_access_safety_check.py"
       - ".github/workflows/elo-free-access-safety.yml"
   workflow_dispatch:
