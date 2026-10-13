@@ -88,7 +88,8 @@ jobs:
           assert 'ELO_ASAAS_SANDBOX_API_KEY' in donate
           mobile=Path("apps/mobile/src/features/more/DeveloperOfferingScreen.tsx").read_text()
           assert "react-native-qrcode-svg" in mobile and "expo-clipboard" in mobile
-          assert 'method === "pix" && frequency === "once"' in mobile
+          assert 'if(method === "pix")' in mobile
+          assert 'monthLabel' in mobile and 'monthly_cycles' in mobile
           assert "Copiar código Pix" in mobile
           assert 'request_elo_monthly_pix_pledge' in donate
           assert 'getOrCreateMonthlyPix' in donate
