@@ -1,0 +1,31 @@
+name: Elo - Produção Asaas permanece DESATIVADA
+
+on:
+  push:
+    branches: [feature/elo-updates-foundation]
+    paths:
+      - "supabase/functions/elo-developer-donations-production/**"
+      - "supabase/functions/elo-asaas-production-webhook/**"
+      - "scripts/elo_production_payments_lock_check.py"
+      - ".github/workflows/elo-production-payments-lock.yml"
+      - "apps/mobile/src/features/more/DeveloperOfferingScreen.tsx"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fail-closed-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Verificar bloqueio dos pagamentos reais sem rede
+        run: python3 scripts/elo_production_payments_lock_check.py
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Checar sintaxe dos futuros endpoints de produção
+        run: |
+          deno check --config supabase/functions/elo-developer-donations-production/deno.json supabase/functions/elo-developer-donations-production/index.ts
+          deno check --config supabase/functions/elo-asaas-production-webhook/deno.json supabase/functions/elo-asaas-production-webhook/index.ts
