@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { parseSandboxPixEvent } from "./parse-event.ts";
-import { DONATION_PAYMENT_EVENTS, prepareDonationEvent, type DonationRecord } from "../elo-developer-donations-webhook/payment-event.ts";
+import { DONATION_PAYMENT_EVENTS, prepareDonationEvent, type DonationRecord } from "./payment-event.ts";
 
 const reply = (payload: Record<string, unknown>, status=200) =>
   new Response(JSON.stringify(payload), {
