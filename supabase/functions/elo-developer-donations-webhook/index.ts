@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { DONATION_PAYMENT_EVENTS, prepareDonationEvent, type DonationRecord } from "./payment-event.ts";
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -24,14 +25,18 @@ Deno.serve(async (req) => {
 
   const eventName = String(body.event ?? "");
   // Este endpoint é exclusivo de ofertas; outros eventos não alteram mensalidades ou planos.
-  if (!eventName.startsWith("PAYMENT_")) return json({ ok: true, ignored: true });
+  if (!Object.hasOwn(DONATION_PAYMENT_EVENTS, eventName)) return json({ ok: true, ignored: true });
   const payment = body.payment;
   if (!payment?.id) return json({ ok: true, ignored: true });
 
   const linkId = typeof payment.paymentLink === "string" ? payment.paymentLink : null;
   const subscriptionId = typeof payment.subscription === "string"
     ? payment.subscription : null;
-  if (!linkId && !subscriptionId) return json({ ok: true, ignored: true });
+  const reference = typeof payment.externalReference === "string" ?
+    payment.externalReference : "";
+  const referenceId = /^elo-donation:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+    .exec(reference)?.[1] ?? null;
+  if (!linkId && !subscriptionId && !referenceId) return json({ ok: true, ignored: true });
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
   let donation: Record<string, any> | null = null;
@@ -46,38 +51,34 @@ Deno.serve(async (req) => {
       .eq("provider_subscription_id", subscriptionId).maybeSingle();
     donation = data;
   }
-  if (!donation) return json({ ok: true, ignored: true });
-
-  const status = (() => {
-    if (["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"].includes(eventName)) return "paid";
-    if (eventName === "PAYMENT_REFUNDED") return "refunded";
-    if (eventName === "PAYMENT_OVERDUE") return "overdue";
-    if (eventName === "PAYMENT_DELETED") return "canceled";
-    return "pending";
-  })();
-
-  const amountCents = Math.round(Number(payment.value) * 100);
-  if (!Number.isSafeInteger(amountCents) || amountCents !== donation.amount_cents) {
-    // Recusar discrepância de valor: cobrança nunca é conciliada apenas por link.
-    return json({ ok: false, message: "Valor divergente." }, 422);
+  if (!donation && referenceId) {
+    const { data } = await admin.from("elo_developer_donations").select("*")
+      .eq("id", referenceId).maybeSingle();
+    donation = data;
   }
+  if (!donation) return json({ ok: true, ignored: true });
 
   const env = (Deno.env.get("ASAAS_API_URL") ?? "https://api-sandbox.asaas.com/v3").includes("sandbox")
     ? "sandbox" : "production";
-  if (donation.environment !== env) {
-    return json({ ok: false, message: "Ambiente divergente." }, 422);
-  }
 
-  const eventId = String(body.id ?? "");
-  if (!eventId || eventId.length > 150) return json({ ok: false, message: "Evento sem identificador." }, 422);
+  let verified;
+  try {
+    verified = prepareDonationEvent(body, donation as DonationRecord, env);
+  } catch (error) {
+    console.warn("Evento de oferta rejeitado", {
+      event: eventName, reason: error instanceof Error ? error.message : "invalid",
+    });
+    return json({ ok: false, message: "Evento de pagamento inválido." }, 422);
+  }
+  if (!verified) return json({ ok: true, ignored: true });
 
   const { error } = await admin.rpc("elo_apply_developer_donation_event", {
-    p_donation_id: donation.id,
-    p_event_key: `${env}:${eventId}`,
-    p_provider_payment_id: String(payment.id),
-    p_status: status,
-    p_amount_cents: amountCents,
-    p_provider_subscription_id: subscriptionId,
+    p_donation_id: verified.donation_id,
+    p_event_key: verified.event_key,
+    p_provider_payment_id: verified.provider_payment_id,
+    p_status: verified.status,
+    p_amount_cents: verified.amount_cents,
+    p_provider_subscription_id: verified.provider_subscription_id,
   });
   if (error) {
     console.error("Falha conciliação de oferta", { code: error.code, event: eventName });
@@ -87,7 +88,7 @@ Deno.serve(async (req) => {
   // Um link de doação não deve gerar múltiplas assinaturas por engano.
   // Após o primeiro pagamento recebido, desative apenas o link.
   // Cancelar o link NAO cancela a assinatura mensal já criada no Asaas.
-  if (status === "paid" && donation.payment_link_id) {
+  if (verified.status === "paid" && donation.payment_link_id) {
     const apiKey = (Deno.env.get("ASAAS_API_KEY") ?? "").trim();
     const base = (Deno.env.get("ASAAS_API_URL") ?? "https://api-sandbox.asaas.com/v3").replace(/\/$/, "");
     const liveAllowed = Deno.env.get("ELO_DONATIONS_LIVE_ENABLED") === "true";
