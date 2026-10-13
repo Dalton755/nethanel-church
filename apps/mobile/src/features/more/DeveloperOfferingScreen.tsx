@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, AppState, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import QRCode from "react-native-qrcode-svg";
 import * as WebBrowser from "expo-web-browser";
 import * as Phosphor from "phosphor-react-native";
 
@@ -10,6 +12,7 @@ import { EloActionButton, EloCard, EloScreen, eloColors, eloSharedStyles } from 
 const P = Phosphor as any;
 type Frequency = "once" | "monthly";
 type Method = "pix" | "card" | "boleto";
+type PixDisplay = { id: string; payload: string; amountCents: number; expiresAt: string | null };
 
 type Contribution = {
   id: string;
@@ -69,6 +72,9 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
   const [refreshing, setRefreshing] = useState(false);
   const [switchingDemo, setSwitchingDemo] = useState(false);
   const [connectionIssue, setConnectionIssue] = useState("");
+  const [pixDisplay, setPixDisplay] = useState<PixDisplay | null>(null);
+  const [loadingPixId, setLoadingPixId] = useState<string | null>(null);
+  const [pixCopied, setPixCopied] = useState(false);
   const isDemo = activeOrganization?.id === TEST_ORG_ID;
   const demoOrganization = organizations.find((org) => org.id === TEST_ORG_ID) ?? null;
 
@@ -133,6 +139,36 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
     }
   };
 
+  async function copyPix() {
+    if (!pixDisplay) return;
+    try {
+      await Clipboard.setStringAsync(pixDisplay.payload);
+      setPixCopied(true);
+    } catch {
+      Alert.alert("Erro ao copiar", "Não foi possível copiar o código Pix.");
+    }
+  }
+
+  async function openSavedPix(item: Contribution) {
+    if (!isDemo || loadingPixId) return;
+    setLoadingPixId(item.id);
+    try {
+      const {data,error} = await supabase.functions.invoke("elo-developer-donations",{
+        body:{action:"pix",id:item.id},
+      });
+      if(error || !data?.ok || typeof data.pixPayload !== "string" ||
+          data.pixPayload.length < 30) throw new Error(
+            data?.message ?? error?.message ?? "Não foi possível recuperar o QR Code Pix."
+          );
+      setPixCopied(false);
+      setPixDisplay({id:item.id,payload:data.pixPayload,
+        amountCents:data.amountCents,expiresAt:data.expiresAt ?? null});
+    }catch(error){
+      Alert.alert("Pix indisponível",error instanceof Error ? error.message :
+        "Tente novamente mais tarde.");
+    }finally{setLoadingPixId(null);}
+  }
+
   function confirmCreate() {
     if (!activeOrganization || !isDemo || !Number.isSafeInteger(cents) ||
         cents < 500 || cents > 5000000) {
@@ -147,7 +183,9 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
       `${frequencyText}Valor: ${brl(cents)}. Esta é uma SIMULAÇÃO no Asaas Sandbox: não realize transferência real. Os recursos da igreja não dependem da oferta.`,
       [
         { text: "Voltar", style: "cancel" },
-        { text: "Continuar no Asaas", onPress: () => void startOffering() },
+        { text: method === "pix" && frequency === "once" ?
+            "Gerar QR Code no Elo" : "Continuar no Asaas",
+          onPress: () => void startOffering() },
       ],
     );
   }
@@ -165,13 +203,25 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
           method,
         },
       });
-      if (error || !data?.ok || !data.checkoutUrl || !safeLink(data.checkoutUrl))
-        throw new Error(data?.message ?? error?.message ?? "Não foi possível preparar a oferta.");
+      if (error || !data?.ok) throw new Error(
+        data?.message ?? error?.message ?? "Não foi possível preparar a oferta."
+      );
+      if(method === "pix" && frequency === "once") {
+        if(typeof data.pixPayload !== "string" || data.pixPayload.length < 30)
+          throw new Error("O Asaas Sandbox não retornou um Pix válido.");
+        setPixCopied(false);
+        setPixDisplay({id:data.id,payload:data.pixPayload,amountCents:cents,
+          expiresAt:data.expiresAt ?? null});
+        await reload();
+        return;
+      }
+      if(!data.checkoutUrl || !safeLink(data.checkoutUrl))
+        throw new Error("Não foi possível abrir a cobrança.");
       await reload();
       await WebBrowser.openBrowserAsync(data.checkoutUrl);
       await reload();
       Alert.alert("Cobrança de teste preparada!",
-        "Acesse o Asaas Sandbox para simular a confirmação. Ao retornar, toque em Atualizar histórico. Nenhum dinheiro real será cobrado.");
+        "Acompanhe a confirmação pelo histórico. Nenhum dinheiro real será cobrado.");
     } catch (error) {
       Alert.alert("Oferta não gerada",
         error instanceof Error ? error.message : "Tente novamente mais tarde.");
@@ -282,10 +332,11 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
       </View>
       {frequency === "monthly" ? (
         <Text style={styles.notice}>
-          Na opção mensal, o Asaas criará uma recorrência.
-          Para Pix, será gerado boleto com QR Pix, pago manualmente a cada mês.
-          No cartão, a cobrança poderá ocorrer automaticamente.
-          Você poderá cancelar as próximas cobranças.
+          Para oferta mensal, o Asaas gerencia a recorrência.
+          Pix mensal exige confirmação manual a cada mês e,
+          nesta etapa de testes, ainda abre o checkout do Asaas.
+          Na oferta única por Pix, o QR Code aparece diretamente no Elo.
+          Você poderá cancelar as próximas cobranças mensais.
         </Text>
       ) : null}
       {!loaded ? <ActivityIndicator style={styles.loading} color={eloColors.blue} /> : null}
@@ -329,7 +380,8 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
       ) : null}
       <View style={styles.payButton}>
         <EloActionButton
-          label={sandbox ? "Gerar teste no Asaas" : "Gerar oferta pelo Asaas"}
+          label={method === "pix" && frequency === "once"
+            ? "Gerar QR Code Pix" : "Gerar teste no Asaas"}
           icon="HeartIcon"
           disabled={!enabled || !isDemo || cents < 500 || cents > 5000000}
           loading={creating}
@@ -359,12 +411,62 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
             <EloActionButton label="Abrir cobrança" variant="secondary"
               icon="ArrowSquareOutIcon" onPress={() => void WebBrowser.openBrowserAsync(item.checkout_url!)} />
           ) : null}
+          {!item.checkout_url && item.payment_method === "pix" &&
+            item.frequency === "once" && item.status === "pending" ? (
+            <EloActionButton label="Ver QR Code Pix" variant="secondary"
+              icon="QrCodeIcon" loading={loadingPixId===item.id}
+              onPress={() => void openSavedPix(item)} />
+          ) : null}
           {item.can_cancel ? (
             <EloActionButton label="Cancelar oferta mensal" variant="danger"
               loading={workingCancel===item.id} onPress={() => confirmCancel(item)} />
           ) : null}
         </EloCard>
       ))}
+
+      <Modal visible={Boolean(pixDisplay)} transparent animationType="slide"
+        onRequestClose={() => setPixDisplay(null)}>
+        <View style={styles.pixOverlay}>
+          <ScrollView contentContainerStyle={styles.pixModalScroll}>
+            <View style={styles.pixCard}>
+              <View style={styles.pixHeader}>
+                <View style={styles.pixHeaderText}>
+                  <Text style={styles.pixTitle}>Oferta por Pix</Text>
+                  <Text style={styles.pixSubtitle}>Código gerado no Asaas Sandbox</Text>
+                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Fechar Pix"
+                  onPress={() => setPixDisplay(null)} style={styles.pixClose}>
+                  <P.XIcon size={22} color={eloColors.ink} />
+                </Pressable>
+              </View>
+              <Text style={styles.pixAmount}>{brl(pixDisplay?.amountCents ?? 0)}</Text>
+              <Text style={styles.pixSafety}>SIMULAÇÃO • NÃO REALIZE PAGAMENTO BANCÁRIO</Text>
+              {pixDisplay?.payload ? (
+                <View style={styles.pixQrFrame}>
+                  <QRCode value={pixDisplay.payload} size={210}
+                    backgroundColor="#FFFFFF" color="#172329" />
+                </View>
+              ) : null}
+              <Text style={styles.pixInstructions}>
+                Escaneie com uma conta de teste do Sandbox ou copie o código abaixo.
+              </Text>
+              <View style={styles.pixCodeContainer}>
+                <Text selectable numberOfLines={4} style={styles.pixCode}>
+                  {pixDisplay?.payload ?? ""}
+                </Text>
+              </View>
+              <EloActionButton label={pixCopied ? "Código Pix copiado!" : "Copiar código Pix"}
+                icon="CopyIcon" onPress={() => void copyPix()} />
+              <EloActionButton label="Atualizar situação" variant="secondary"
+                icon="ArrowClockwiseIcon" onPress={() => void refreshHistory()} />
+              <Pressable onPress={() => setPixDisplay(null)} style={styles.pixDone}
+                accessibilityRole="button">
+                <Text style={styles.pixDoneText}>Voltar às ofertas</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </EloScreen>
   );
 }
@@ -418,4 +520,22 @@ const styles=StyleSheet.create({
   refreshText:{ fontSize:12,fontWeight:"800",color:eloColors.blue },
   history:{ marginTop:10,gap:8 },
   historyTitle:{ fontSize:15,fontWeight:"800",color:eloColors.ink },
+  pixOverlay:{flex:1,justifyContent:"center",backgroundColor:"rgba(17,30,39,.65)"},
+  pixModalScroll:{flexGrow:1,justifyContent:"center",padding:18},
+  pixCard:{backgroundColor:"#FFFFFF",borderRadius:22,padding:20,gap:14},
+  pixHeader:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},
+  pixHeaderText:{flex:1},
+  pixTitle:{fontSize:19,fontWeight:"900",color:eloColors.ink},
+  pixSubtitle:{fontSize:12,color:eloColors.muted,marginTop:3},
+  pixClose:{minWidth:44,minHeight:44,justifyContent:"center",alignItems:"center"},
+  pixAmount:{fontSize:26,fontWeight:"900",color:eloColors.ink,textAlign:"center"},
+  pixSafety:{fontSize:11,fontWeight:"900",color:"#875B00",textAlign:"center"},
+  pixQrFrame:{alignSelf:"center",padding:15,borderRadius:15,borderWidth:1,
+    borderColor:eloColors.line,backgroundColor:"#FFFFFF"},
+  pixInstructions:{fontSize:12,lineHeight:19,color:eloColors.muted,textAlign:"center"},
+  pixCodeContainer:{borderRadius:12,borderWidth:1,borderColor:eloColors.line,
+    padding:12,backgroundColor:eloColors.surfaceSoft},
+  pixCode:{fontSize:11,lineHeight:16,color:eloColors.ink},
+  pixDone:{alignItems:"center",justifyContent:"center",padding:10,minHeight:44},
+  pixDoneText:{color:eloColors.blue,fontSize:14,fontWeight:"800"},
 });
