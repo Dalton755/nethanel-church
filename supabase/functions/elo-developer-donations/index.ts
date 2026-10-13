@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
     billingType: frequency === "monthly" && method === "pix" ? "BOLETO" : types[method],
     chargeType: frequency === "once" ? "DETACHED" : "RECURRENT",
     ...(frequency === "monthly" ? { subscriptionCycle: "MONTHLY" } : {}),
-    ...(method === "boleto" ? { dueDateLimitDays: 3 } : {}),
+    dueDateLimitDays: 3,
     externalReference: `elo-donation:${id}`,
     notificationEnabled: true,
   };
