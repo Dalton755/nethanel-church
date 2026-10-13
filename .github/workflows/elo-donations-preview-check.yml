@@ -78,5 +78,15 @@ jobs:
           assert 'const base = SANDBOX_URL' in donate
           assert 'DEMO_ORG_ID' in donate and 'paymentLinks' in donate
           assert 'https://api.asaas.com/v3' not in donate
+          assert 'pix/qrCodes/static' in donate
+          assert 'allowsMultiplePayments:false' in donate
+          assert 'format:"PAYLOAD"' in donate
+          assert 'provider_pix_qr_id' in donate
+          assert 'ELO_ASAAS_SANDBOX_API_KEY' in donate
+          mobile=Path("apps/mobile/src/features/more/DeveloperOfferingScreen.tsx").read_text()
+          assert "react-native-qrcode-svg" in mobile and "expo-clipboard" in mobile
+          assert 'method === "pix" && frequency === "once"' in mobile
+          assert "Copiar código Pix" in mobile
+
           print("Nenhum pagamento em producao e gerado por esta verificacao.")
           PY
