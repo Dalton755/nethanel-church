@@ -19,14 +19,14 @@ Ofertas únicas e ofertas mensais Pix **manuais** ao desenvolvedor (acesso aos p
 
 ## BLOQUEADORES antes de ofertar em produção
 
-**1 — Acesso gratuito:** o arquivo `20261012190000_elo_free_for_all_draft.sql` ainda NÃO foi aplicado. A tela diz que todos os recursos são gratuitos, mas não se pode presumir que o controle legado de planos já está desativado. Requer revisão e autorização explícita, inclusive de histórico e obrigações de assinantes.
+**1 — Acesso gratuito (concluído em 13/10/2026):** migração `20261013182943_elo_free_access_preserve_legacy_billing_v65.sql` APLICADA no Supabase. Todas as 5 igrejas têm plano efetivo `ELO_REDE` gratuito e acesso à personalização, independentemente do plano histórico. Foram bloqueadas as RPCs de novos checkouts e novas faturas comerciais; lista pública de planos pagos vazia; trigger de teste inicial desativado. Não foi alterada a situação histórica dos registros financeiros. Os rascunhos antigos de migrations foram arquivados em `supabase/drafts/` para evitar reaplicação acidental.
 
-**2 — Financeiro legado:** não alterar nem apagar as tabelas `organization_subscriptions`, `billing_invoices`, `billing_payment_attempts` ou `billing_recurring_authorizations` nesta tarefa. Auditoria agregada mostrou:
+**2 — Financeiro legado (pendente de baixa no provedor):** a migração gratuita manteve intactos os dados abaixo e NÃO cancelou nem perdoou cobranças previamente criadas. Não alterar nem apagar as tabelas `organization_subscriptions`, `billing_invoices`, `billing_payment_attempts` ou `billing_recurring_authorizations` nesta tarefa. Auditoria agregada mostrou:
 - `organization_subscriptions`: 5 registros (2 ativos, 2 pendentes e 1 expirado; nenhum com ID de assinatura externo).
 - `billing_invoices`: 1 fatura **em atraso** no ambiente de produção, e 5 lançamentos no Sandbox.
 - `billing_payment_attempts`: existem tentativas de cobrança Asaas em produção, incluindo 1 pendente de confirmação com status `created` e 1 `overdue`.
 - `billing_recurring_authorizations`: 1 autorização Asaas produção `refused`, sem ID de assinatura ativo; outras duas são Sandbox (cancelada/recusada).
-Esses dados precisam de revisão antes de proclamar desativação do faturamento comercial. Isso **não implica** existência de débito real pagável nem confirma ausência de compromisso fora do banco.
+Esses dados precisam de revisão antes de proclamar desativação do faturamento comercial. Isso **não implica** existência de débito real pagável nem confirma ausência de compromisso fora do banco. Verificação read-only após migração confirmou **5 registros de assinatura, 6 faturas, 11 tentativas de pagamento e 3 autorizações recorrentes**, todos preservados.
 
 **3 — Isolamento de produção:** implementar **novas** Edge Functions, URL/token de webhook e configuração de chaves **exclusivas de produção**. Não reaproveitar nem transformar as funções `elo-developer-donations` e `elo-asaas-sandbox-webhook` em endpoint de produção apenas alterando a URL. Manter flag de habilitação de produção desativada por padrão, com allowlist interna no primeiro teste. Nenhuma chave real no GitHub, app, SQL ou logs.
 
@@ -52,3 +52,15 @@ A aprovação para preparar auditoria **não** concede (b), (c) ou (d).
 - https://docs.asaas.com/docs/criar-novo-webhook-pela-api
 - https://docs.asaas.com/docs/receba-eventos-do-asaas-no-seu-endpoint-de-webhook
 - https://docs.asaas.com/changelog/obrigatoriedade-e-auto-gera%C3%A7%C3%A3o-de-tokens-para-webhooks
+
+
+## Resultado da liberação de acesso gratuito — 13/10/2026
+
+- SQL de acesso completo aplicado com segurança; nenhuma cobrança real nova foi gerada por esta etapa.
+- `get_organization_plan_context`: `ELO_REDE`, preço zero, sem limites e sem expiração de acesso.
+- `organization_effective_plan_code` e `organization_people_limit`: recursos completos e limite ilimitado.
+- 5/5 igrejas: `white_label_enabled=true`; novas igrejas também têm esse padrão.
+- Trigger de criação de plano de teste `zz_organizations_start_elo_complete_trial` DESATIVADO; demais gatilhos essenciais de inicialização permanecem ativos.
+- RPCs para criar checkout comercial e faturas bloqueadas, inclusive para APKs antigos que as invoquem; histórico e webhooks antigos não foram excluídos.
+- Uma fatura antiga classificada como **overdue** no banco de produção (R$ 49,90) permanece em aberto no histórico. É necessário conciliar o estado do boleto/Pix antigo diretamente no Asaas antes de cancelar ou encerrar a cobrança externa. Não afirmar que não há meios de pagamento históricos ainda válidos.
+- Migração efetiva foi registrada pelo Supabase como versão `20261013182943`; arquivos de rascunho anteriores foram movidos para `supabase/drafts/` por segurança.
