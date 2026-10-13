@@ -1,4 +1,5 @@
 name: Elo - Asaas Sandbox Pix (apenas teste, sem deploy)
+# Reexecucao apos configurar ASAAS_SANDBOX_API_KEY, restrita ao Sandbox.
 
 on:
   push:
