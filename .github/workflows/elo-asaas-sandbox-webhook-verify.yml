@@ -30,7 +30,8 @@ jobs:
       - name: Testar dez casos de confirmação Pix simulada
         run: |
           deno test --no-check --config supabase/functions/elo-asaas-sandbox-webhook/deno.json \
-            supabase/functions/elo-asaas-sandbox-webhook/parse-event.test.ts
+            supabase/functions/elo-asaas-sandbox-webhook/parse-event.test.ts \
+            supabase/functions/elo-asaas-sandbox-webhook/payment-event.test.ts
       - name: Verificar que receptor publicado rejeita requisicoes nao autorizadas
         run: |
           set -eu
@@ -62,6 +63,8 @@ jobs:
           assert 'ELO_ASAAS_SANDBOX_WEBHOOK_TOKEN' in p
           assert 'asaas-access-token' in p
           assert 'elo_asaas_sandbox_webhook_receipts' in p
+          assert 'elo_apply_developer_donation_event' in p
+          assert 'DEMO_ORG_ID' in p
           for x in ['organization_subscriptions','billing_invoices','billing_payment_attempts','platform_webhook_events','church_app_releases']:
             assert x not in p, x
           s=Path("supabase/migrations/20261013002628_elo_asaas_sandbox_webhook_receipts_v61.sql").read_text()
