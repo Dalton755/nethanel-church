@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getOrCreateMonthlyPix, cancelMonthlyManualPix } from "./monthly-flow.ts";
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -79,6 +80,14 @@ Deno.serve(async (req) => {
       amountCents:d.amount_cents,pixPayload:d.pix_payload,expiresAt:d.pix_expires_at});
   }
 
+  if (body.action === "monthly_pix") {
+    const id = typeof body.id === "string" ? body.id : "";
+    if (!/^[0-9a-f-]{36}$/i.test(id))
+      return json({ok:false,message:"Identificador da oferta mensal inválido."},400);
+    const result = await getOrCreateMonthlyPix(user,admin,asaasKey,id);
+    return json(result, result.ok ? 200 : 409);
+  }
+
   if (body.action === "cancel") {
     if (typeof body.id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.id))
       return json({ ok: false, message: "Identificador inválido." }, 400);
@@ -97,6 +106,10 @@ Deno.serve(async (req) => {
     if (can.error || !Array.isArray(can.data) || !can.data.some((x: any) => x.id === d.id))
       return json({ ok: false, message: "Sem permissão para cancelar." }, 403);
 
+    if (d.payment_method === "pix" && !d.checkout_url) {
+      const result = await cancelMonthlyManualPix(admin,asaasKey,d);
+      return json(result, result.ok ? 200 : 502);
+    }
     if (!d.provider_subscription_id)
       return json({ ok: false, message: "A assinatura ainda não foi identificada. Solicite o cancelamento ao suporte da Nethanel." }, 409);
 
@@ -135,6 +148,18 @@ Deno.serve(async (req) => {
       cents < 500 || cents > 5000000 || !expectedMethods.has(method) || !expectedFrequency.has(frequency)) {
     return json({ ok: false,
       message: "Ofertas em teste estão disponíveis apenas na igreja Elo Church Demo. Confira valor e pagamento." }, 400);
+  }
+
+  if (frequency === "monthly" && method === "pix") {
+    const {data:pledge,error:pledgeError} =
+      await user.rpc("request_elo_monthly_pix_pledge",{
+        p_organization_id:org,p_amount_cents:cents,
+      });
+    if(pledgeError || !pledge?.id) return json({
+      ok:false,message:pledgeError?.message ?? "Não foi possível criar a oferta mensal."
+    },403);
+    const result=await getOrCreateMonthlyPix(user,admin,asaasKey,String(pledge.id));
+    return json(result,result.ok?200:409);
   }
 
   const { data: intent, error: intentError } = await user.rpc("request_elo_developer_donation", {
