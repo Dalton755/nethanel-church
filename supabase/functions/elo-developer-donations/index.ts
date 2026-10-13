@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, message: "Sem permissão para cancelar." }, 403);
 
     if (d.payment_method === "pix" && !d.checkout_url) {
-      const result = await cancelMonthlyManualPix(admin,asaasKey,d);
+      const result = await cancelMonthlyManualPix(user,asaasKey,d);
       return json(result, result.ok ? 200 : 502);
     }
     if (!d.provider_subscription_id)
