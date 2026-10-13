@@ -6,6 +6,8 @@ const json = (data: unknown, status = 200) =>
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
 
+const SANDBOX_URL = "https://api-sandbox.asaas.com/v3";
+const DEMO_ORG_ID = "101212c5-6e81-4915-ae9a-fbde5b42bb04";
 const expectedMethods = new Set(["pix", "card", "boleto"]);
 const expectedFrequency = new Set(["once", "monthly"]);
 
@@ -25,16 +27,14 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const asaasKey = (Deno.env.get("ASAAS_API_KEY") ?? "").trim();
-  const base = (Deno.env.get("ASAAS_API_URL") ?? "https://api-sandbox.asaas.com/v3").replace(/\/$/, "");
-  const environment = base.includes("sandbox") ? "sandbox" : "production";
-  const enabledProduction = Deno.env.get("ELO_DONATIONS_LIVE_ENABLED") === "true";
+  // HOMOLOGACAO: nunca reutiliza a chave de producao das assinaturas.
+  // Mesmo com variaveis antigas apontando para live, o destino e SEMPRE Sandbox.
+  const asaasKey = (Deno.env.get("ELO_ASAAS_SANDBOX_API_KEY") ?? "").trim();
+  const base = SANDBOX_URL;
+  const environment = "sandbox";
+  const configured = asaasKey.startsWith("$aact_hmlg_");
   if (!supabaseUrl || !anonKey || !serviceKey) return json({ ok: false, message: "Integração indisponível." }, 503);
 
-  // No preview não é possível gerar cobranças reais por acidente.
-  if (environment === "production" && !enabledProduction) {
-    return json({ ok: false, message: "Ofertas reais aguardam aprovação da Nethanel." }, 503);
-  }
 
   const token = req.headers.get("Authorization") ?? "";
   if (!token.startsWith("Bearer ")) return json({ ok: false, message: "Entre na sua conta." }, 401);
@@ -48,12 +48,13 @@ Deno.serve(async (req) => {
   catch { return json({ ok: false, message: "Requisição inválida." }, 400); }
 
   if (body.action === "capabilities") {
-    return json({ ok: true, configured: Boolean(asaasKey),
-      sandbox: environment === "sandbox", productionEnabled: enabledProduction,
+    return json({ ok: true, configured,
+      sandbox: true, productionEnabled: false, demoOrganizationId: DEMO_ORG_ID,
       methods: ["pix", "card", "boleto"], frequency: ["once", "monthly"] });
   }
 
-  if (!asaasKey) return json({ ok: false, message: "Asaas ainda não configurado." }, 503);
+  if (!configured) return json({ ok: false,
+    message: "Chave do Asaas Sandbox ainda não configurada no Supabase." }, 503);
 
   if (body.action === "cancel") {
     if (typeof body.id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.id))
@@ -63,7 +64,10 @@ Deno.serve(async (req) => {
       .select("*").eq("id", body.id).eq("requested_by", userInfo.user.id)
       .eq("frequency", "monthly").limit(1);
     const d = donations?.[0];
-    if (donationError || !d) return json({ ok: false, message: "Oferta mensal não localizada." }, 404);
+    if (donationError || !d || d.organization_id !== DEMO_ORG_ID ||
+        d.environment !== "sandbox") {
+      return json({ ok: false, message: "Oferta mensal de teste não localizada." }, 404);
+    }
     if (d.status === "canceled") return json({ ok: true, alreadyCanceled: true });
 
     const can = await user.rpc("list_my_elo_developer_donations", { p_organization_id: d.organization_id });
@@ -104,9 +108,10 @@ Deno.serve(async (req) => {
   const cents = Number(body.amountCents);
   const method = String(body.method ?? "");
   const frequency = String(body.frequency ?? "");
-  if (!/^[0-9a-f-]{36}$/i.test(org) || !Number.isInteger(cents) ||
+  if (org !== DEMO_ORG_ID || !Number.isInteger(cents) ||
       cents < 500 || cents > 5000000 || !expectedMethods.has(method) || !expectedFrequency.has(frequency)) {
-    return json({ ok: false, message: "Confira valor, periodicidade e forma de pagamento." }, 400);
+    return json({ ok: false,
+      message: "Ofertas em teste estão disponíveis apenas na igreja Elo Church Demo. Confira valor e pagamento." }, 400);
   }
 
   const { data: intent, error: intentError } = await user.rpc("request_elo_developer_donation", {
