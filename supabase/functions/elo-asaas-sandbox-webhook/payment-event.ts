@@ -8,6 +8,7 @@ export type DonationRecord = {
   payment_link_id: string | null;
   provider_subscription_id: string | null;
   provider_pix_qr_id?: string | null;
+  provider_monthly_cycle_id?: string | null;
 };
 
 export type DonationEvent = {
@@ -50,7 +51,9 @@ export function prepareDonationEvent(
     typeof payment.subscription === "string" ? payment.subscription : null;
   const pixQrId =
     typeof payment.pixQrCodeId === "string" ? payment.pixQrCodeId : null;
-  const exactExternalRef = payment.externalReference === `elo-donation:${donation.id}`;
+  const exactExternalRef = payment.externalReference === `elo-donation:${donation.id}` ||
+    Boolean(donation.provider_monthly_cycle_id &&
+      payment.externalReference === `elo-monthly:${donation.provider_monthly_cycle_id}`);
   const belongsToDonation =
     Boolean(linkId && linkId === donation.payment_link_id) ||
     Boolean(subscriptionId && subscriptionId === donation.provider_subscription_id) ||
