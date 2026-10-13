@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 from pglast import parse_sql
 
-sql_path = Path("supabase/migrations/20261013180000_elo_free_access_preserve_legacy_billing.sql")
+sql_path = Path("supabase/migrations/20261013182943_elo_free_access_preserve_legacy_billing_v65.sql")
 sql = sql_path.read_text(encoding="utf-8")
 stmts = parse_sql(sql)
 assert len(stmts) >= 10, "Migração incompleta"
