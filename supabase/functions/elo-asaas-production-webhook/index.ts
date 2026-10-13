@@ -29,7 +29,7 @@ Deno.serve(async (request: Request) => {
 
   const secret = (Deno.env.get("ELO_ASAAS_PRODUCTION_WEBHOOK_TOKEN") ?? "").trim();
   // O token deve ser distinto da chave API e do token do webhook Sandbox.
-  if (secret.length < 32 || secret.length > 255 || /\\s/.test(secret) ||
+  if (secret.length < 32 || secret.length > 255 || /\s/.test(secret) ||
       secret.startsWith("$aact_")) {
     return json(503, "production_webhook_not_configured");
   }
