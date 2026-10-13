@@ -1,0 +1,48 @@
+name: Elo - Validar receptor Asaas Sandbox (sem deploy)
+
+on:
+  push:
+    branches: [feature/elo-updates-foundation]
+    paths:
+      - ".github/workflows/elo-asaas-sandbox-webhook-verify.yml"
+      - "supabase/functions/elo-asaas-sandbox-webhook/**"
+      - "supabase/migrations/20261013002628_elo_asaas_sandbox_webhook_receipts_v61.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Analisar TypeScript e dependencias do receptor
+        run: |
+          deno check --config supabase/functions/elo-asaas-sandbox-webhook/deno.json \
+            supabase/functions/elo-asaas-sandbox-webhook/index.ts
+      - name: Testar dez casos de confirmação Pix simulada
+        run: |
+          deno test --no-check --config supabase/functions/elo-asaas-sandbox-webhook/deno.json \
+            supabase/functions/elo-asaas-sandbox-webhook/parse-event.test.ts
+      - name: Verificar isolamento de dados financeiros de igrejas
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path("supabase/functions/elo-asaas-sandbox-webhook/index.ts").read_text()
+          assert 'ELO_ASAAS_SANDBOX_WEBHOOK_TOKEN' in p
+          assert 'asaas-access-token' in p
+          assert 'elo_asaas_sandbox_webhook_receipts' in p
+          for x in ['organization_subscriptions','billing_invoices','billing_payment_attempts','platform_webhook_events','church_app_releases']:
+            assert x not in p, x
+          s=Path("supabase/migrations/20261013002628_elo_asaas_sandbox_webhook_receipts_v61.sql").read_text()
+          assert "enable row level security" in s.lower()
+          assert "from public, anon, authenticated" in s
+          print("Somente eventos de teste; nenhuma escrita em tabelas financeiras das igrejas.")
+          PY
