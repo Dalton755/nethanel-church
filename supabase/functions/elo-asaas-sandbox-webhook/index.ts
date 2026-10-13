@@ -58,6 +58,7 @@ Deno.serve(async (request) => {
     ? incoming.payment as Record<string, unknown> : null;
   const paymentLink = typeof payment?.paymentLink === "string" ? payment.paymentLink : null;
   const subscriptionId = typeof payment?.subscription === "string" ? payment.subscription : null;
+  const pixQrCodeId = typeof payment?.pixQrCodeId === "string" ? payment.pixQrCodeId : null;
   const extref = typeof payment?.externalReference === "string" ?
     payment.externalReference : "";
   const refId = /^elo-donation:([0-9a-f-]{36})$/i.exec(extref)?.[1] ?? null;
@@ -65,7 +66,7 @@ Deno.serve(async (request) => {
   const receipt=parseSandboxPixEvent(body);
   // Demais eventos são ignorados antes de sequer abrir conexão com o banco.
   if (!receipt && (!payment || !Object.hasOwn(DONATION_PAYMENT_EVENTS, eventName) ||
-      (!paymentLink && !subscriptionId && !refId))) return reply({ok:true,ignored:true});
+      (!paymentLink && !subscriptionId && !refId && !pixQrCodeId))) return reply({ok:true,ignored:true});
 
   const base=Deno.env.get("SUPABASE_URL") ?? "";
   const key=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -81,10 +82,11 @@ Deno.serve(async (request) => {
     const filters: {column: string; value: string}[] = [];
     if (paymentLink) filters.push({column:"payment_link_id",value:paymentLink});
     if (subscriptionId) filters.push({column:"provider_subscription_id",value:subscriptionId});
+    if (pixQrCodeId) filters.push({column:"provider_pix_qr_id",value:pixQrCodeId});
     if (refId) filters.push({column:"id",value:refId});
     for (const filter of filters) {
       const {data,error} = await db.from("elo_developer_donations")
-        .select("id,amount_cents,environment,frequency,payment_link_id,provider_subscription_id")
+        .select("id,amount_cents,environment,frequency,payment_link_id,provider_subscription_id,provider_pix_qr_id")
         .eq("organization_id",DEMO_ORG_ID).eq("environment","sandbox")
         .eq(filter.column,filter.value).maybeSingle();
       if(error) {
