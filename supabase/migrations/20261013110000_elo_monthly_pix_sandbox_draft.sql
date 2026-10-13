@@ -226,7 +226,7 @@ create or replace function public.elo_commit_monthly_pix_qr(
  p_pix_payload text,p_expires_at timestamptz
 ) returns boolean
 language plpgsql security definer set search_path to pg_catalog,public,app_private
-as $
+as $$
 declare d public.elo_developer_donations%rowtype;
  v_id uuid;
 begin
@@ -247,7 +247,7 @@ begin
  returning id into v_id;
  return v_id is not null;
 end;
-$;
+$$;
 revoke all on function public.elo_commit_monthly_pix_qr(uuid,uuid,text,text,timestamptz)
  from public,anon,authenticated;
 grant execute on function public.elo_commit_monthly_pix_qr(uuid,uuid,text,text,timestamptz)
@@ -258,7 +258,7 @@ grant execute on function public.elo_commit_monthly_pix_qr(uuid,uuid,text,text,t
 create or replace function public.cancel_elo_monthly_pix_pledge(p_donation_id uuid)
 returns jsonb language plpgsql security definer
 set search_path to pg_catalog,public,app_private
-as $
+as $$
 declare d public.elo_developer_donations%rowtype;
  v_codes jsonb;
 begin
@@ -285,7 +285,7 @@ begin
  where donation_id=d.id and status in ('pending','processing');
  return jsonb_build_object('canceled',true,'alreadyCanceled',false,'qrIds',v_codes);
 end;
-$;
+$$;
 revoke all on function public.cancel_elo_monthly_pix_pledge(uuid) from public,anon;
 grant execute on function public.cancel_elo_monthly_pix_pledge(uuid) to authenticated;
 
