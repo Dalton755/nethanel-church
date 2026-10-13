@@ -5,7 +5,7 @@ import * as Phosphor from "phosphor-react-native";
 
 import { useOrganization } from "../../contexts/OrganizationContext";
 import { supabase } from "../../lib/supabase";
-import { EloActionButton, EloCard, EloScreen, EloState, eloColors, eloSharedStyles } from "../elo/EloUi";
+import { EloActionButton, EloCard, EloScreen, eloColors, eloSharedStyles } from "../elo/EloUi";
 
 const P = Phosphor as any;
 type Frequency = "once" | "monthly";
@@ -56,7 +56,7 @@ function Choice({ label, active, onPress }: {
 }
 
 export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
-  const { activeOrganization } = useOrganization();
+  const { activeOrganization, organizations, selectOrganization } = useOrganization();
   const [frequency, setFrequency] = useState<Frequency>("once");
   const [method, setMethod] = useState<Method>("pix");
   const [centsText, setCentsText] = useState("");
@@ -67,16 +67,21 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
   const [history, setHistory] = useState<Contribution[]>([]);
   const [workingCancel, setWorkingCancel] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [switchingDemo, setSwitchingDemo] = useState(false);
+  const [connectionIssue, setConnectionIssue] = useState("");
   const isDemo = activeOrganization?.id === TEST_ORG_ID;
+  const demoOrganization = organizations.find((org) => org.id === TEST_ORG_ID) ?? null;
 
   const cents = Number(centsText || "0");
   const reload = useCallback(async () => {
     if (!activeOrganization || activeOrganization.id !== TEST_ORG_ID) {
       setEnabled(false);
+      setConnectionIssue("");
       setHistory([]);
       setLoaded(true);
       return;
     }
+    setLoaded(false);
     const [capability, list] = await Promise.all([
       supabase.functions.invoke("elo-developer-donations", {
         body: { action: "capabilities" },
@@ -85,9 +90,15 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
         p_organization_id: activeOrganization.id,
       }),
     ]);
-    setEnabled(!capability.error && capability.data?.ok === true &&
-      capability.data?.configured === true && capability.data?.sandbox === true);
-    setSandbox(capability.data?.sandbox !== false);
+    const available = !capability.error && capability.data?.ok === true &&
+      capability.data?.configured === true && capability.data?.sandbox === true;
+    setEnabled(available);
+    setConnectionIssue(available ? "" : (
+      capability.data?.configured === false
+        ? "A chave de teste do Asaas ainda não foi reconhecida no Supabase."
+        : "Não foi possível confirmar a conexão com o Sandbox. Tente verificar novamente."
+    ));
+    setSandbox(true);
     if (!list.error && Array.isArray(list.data)) setHistory(list.data as Contribution[]);
     setLoaded(true);
   }, [activeOrganization?.id]);
@@ -105,6 +116,21 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
     setRefreshing(true);
     try { await reload(); }
     finally { setRefreshing(false); }
+  };
+
+  const openDemoForTesting = async () => {
+    if (!demoOrganization || switchingDemo) return;
+    setSwitchingDemo(true);
+    try {
+      await selectOrganization(demoOrganization.id);
+      setLoaded(false);
+      setEnabled(false);
+    } catch (error) {
+      Alert.alert("Não foi possível abrir a igreja Demo",
+        error instanceof Error ? error.message : "Tente novamente.");
+    } finally {
+      setSwitchingDemo(false);
+    }
   };
 
   function confirmCreate() {
@@ -263,17 +289,44 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
         </Text>
       ) : null}
       {!loaded ? <ActivityIndicator style={styles.loading} color={eloColors.blue} /> : null}
-      {loaded && !enabled ? (
-        <EloState title="Ofertas em preparação"
-          description="A integração segura com o Asaas ainda está sendo ativada. O Elo continua totalmente gratuito."
-          icon="InfoIcon" />
+      {!isDemo ? (
+        <EloCard style={styles.demoNotice}>
+          <View style={styles.demoNoticeTitle}>
+            <P.InfoIcon size={22} color={eloColors.blue} weight="duotone" />
+            <Text style={styles.demoTitle}>Teste disponível na Elo Church Demo</Text>
+          </View>
+          <Text style={styles.demoBody}>
+            Igreja selecionada: {activeOrganization?.name ?? "Nenhuma"}.
+            Por segurança, a simulação de pagamentos está liberada somente para a igreja Demo.
+          </Text>
+          {demoOrganization ? (
+            <EloActionButton label="Mudar para Elo Church Demo"
+              icon="ArrowRightIcon" loading={switchingDemo}
+              onPress={() => void openDemoForTesting()} />
+          ) : (
+            <Text style={styles.demoBody}>
+              Esta conta não tem a igreja Demo na lista. Selecione uma conta
+              com acesso à Elo Church Demo antes de testar.
+            </Text>
+          )}
+        </EloCard>
+      ) : (
+        <View style={styles.sandboxNotice}>
+          <P.ShieldCheckIcon size={18} color="#875B00" weight="duotone" />
+          <Text style={styles.sandboxNote}>
+            ASAAS SANDBOX • Simulação, sem movimentação de dinheiro real.
+          </Text>
+        </View>
+      )}
+      {isDemo && loaded && !enabled ? (
+        <EloCard style={styles.demoNotice}>
+          <Text style={styles.demoTitle}>Integração temporariamente indisponível</Text>
+          <Text style={styles.demoBody}>{connectionIssue}</Text>
+          <EloActionButton label="Verificar conexão"
+            icon="ArrowClockwiseIcon" variant="secondary"
+            onPress={() => void refreshHistory()} />
+        </EloCard>
       ) : null}
-      {isDemo && <Text style={styles.preview}>
-        SIMULAÇÃO • ASAAS SANDBOX — Nenhum valor real será cobrado.
-      </Text>}
-      {!isDemo && <EloState title="Teste restrito à igreja Demo"
-        description="A geração de ofertas está em homologação. Nas demais igrejas, o recurso será ativado somente após aprovação."
-        icon="InfoIcon" />}
       <View style={styles.payButton}>
         <EloActionButton
           label={sandbox ? "Gerar teste no Asaas" : "Gerar oferta pelo Asaas"}
@@ -350,7 +403,13 @@ const styles=StyleSheet.create({
   notice:{ marginTop:12,fontSize:12,lineHeight:19,color:"#8A5B00",
     backgroundColor:"#FFF8E8",padding:13,borderRadius:14 },
   loading:{ marginVertical:18 },
-  preview:{ marginTop:12,fontWeight:"800",fontSize:12,color:"#9A6700" },
+  sandboxNotice:{ marginTop:14,flexDirection:"row",alignItems:"center",
+    gap:8,paddingHorizontal:12,paddingVertical:11,borderRadius:12,backgroundColor:"#FFF8E8" },
+  sandboxNote:{ fontSize:12,lineHeight:18,fontWeight:"700",color:"#875B00",flex:1 },
+  demoNotice:{ marginTop:12,gap:12,padding:16 },
+  demoNoticeTitle:{ flexDirection:"row",alignItems:"center",gap:10 },
+  demoTitle:{ fontSize:14,fontWeight:"800",color:eloColors.ink,flex:1 },
+  demoBody:{ fontSize:13,lineHeight:20,color:eloColors.muted },
   payButton:{ marginTop:16 },
   historyHeader:{ marginTop:16, flexDirection:"row",flexWrap:"wrap",
     justifyContent:"space-between",alignItems:"center",gap:8 },
