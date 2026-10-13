@@ -7,6 +7,7 @@ export type DonationRecord = {
   frequency: "once" | "monthly";
   payment_link_id: string | null;
   provider_subscription_id: string | null;
+  provider_pix_qr_id?: string | null;
 };
 
 export type DonationEvent = {
@@ -47,10 +48,13 @@ export function prepareDonationEvent(
   const linkId = typeof payment.paymentLink === "string" ? payment.paymentLink : null;
   const subscriptionId =
     typeof payment.subscription === "string" ? payment.subscription : null;
+  const pixQrId =
+    typeof payment.pixQrCodeId === "string" ? payment.pixQrCodeId : null;
   const exactExternalRef = payment.externalReference === `elo-donation:${donation.id}`;
   const belongsToDonation =
     Boolean(linkId && linkId === donation.payment_link_id) ||
     Boolean(subscriptionId && subscriptionId === donation.provider_subscription_id) ||
+    Boolean(pixQrId && pixQrId === donation.provider_pix_qr_id) ||
     exactExternalRef;
   if (!belongsToDonation) {
     throw new Error("Cobrança sem vínculo válido com a oferta.");
