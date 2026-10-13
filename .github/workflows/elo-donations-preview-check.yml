@@ -45,6 +45,10 @@ jobs:
           deno check --config supabase/functions/elo-developer-donations/deno.json supabase/functions/elo-developer-donations/index.ts
           deno check --config supabase/functions/elo-developer-donations/deno.json supabase/functions/elo-developer-donations/monthly-flow.ts
           deno check --config supabase/functions/elo-developer-donations-webhook/deno.json supabase/functions/elo-developer-donations-webhook/index.ts
+      - name: Testar Pix mensal manual sem rede e sem cobrar
+        run: |
+          deno test --no-check --config supabase/functions/elo-developer-donations/deno.json \
+            supabase/functions/elo-developer-donations/monthly-flow.test.ts
       - name: Homologar webhook de Pix Asaas com eventos simulados, sem rede
         run: |
           deno test --no-check --config supabase/functions/elo-developer-donations-webhook/deno.json \
