@@ -16,7 +16,12 @@ function logSummary(line) {
   else console.log(line);
 }
 function fail(message) {
-  logSummary("❌ " + message);
+  // A saída das Actions não deve incluir a chave mesmo se o provedor citá-la.
+  const clean = String(message)
+    .replace(/\\$aact_(?:hmlg|prod)_[^\\s"'<>]+/gi, "[CHAVE OCULTA]")
+    .slice(0, 400);
+  logSummary("❌ " + clean);
+  console.error("ASAAS_SANDBOX_DIAGNOSTIC: " + clean);
   process.exitCode = 1;
 }
 const key = (process.env.ASAAS_SANDBOX_API_KEY || "").trim();
