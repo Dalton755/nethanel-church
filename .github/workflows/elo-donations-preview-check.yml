@@ -42,6 +42,10 @@ jobs:
         run: |
           deno check --config supabase/functions/elo-developer-donations/deno.json supabase/functions/elo-developer-donations/index.ts
           deno check --config supabase/functions/elo-developer-donations-webhook/deno.json supabase/functions/elo-developer-donations-webhook/index.ts
+      - name: Homologar webhook de Pix Asaas com eventos simulados, sem rede
+        run: |
+          deno test --no-check --config supabase/functions/elo-developer-donations-webhook/deno.json \
+            supabase/functions/elo-developer-donations-webhook/payment-event.test.ts
       - name: Sintaxe das migrations SQL sem conectar à produção
         run: |
           python -m pip install --disable-pip-version-check pglast
