@@ -41,6 +41,7 @@ const payload = {
   description: "Simulação de oferta voluntária de R$ 5,00 no ambiente Sandbox. Não efetuar pagamento bancário real.",
   billingType: "PIX",
   chargeType: "DETACHED",
+  dueDateLimitDays: 3,
   value: 5,
   externalReference: `elo-test-donation-${runId}`,
   notificationEnabled: false,
