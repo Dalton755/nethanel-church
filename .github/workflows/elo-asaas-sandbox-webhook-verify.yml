@@ -39,10 +39,21 @@ jobs:
           [ "$method_status" = "405" ] || { echo "GET esperado HTTP 405, recebido $method_status"; exit 1; }
           without_secret=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 \
             -X POST -H 'content-type: application/json' --data '{"event":"PAYMENT_RECEIVED"}' "$URL")
-          case "$without_secret" in
-            401|503) echo "Receptor seguro: requisicao sem token foi bloqueada ($without_secret)" ;;
-            *) echo "FALHA: endpoint permitiu POST sem token: HTTP $without_secret"; exit 1 ;;
-          esac
+          # 401 comprova que o segredo foi carregado no Supabase.
+          # 503 indicaria que a funcao continua sem o segredo configurado.
+          [ "$without_secret" = "401" ] || {
+            echo "ERRO: segredo nao confirmado. Esperado 401, recebido HTTP $without_secret";
+            exit 1;
+          }
+          wrong_token=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 \
+            -X POST -H 'content-type: application/json' \
+            -H 'asaas-access-token: INVALID_SANDBOX_TOKEN_NEVER_MATCHES_00000000' \
+            --data '{"event":"PAYMENT_RECEIVED"}' "$URL")
+          [ "$wrong_token" = "401" ] || {
+            echo "ERRO: token invalido nao foi bloqueado (HTTP $wrong_token)";
+            exit 1;
+          }
+          echo "OK: token carregado, ausente e incorreto rejeitados (401). Nenhum pagamento simulado."
       - name: Verificar isolamento de dados financeiros de igrejas
         run: |
           python - <<'PY'
