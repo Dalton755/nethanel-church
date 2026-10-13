@@ -434,7 +434,13 @@ export function DeveloperOfferingScreen({ onBack }: { onBack: () => void }) {
         <EloCard key={item.id} style={styles.history}>
           <Text style={styles.historyTitle}>{brl(item.amount_cents)} • {
             item.frequency === "monthly" ? "Mensal" : "Única"}</Text>
-          <Text style={styles.smallNote}>{statusName[item.status] ?? item.status}</Text>
+          <Text style={styles.smallNote}>
+            {item.frequency==="monthly" && item.payment_method==="pix" && !item.checkout_url
+              ? (item.status==="canceled"
+                  ? "Compromisso mensal cancelado"
+                  : "Compromisso voluntário ativo • pagamento manual a cada mês")
+              : (statusName[item.status] ?? item.status)}
+          </Text>
           {item.checkout_url && item.status==="pending" && safeLink(item.checkout_url) ? (
             <EloActionButton label="Abrir cobrança" variant="secondary"
               icon="ArrowSquareOutIcon" onPress={() => void WebBrowser.openBrowserAsync(item.checkout_url!)} />
