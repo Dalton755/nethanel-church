@@ -1,4 +1,4 @@
-name: Elo Principal - Teste conexao Asaas producao (APK privado)
+name: Elo Principal - Verificar token Webhook Asaas (APK privado)
 
 # Roda SOMENTE na branch de testes. Nao faz merge nem deploy.
 # A nova tela apenas consulta a conexao Asaas: cobranças reais desativadas.
@@ -34,8 +34,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/elo-generic-historic/{last-preview,latest,previous,earliest}
-          gh run download 38335568797 --repo "$GITHUB_REPOSITORY" \
-            --name nethanel-elo-principal-pix-qrcode-sandbox-preview \
+          gh run download 38499488257 --repo "$GITHUB_REPOSITORY" \
+            --name nethanel-elo-principal-asaas-producao-conexao-preview \
             --dir /tmp/elo-generic-historic/last-preview
           test -s /tmp/elo-generic-historic/last-preview/nethanel-elo-platform-preview.apk
           gh run download 37397162273 --repo "$GITHUB_REPOSITORY" \
@@ -127,7 +127,7 @@ jobs:
       - name: Disponibilizar somente APK aprovado para teste no GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: nethanel-elo-principal-asaas-producao-conexao-preview
+          name: nethanel-elo-principal-asaas-webhook-token-preview
           path: apps/mobile/nethanel-elo-platform-preview.apk
           retention-days: 7
           if-no-files-found: error
