@@ -109,3 +109,11 @@ O responsável executou o botão **Verificar conexão Asaas** dentro do **Painel
 
 **SQL PILOTO INATIVO APLICADO COM SUCESSO EM 14/10/2026:** versão `20261014114402_elo_production_pix_pilot_schema_inactive_v66.sql` no Supabase. Tabelas `elo_prod_offering_intents`, `elo_prod_pix_cycles` e `elo_prod_pix_events` criadas e vazias (0 ofertas, 0 QR e 0 eventos reais). RLS ativo; clientes anônimos/autenticados não leem diretamente essas tabelas, enquanto escritas de confirmação financeira exigem `service_role`. Integração de pagamento e Webhook permanecem **totalmente bloqueadas em HTTP 503**, mesmo com os módulos auxiliares presentes no deploy v3. Nenhuma cobrança real foi gerada.
 
+
+## Preparação do token do Webhook real — 14/10/2026
+
+O responsável informou que salvou o secret **`ELO_ASAAS_PRODUCTION_WEBHOOK_TOKEN`** diretamente no Supabase. Não foi revelado ou lido nesta conversa e **ainda não foi validado por uma sessão autenticada**.
+
+Para verificar sem expor credenciais, o serviço somente leitura `elo-asaas-production-health` foi atualizado (v3) para inspecionar no runtime o token: existência, comprimento entre 32 e 255, ausência de espaços e diferença das chaves de API e do token Sandbox (quando disponível). Somente o administrador global autenticado recebe uma classificação (`ready`, `missing`, `invalid`, `same_as_api_key` ou `same_as_sandbox`), **nunca o valor do segredo**. A tela administrativa mostra o diagnóstico separadamente da verificação da chave Pix. O CI `38559828941` foi aprovado e um APK de prévia privado está sendo compilado no run `38560029511`.
+
+O diagnóstico **não registra Webhook no Asaas**, não faz requisições de cobrança e **não habilita a produção**. Os endpoints `elo-developer-donations-production` e `elo-asaas-production-webhook` continuam retornando HTTP 503. Próximo passo: administrador global validar mensagem do token no app; depois planejar o primeiro webhook real somente após autorização de ativação e preparação segura da conciliação.
