@@ -68,3 +68,7 @@ CI `38499386340` concluiu com sucesso (segurança da integração + Deno + TypeS
 Nenhum QR real foi emitido e nenhuma operação financeira de produção foi ativada; `elo-developer-donations-production` e `elo-asaas-production-webhook` permanecem BLOQUEADOS por código.
 
 **Importante**: a consulta Pix é só diagnóstico de autenticação/permissão; não autoriza emitir uma cobrança e não prova, isoladamente, que todos os recursos da conta estão aptos para uso.
+
+## Validação visual de conexão — 13/10/2026
+
+O responsável executou o botão **Verificar conexão Asaas** dentro do **Painel Nethanel** em APK privado e enviou captura de tela com o resultado: **“Conexão Asaas PRODUÇÃO validada! Chave Pix ativa localizada. Nenhuma cobrança foi criada.”** Esta é a resposta do endpoint somente leitura `elo-asaas-production-health`, e confirma a verificação de credencial/chave Pix. **Não é teste de recebimento real**, nem autoriza ativar emissão de cobranças ou webhook financeiro. Os endpoints de pagamento e conciliação permanecem intencionalmente bloqueados (HTTP 503) e o aplicativo continua sem acesso aos valores de Secrets.
