@@ -27,8 +27,15 @@ check('paymentsEnabled: false' in f and 'private, no-store' in f,
       "Modo somente diagnóstico e sem cache da resposta")
 check('platform_admin_required' in f and 'invalid_session' in f,
       "Rejeita usuários sem privilégio")
-check('return json(200, {' in f and "result.data.some" in f,
-      "Somente estados da conexão são enviados ao aplicativo")
+check('const report = (body:' in f and "result.data.some" in f,
+      "Retorna apenas estados de conexão e diagnóstico do token do Webhook")
+check('"ELO_ASAAS_PRODUCTION_WEBHOOK_TOKEN"' in f and
+      '"same_as_api_key"' in f and '"same_as_sandbox"' in f and
+      '"ready"' in f and '"missing"' in f and '"invalid"' in f,
+      "Token de webhook validado no servidor sem revelar valor")
+check("inspectWebhookSecret(key)" in f and "webhookSecretStatus" in f and
+      "webhookStates" in ui and "Token do Webhook" in ui,
+      "Somente o administrador global recebe uma classificação não sensível do Secret")
 check("elo-asaas-production-health" in ui and "Verificar conexão Asaas" in ui,
       "Teste visível no painel do administrador global")
 check(all("= false as const" in code for code in stubs),
