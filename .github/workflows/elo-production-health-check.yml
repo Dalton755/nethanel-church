@@ -1,0 +1,38 @@
+name: Elo - Validar conexao Asaas PRODUCAO sem cobrar
+
+on:
+  push:
+    branches: [feature/elo-updates-foundation]
+    paths:
+      - "supabase/functions/elo-asaas-production-health/**"
+      - "apps/mobile/src/features/management/PlatformAdminScreen.tsx"
+      - "scripts/elo_production_health_safety_check.py"
+      - ".github/workflows/elo-production-health-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readonly-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Conferir segurança sem chave Asaas e sem chamadas externas
+        run: python3 scripts/elo_production_health_safety_check.py
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Validar TypeScript da function
+        run: deno check --config supabase/functions/elo-asaas-production-health/deno.json supabase/functions/elo-asaas-production-health/index.ts
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Validar a tela de administração
+        run: |
+          npm ci
+          npm run typecheck --workspace=mobile
