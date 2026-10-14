@@ -55,3 +55,16 @@ O teste prova que os novos endpoints não possuem `fetch`, persistência SQL e *
 - https://docs.asaas.com/docs/criar-novo-webhook-pela-api
 - https://docs.asaas.com/docs/sobre-os-webhooks
 - https://docs.asaas.com/docs/faq-de-webhooks
+
+## Validação read-only de chave de produção — 13/10/2026
+
+O usuário confirmou que a chave `ELO_ASAAS_PRODUCTION_API_KEY` foi criada e salva no Supabase. **Não tivemos acesso nem expusemos o valor da chave.**
+O endpoint **`elo-asaas-production-health` v1** foi instalado como função **`verify_jwt=true`**, separado dos endpoints financeiros desativados.
+Somente um **administrador global ativo**, verificado pelo Supabase Auth e pela tabela `platform_admins`, pode utilizá-lo.
+O diagnóstico realiza exclusivamente o **GET de leitura** `https://api.asaas.com/v3/pix/addressKeys?status=ACTIVE&limit=20` (Asaas Produção) com a chave obtida no servidor. O retorno ao aplicativo contém somente indicadores de conexão e existência de pelo menos uma chave Pix ativa, **nunca conteúdo da chave, dados da conta, QR/payload ou saldo**. Uso limitado a uma verificação por 30 segundos na instância. Nenhum cliente comum pode acionar esse recurso.
+
+No painel `Painel Nethanel` do app de prévia, foi adicionado o botão **Verificar conexão Asaas**, com mensagens específicas para credencial ausente, inválida, acesso restrito e conexão estabelecida. Ainda é necessário executar o teste a partir de uma sessão do administrador global.
+CI `38499386340` concluiu com sucesso (segurança da integração + Deno + TypeScript React Native). Build privado em GitHub Actions `38499488257`, aguardando compilação.
+Nenhum QR real foi emitido e nenhuma operação financeira de produção foi ativada; `elo-developer-donations-production` e `elo-asaas-production-webhook` permanecem BLOQUEADOS por código.
+
+**Importante**: a consulta Pix é só diagnóstico de autenticação/permissão; não autoriza emitir uma cobrança e não prova, isoladamente, que todos os recursos da conta estão aptos para uso.
