@@ -65,8 +65,19 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
         unexpected_response: "O Asaas respondeu, mas não foi possível validar a lista de chaves Pix.",
         network_error: "Não foi possível estabelecer a conexão. Verifique a rede e tente novamente.",
       };
-      setAsaasDiagnostic(status[data.code as string] ??
-        "A verificação não foi concluída. Nenhum pagamento foi criado.");
+      const webhookStates: Record<string, string> = {
+        ready: "Token do Webhook: formato válido e armazenado no Supabase. O Webhook ainda não foi cadastrado no Asaas.",
+        missing: "Token do Webhook: não encontrado. Confira o Secret no Supabase.",
+        invalid: "Token do Webhook: inválido (32 a 255 caracteres, sem espaços).",
+        same_as_api_key: "Token do Webhook: use um segredo diferente da chave API.",
+        same_as_sandbox: "Token do Webhook: use um segredo diferente do Sandbox.",
+      };
+      const connection = status[data.code as string] ??
+        "A verificação da conexão não foi concluída. Nenhum pagamento foi criado.";
+      const webhookStatus = webhookStates[data.webhookSecretStatus as string] ??
+        "Não foi possível verificar a configuração do token do Webhook.";
+      setAsaasDiagnostic(connection + "\n\n" + webhookStatus +
+        "\n\nPagamentos reais continuam desativados.");
     } catch {
       setAsaasDiagnostic("Erro ao verificar conexão. Nenhum pagamento foi criado.");
     } finally {
@@ -150,7 +161,7 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
               <View style={styles.cardText}>
                 <Text style={styles.cardTitle}>Validar conexão de produção</Text>
                 <Text style={styles.cardDescription}>
-                  Consulta somente a autenticação e as chaves Pix ativas no Asaas.
+                  Consulta a conexão Asaas, chave Pix e configuração do Webhook.
                   Não gera cobranças. As ofertas reais continuam desativadas.
                 </Text>
               </View>
