@@ -79,25 +79,25 @@ O responsável executou o botão **Verificar conexão Asaas** dentro do **Painel
 
 ### Arquivos preparados na branch de homologação
 
-- \`supabase/functions/elo-developer-donations-production/pix-provider.ts\`: QR Pix real via \`POST /v3/pix/qrCodes/static\`, valor em centavos fixo, expiração de 24h, \`allowsMultiplePayments:false\`, referência própria ao ciclo, consulta prévia de chave Pix ativa e revogação de QR em erro/cancelamento.
-- \`supabase/functions/elo-developer-donations-production/production-flow.ts\`: autenticação Supabase, checagem de administrador global, limitação à Demo, RPC de intenção, geração por competência, histórico e cancelamento voluntário.
-- \`supabase/functions/elo-asaas-production-webhook/verify-event.ts\`: validação pura de referência \`elo-prod:<uuid>\`, \`pixQrCodeId\`, id do evento, identificador do pagamento, valor exato e tipo de evento.
-- \`supabase/functions/elo-asaas-production-webhook/webhook-flow.ts\`: token próprio no header \`asaas-access-token\`, limite de corpo, idempotência via RPC, conferência de QR/valor/igreja e rejeição de conflitos; nunca envia dados pessoais para logs.
-- **SQL PREVIEW, NÃO APLICADO:** \`supabase/drafts/20261014_elo_production_pix_PILOT_DO_NOT_APPLY.sql\`, com tabelas isoladas \`elo_prod_offering_intents\`, \`elo_prod_pix_cycles\`, \`elo_prod_pix_events\`, RLS restritivo, guarda por administrador global + papel ministerial na Demo, locks por oferta/ciclo, uma competência mensal por oferta e cancelamento transacional. Mantido fora de \`supabase/migrations/\` para não ser executado automaticamente.
+- `supabase/functions/elo-developer-donations-production/pix-provider.ts`: QR Pix real via `POST /v3/pix/qrCodes/static`, valor em centavos fixo, expiração de 24h, `allowsMultiplePayments:false`, referência própria ao ciclo, consulta prévia de chave Pix ativa e revogação de QR em erro/cancelamento.
+- `supabase/functions/elo-developer-donations-production/production-flow.ts`: autenticação Supabase, checagem de administrador global, limitação à Demo, RPC de intenção, geração por competência, histórico e cancelamento voluntário.
+- `supabase/functions/elo-asaas-production-webhook/verify-event.ts`: validação pura de referência `elo-prod:<uuid>`, `pixQrCodeId`, id do evento, identificador do pagamento, valor exato e tipo de evento.
+- `supabase/functions/elo-asaas-production-webhook/webhook-flow.ts`: token próprio no header `asaas-access-token`, limite de corpo, idempotência via RPC, conferência de QR/valor/igreja e rejeição de conflitos; nunca envia dados pessoais para logs.
+- **SQL PREVIEW, NÃO APLICADO:** `supabase/drafts/20261014_elo_production_pix_PILOT_DO_NOT_APPLY.sql`, com tabelas isoladas `elo_prod_offering_intents`, `elo_prod_pix_cycles`, `elo_prod_pix_events`, RLS restritivo, guarda por administrador global + papel ministerial na Demo, locks por oferta/ciclo, uma competência mensal por oferta e cancelamento transacional. Mantido fora de `supabase/migrations/` para não ser executado automaticamente.
 
 ### Implantação técnica sem permissão de uso
 
-**Funções no Supabase atualizadas para v3 com módulos auxiliares inertes**, mas seus \`index.ts\` **NÃO IMPORTAM E NÃO EXECUTAM** esses módulos. As duas rotas continuam retornando **HTTP 503** independentemente da flag:
+**Funções no Supabase atualizadas para v3 com módulos auxiliares inertes**, mas seus `index.ts` **NÃO IMPORTAM E NÃO EXECUTAM** esses módulos. As duas rotas continuam retornando **HTTP 503** independentemente da flag:
 
-- \`elo-developer-donations-production\`: \`verify_jwt=true\`, retorno \`production_donations_disabled\`.
-- \`elo-asaas-production-webhook\`: \`verify_jwt=false\` com validação do token quando configurado, retorno \`production_webhook_disabled\`. Não registrar no Asaas agora; ele pode enfileirar/repetir eventos com HTTP 503.
+- `elo-developer-donations-production`: `verify_jwt=true`, retorno `production_donations_disabled`.
+- `elo-asaas-production-webhook`: `verify_jwt=false` com validação do token quando configurado, retorno `production_webhook_disabled`. Não registrar no Asaas agora; ele pode enfileirar/repetir eventos com HTTP 503.
 
-**Não foram realizadas operações Asaas de produção**, criação de QR, cobrança, movimentação financeira ou alteração de contas reais. A chave API real já havia sido validada somente por consulta de leitura em \`elo-asaas-production-health\`. Nenhuma das novas tabelas de produção foi criada no banco. Sandbox e cobrança legada seguem independentes.
+**Não foram realizadas operações Asaas de produção**, criação de QR, cobrança, movimentação financeira ou alteração de contas reais. A chave API real já havia sido validada somente por consulta de leitura em `elo-asaas-production-health`. Nenhuma das novas tabelas de produção foi criada no banco. Sandbox e cobrança legada seguem independentes.
 
 ### Testes sem rede
 
-- \`.github/workflows/elo-production-payment-preflight.yml\`: sintaxe PostgreSQL (\`pglast\`), isolamento de tabelas, idempotência e autorização; compilação Deno de ambos os motores; simulações de eventos Asaas sem rede nem credenciais.
-- \`.github/workflows/elo-production-payments-lock.yml\`: continua impondo ausência de importação/execução e HTTP 503 em ambos os endpoints públicos.
+- `.github/workflows/elo-production-payment-preflight.yml`: sintaxe PostgreSQL (`pglast`), isolamento de tabelas, idempotência e autorização; compilação Deno de ambos os motores; simulações de eventos Asaas sem rede nem credenciais.
+- `.github/workflows/elo-production-payments-lock.yml`: continua impondo ausência de importação/execução e HTTP 503 em ambos os endpoints públicos.
 
 ### Bloqueadores para primeira oferta real
 
