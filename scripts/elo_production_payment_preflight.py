@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 from pglast import parse_sql
 
-migration_path=Path("supabase/drafts/20261014_elo_production_pix_PILOT_DO_NOT_APPLY.sql")
+migration_path=Path("supabase/migrations/20261014114402_elo_production_pix_pilot_schema_inactive_v66.sql")
 sql=migration_path.read_text(encoding="utf-8")
 donation=Path("supabase/functions/elo-developer-donations-production/index.ts").read_text()
 webhook=Path("supabase/functions/elo-asaas-production-webhook/index.ts").read_text()
