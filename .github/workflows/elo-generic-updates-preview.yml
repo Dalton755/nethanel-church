@@ -1,6 +1,7 @@
-name: Elo Principal - Oferta Pix mensal manual (APK Sandbox de previa)
+name: Elo Principal - Teste conexao Asaas producao (APK privado)
 
 # Roda SOMENTE na branch de testes. Nao faz merge nem deploy.
+# A nova tela apenas consulta a conexao Asaas: cobranças reais desativadas.
 on:
   push:
     branches:
@@ -126,7 +127,7 @@ jobs:
       - name: Disponibilizar somente APK aprovado para teste no GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: nethanel-elo-principal-pix-mensal-manual-preview
+          name: nethanel-elo-principal-asaas-producao-conexao-preview
           path: apps/mobile/nethanel-elo-platform-preview.apk
           retention-days: 7
           if-no-files-found: error
