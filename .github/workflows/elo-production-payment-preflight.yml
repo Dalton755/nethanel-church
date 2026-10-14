@@ -41,9 +41,11 @@ jobs:
           deno check --config supabase/functions/elo-asaas-production-webhook/deno.json \
             supabase/functions/elo-asaas-production-webhook/index.ts \
             supabase/functions/elo-asaas-production-webhook/webhook-flow.ts \
-            supabase/functions/elo-asaas-production-webhook/verify-event.ts
+            supabase/functions/elo-asaas-production-webhook/verify-event.ts \
+            supabase/functions/elo-asaas-production-webhook/reconcile-payments.ts
       - name: Testes de QR e evento simulados SEM REDE
         run: |
           deno test --no-check \
             supabase/functions/elo-developer-donations-production/pix-provider.test.ts \
-            supabase/functions/elo-asaas-production-webhook/verify-event.test.ts
+            supabase/functions/elo-asaas-production-webhook/verify-event.test.ts \
+            supabase/functions/elo-asaas-production-webhook/reconcile-payments.test.ts
