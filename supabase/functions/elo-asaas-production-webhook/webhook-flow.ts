@@ -55,15 +55,17 @@ export async function handleAuthorizedProductionWebhook(request:Request):Promise
 
   const {data:cycle,error:cycleError}=await db.from("elo_prod_pix_cycles")
     .select("id,intent_id,provider_qr_id,amount_cents,state,provider_payment_id")
-    .eq("id",parsed.cycleId).maybeSingle();
+    .eq("provider_qr_id",parsed.qrId).maybeSingle();
   if(cycleError)return reply(500,{ok:false,code:"database_unavailable"});
   if(!cycle)return reply(200,{ok:true,ignored:true});
   const {data:intent,error:intentError}=await db.from("elo_prod_offering_intents")
     .select("organization_id").eq("id",cycle.intent_id)
     .eq("organization_id",DEMO).maybeSingle();
   if(intentError)return reply(500,{ok:false,code:"database_unavailable"});
-  if(!intent || cycle.provider_qr_id!==parsed.qrId ||
-     cycle.amount_cents!==parsed.amountCents)
+  // O ciclo é identificado pelo QR estático cadastrado, não por
+  // payment.externalReference (que pode não ser propagado pelo Asaas).
+  if((parsed.cycleId && parsed.cycleId!==cycle.id) || !intent ||
+     cycle.provider_qr_id!==parsed.qrId || cycle.amount_cents!==parsed.amountCents)
     return reply(422,{ok:false,code:"payment_not_matching"});
   if(cycle.provider_payment_id && cycle.provider_payment_id!==parsed.paymentId)
     return reply(422,{ok:false,code:"payment_id_conflict"});
