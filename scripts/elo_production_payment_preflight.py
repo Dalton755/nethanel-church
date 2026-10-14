@@ -49,7 +49,8 @@ checks=[
  ("ELO_DONATIONS_PRODUCTION_ENABLED" in production_flow and
   "ELO_DONATIONS_PRODUCTION_ENABLED" in webhook_flow,
   "Mesmo módulos inativos exigem habilitação futura separada"),
- ("elo_prod_offering_intents" in production_flow and
+ ("request_elo_prod_offering" in production_flow and
+  "reserve_elo_prod_pix_cycle" in production_flow and
   "record_elo_prod_pix_event" in webhook_flow,
   "Futuros motores só acessam dados isolados"),
  ("organization_subscriptions" not in sql and
