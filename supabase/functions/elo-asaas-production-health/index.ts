@@ -12,6 +12,20 @@ const json = (status: number, body: Record<string, unknown>) =>
     "cache-control": "private, no-store",
   } });
 
+type WebhookSecretStatus = "ready" | "missing" | "invalid" | "same_as_api_key" | "same_as_sandbox";
+
+function inspectWebhookSecret(apiKey: string): WebhookSecretStatus {
+  // Estado somente: NÃO retorna, registra ou transmite o token real.
+  const raw = Deno.env.get("ELO_ASAAS_PRODUCTION_WEBHOOK_TOKEN") ?? "";
+  if (!raw) return "missing";
+  if (raw !== raw.trim() || raw.length < 32 || raw.length > 255 ||
+      /\s/.test(raw) || raw.startsWith("$aact_")) return "invalid";
+  if (apiKey && raw === apiKey) return "same_as_api_key";
+  const sandboxToken = Deno.env.get("ELO_ASAAS_SANDBOX_WEBHOOK_TOKEN") ?? "";
+  if (sandboxToken && raw === sandboxToken) return "same_as_sandbox";
+  return "ready";
+}
+
 const checked = new Map<string, number>();
 const MIN_INTERVAL_MS = 30_000;
 
@@ -58,10 +72,15 @@ Deno.serve(async (request: Request) => {
   checked.set(verified.user.id, Date.now());
 
   const key = (Deno.env.get("ELO_ASAAS_PRODUCTION_API_KEY") ?? "").trim();
+  const webhookSecretStatus = inspectWebhookSecret(key);
+  // A validação comprova apenas que o Secret é adequado e está disponível
+  // ao runtime. NÃO comprova que o webhook já esteja registrado no Asaas.
+  const report = (body: Record<string, unknown>) =>
+    json(200, { ...body, webhookSecretStatus });
   if (!key)
-    return json(200, { ok: true, connected: false, activePixKey: false, code: "key_missing" });
+    return report({ ok: true, connected: false, activePixKey: false, code: "key_missing" });
   if (!key.startsWith("$aact_prod_"))
-    return json(200, { ok: true, connected: false, activePixKey: false, code: "invalid_environment" });
+    return report({ ok: true, connected: false, activePixKey: false, code: "invalid_environment" });
 
   try {
     const response = await fetch(API_URL, {
@@ -75,25 +94,25 @@ Deno.serve(async (request: Request) => {
     });
     // Nunca registrar corpo da resposta, chaves Pix, token ou dados da conta.
     if (response.status === 401)
-      return json(200, { ok: true, connected: false, activePixKey: false, code: "not_authorized" });
+      return report({ ok: true, connected: false, activePixKey: false, code: "not_authorized" });
     if (response.status === 403)
-      return json(200, { ok: true, connected: false, activePixKey: false, code: "api_access_restricted" });
+      return report({ ok: true, connected: false, activePixKey: false, code: "api_access_restricted" });
     if (response.status === 429)
-      return json(200, { ok: true, connected: false, activePixKey: false, code: "provider_rate_limited" });
+      return report({ ok: true, connected: false, activePixKey: false, code: "provider_rate_limited" });
     if (!response.ok)
-      return json(200, { ok: true, connected: false, activePixKey: false, code: "provider_unavailable" });
+      return report({ ok: true, connected: false, activePixKey: false, code: "provider_unavailable" });
 
     const result = await response.json().catch(() => ({}));
     if (!Array.isArray(result?.data))
-      return json(200, { ok: true, connected: false, activePixKey: false, code: "unexpected_response" });
+      return report({ ok: true, connected: false, activePixKey: false, code: "unexpected_response" });
     const hasActivePix = result.data.some((entry: unknown) =>
       entry !== null && typeof entry === "object" &&
       (entry as Record<string, unknown>).status === "ACTIVE");
-    return json(200, {
+    return report({
       ok: true, connected: true, activePixKey: hasActivePix,
       code: hasActivePix ? "connected" : "no_active_pix",
     });
   } catch {
-    return json(200, { ok: true, connected: false, activePixKey: false, code: "network_error" });
+    return report({ ok: true, connected: false, activePixKey: false, code: "network_error" });
   }
 });
