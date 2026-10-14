@@ -4,7 +4,7 @@ on:
   push:
     branches: [feature/elo-updates-foundation]
     paths:
-      - "supabase/drafts/20261014_elo_production_pix_PILOT_DO_NOT_APPLY.sql"
+      - "supabase/migrations/20261014114402_elo_production_pix_pilot_schema_inactive_v66.sql"
       - "supabase/functions/elo-developer-donations-production/**"
       - "supabase/functions/elo-asaas-production-webhook/**"
       - "scripts/elo_production_payment_preflight.py"
