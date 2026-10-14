@@ -10,7 +10,7 @@ const respond = (status: number, data: Record<string, unknown>) =>
     status, headers: {"content-type":"application/json; charset=utf-8","cache-control":"no-store"},
   });
 
-type Client = ReturnType<typeof createClient>;
+type Client = any; // Supabase RPCs ainda não foram aplicadas ao banco; tipar após a migração.
 async function prepareCycle(user: Client, admin: Client, key: string, intentId: string) {
   const { data, error } = await user.rpc("reserve_elo_prod_pix_cycle", {
     p_intent_id: intentId,
