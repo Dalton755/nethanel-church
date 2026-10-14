@@ -83,7 +83,7 @@ O responsável executou o botão **Verificar conexão Asaas** dentro do **Painel
 - `supabase/functions/elo-developer-donations-production/production-flow.ts`: autenticação Supabase, checagem de administrador global, limitação à Demo, RPC de intenção, geração por competência, histórico e cancelamento voluntário.
 - `supabase/functions/elo-asaas-production-webhook/verify-event.ts`: validação pura de referência `elo-prod:<uuid>`, `pixQrCodeId`, id do evento, identificador do pagamento, valor exato e tipo de evento.
 - `supabase/functions/elo-asaas-production-webhook/webhook-flow.ts`: token próprio no header `asaas-access-token`, limite de corpo, idempotência via RPC, conferência de QR/valor/igreja e rejeição de conflitos; nunca envia dados pessoais para logs.
-- **SQL PREVIEW, NÃO APLICADO:** `supabase/drafts/20261014_elo_production_pix_PILOT_DO_NOT_APPLY.sql`, com tabelas isoladas `elo_prod_offering_intents`, `elo_prod_pix_cycles`, `elo_prod_pix_events`, RLS restritivo, guarda por administrador global + papel ministerial na Demo, locks por oferta/ciclo, uma competência mensal por oferta e cancelamento transacional. Mantido fora de `supabase/migrations/` para não ser executado automaticamente.
+- **SQL PILOTO APLICADO, SEM ATIVAÇÃO FINANCEIRA:** `supabase/migrations/20261014114402_elo_production_pix_pilot_schema_inactive_v66.sql`, com tabelas isoladas `elo_prod_offering_intents`, `elo_prod_pix_cycles`, `elo_prod_pix_events`, RLS restritivo, guarda por administrador global + papel ministerial na Demo, locks por oferta/ciclo, uma competência mensal por oferta e cancelamento transacional. Registrado como migração versionada após aprovação de implementação do piloto inativo.
 
 ### Implantação técnica sem permissão de uso
 
@@ -92,7 +92,7 @@ O responsável executou o botão **Verificar conexão Asaas** dentro do **Painel
 - `elo-developer-donations-production`: `verify_jwt=true`, retorno `production_donations_disabled`.
 - `elo-asaas-production-webhook`: `verify_jwt=false` com validação do token quando configurado, retorno `production_webhook_disabled`. Não registrar no Asaas agora; ele pode enfileirar/repetir eventos com HTTP 503.
 
-**Não foram realizadas operações Asaas de produção**, criação de QR, cobrança, movimentação financeira ou alteração de contas reais. A chave API real já havia sido validada somente por consulta de leitura em `elo-asaas-production-health`. Nenhuma das novas tabelas de produção foi criada no banco. Sandbox e cobrança legada seguem independentes.
+**Não foram realizadas operações Asaas de produção**, criação de QR, cobrança, movimentação financeira ou alteração de contas reais. A chave API real já havia sido validada somente por consulta de leitura em `elo-asaas-production-health`. As tabelas exclusivas para as futuras ofertas reais foram criadas, mas estão vazias e protegidas por RLS. Sandbox e cobrança legada seguem independentes.
 
 ### Testes sem rede
 
@@ -101,8 +101,11 @@ O responsável executou o botão **Verificar conexão Asaas** dentro do **Painel
 
 ### Bloqueadores para primeira oferta real
 
-1. Auditoria final do SQL e autorização expressa para aplicá-lo ao Supabase, deixando os endpoints **ainda desligados**.
+1. Executar os testes autenticados de autorização e concorrência das novas RPCs, mantendo os endpoints **ainda desligados**.
 2. Verificação real das permissões por perfil, concorrência na geração, expiração e reembolso em ambiente controlado.
 3. Criar token **exclusivo** do webhook real no painel seguro e definir eventos necessários; **não cadastrar Webhook enquanto os endpoints estiverem desligados**.
 4. Revisão de termos e identificação do destinatário das ofertas, custas/taxas e políticas de privacidade.
 5. **Nova autorização expressa** para ativar Pix real **somente na Demo** e fazer teste de R$ 5; depois outra para liberar todas as igrejas.
+
+**SQL PILOTO INATIVO APLICADO COM SUCESSO EM 14/10/2026:** versão `20261014114402_elo_production_pix_pilot_schema_inactive_v66.sql` no Supabase. Tabelas `elo_prod_offering_intents`, `elo_prod_pix_cycles` e `elo_prod_pix_events` criadas e vazias (0 ofertas, 0 QR e 0 eventos reais). RLS ativo; clientes anônimos/autenticados não leem diretamente essas tabelas, enquanto escritas de confirmação financeira exigem `service_role`. Integração de pagamento e Webhook permanecem **totalmente bloqueadas em HTTP 503**, mesmo com os módulos auxiliares presentes no deploy v3. Nenhuma cobrança real foi gerada.
+
