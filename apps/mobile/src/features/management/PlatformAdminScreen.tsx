@@ -38,6 +38,42 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [updatesOpen, setUpdatesOpen] = useState(false);
 
+  const [checkingAsaas, setCheckingAsaas] = useState(false);
+  const [asaasDiagnostic, setAsaasDiagnostic] = useState<string | null>(null);
+
+  const checkAsaasConnection = useCallback(async () => {
+    if (checkingAsaas) return;
+    setCheckingAsaas(true);
+    setAsaasDiagnostic(null);
+    try {
+      const { data, error: functionError } = await supabase.functions.invoke(
+        "elo-asaas-production-health", { body: { action: "check" } },
+      );
+      if (functionError || !data?.ok) {
+        setAsaasDiagnostic("Não foi possível verificar agora. Confirme seu acesso de administrador e tente novamente.");
+        return;
+      }
+      const status: Record<string, string> = {
+        connected: "Conexão Asaas PRODUÇÃO validada! Chave Pix ativa localizada. Nenhuma cobrança foi criada.",
+        no_active_pix: "Conexão validada, mas nenhuma chave Pix ativa foi localizada nessa conta.",
+        key_missing: "A chave de produção não foi encontrada nos Secrets do Supabase.",
+        invalid_environment: "A chave configurada não parece ser do Asaas de produção.",
+        not_authorized: "O Asaas recusou a chave API. Confira se está ativa e pertence à conta de produção.",
+        api_access_restricted: "O Asaas bloqueou a consulta. Confira permissões e restrições de IP da chave.",
+        provider_rate_limited: "O Asaas limitou as consultas. Aguarde e tente novamente.",
+        provider_unavailable: "O Asaas não respondeu à consulta da chave Pix. Tente novamente.",
+        unexpected_response: "O Asaas respondeu, mas não foi possível validar a lista de chaves Pix.",
+        network_error: "Não foi possível estabelecer a conexão. Verifique a rede e tente novamente.",
+      };
+      setAsaasDiagnostic(status[data.code as string] ??
+        "A verificação não foi concluída. Nenhum pagamento foi criado.");
+    } catch {
+      setAsaasDiagnostic("Erro ao verificar conexão. Nenhum pagamento foi criado.");
+    } finally {
+      setCheckingAsaas(false);
+    }
+  }, [checkingAsaas]);
+
   const load = useCallback(async () => {
     setLoading(true);
     const { data, error: rpcError } = await supabase.rpc("platform_admin_dashboard");
@@ -105,6 +141,33 @@ export function PlatformAdminScreen({ onBack }: { onBack: () => void }) {
             </View>
           </View>
 
+          <Text style={eloSharedStyles.sectionTitle}>Integração Asaas</Text>
+          <EloCard style={styles.updatesCard}>
+            <View style={styles.updatesHead}>
+              <View style={styles.updatesIcon}>
+                <P.ShieldCheckIcon color={eloColors.blue} size={22} />
+              </View>
+              <View style={styles.cardText}>
+                <Text style={styles.cardTitle}>Validar conexão de produção</Text>
+                <Text style={styles.cardDescription}>
+                  Consulta somente a autenticação e as chaves Pix ativas no Asaas.
+                  Não gera cobranças. As ofertas reais continuam desativadas.
+                </Text>
+              </View>
+            </View>
+            <EloActionButton
+              label="Verificar conexão Asaas"
+              icon="ShieldCheckIcon"
+              variant="secondary"
+              loading={checkingAsaas}
+              disabled={checkingAsaas}
+              onPress={() => void checkAsaasConnection()}
+            />
+            {asaasDiagnostic ? (
+              <Text style={styles.checkResult}>{asaasDiagnostic}</Text>
+            ) : null}
+          </EloCard>
+
           <Text style={eloSharedStyles.sectionTitle}>Aplicativos das igrejas</Text>
           <EloCard style={styles.updatesCard}>
             <View style={styles.updatesHead}>
@@ -171,5 +234,6 @@ const styles = StyleSheet.create({
   churches: { gap: 10 },
   churchLine: { flexDirection: "row", alignItems: "center", gap: 12 },
   churchName: { fontSize: 14, fontWeight: "900", color: eloColors.ink },
+  checkResult: { fontSize: 12, color: eloColors.ink, lineHeight: 18 },
   hint: { marginTop: 19, fontSize: 11, color: eloColors.muted, lineHeight: 18 },
 });
