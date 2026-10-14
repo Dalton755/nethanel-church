@@ -101,7 +101,10 @@ begin
  select * into d from public.elo_prod_offering_intents i
  where i.organization_id=p_organization_id and i.requested_by=(select auth.uid())
  and i.amount_cents=p_amount_cents and i.frequency=p_frequency and i.state='active'
- and (p_frequency='monthly' or i.created_at > now()-interval '10 minutes')
+ and (p_frequency='monthly' or i.created_at > now()-interval '24 hours'
+      or exists(select 1 from public.elo_prod_pix_cycles existing
+         where existing.intent_id=i.id and existing.state='pending'
+           and existing.expires_at>now()))
  and (p_frequency='monthly' or not exists
    (select 1 from public.elo_prod_pix_cycles c where c.intent_id=i.id
       and c.state in ('paid','refunded','canceled','failed')))
@@ -290,6 +293,14 @@ begin
  on conflict(provider_event_id) do nothing returning id into v_new;
  if v_new is null then return false; end if;
  if p_state='paid' and c.state not in ('paid','refunded') then
+  -- Webhooks podem chegar fora de ordem: estorno já registrado prevalece.
+  if exists(select 1 from public.elo_prod_pix_events prior
+    where prior.cycle_id=c.id and prior.provider_payment_id=p_payment_id
+      and prior.result_state='refunded') then
+    update public.elo_prod_pix_cycles set state='refunded',
+      provider_payment_id=p_payment_id,updated_at=now() where id=c.id;
+    return true;
+  end if;
   update public.elo_prod_pix_cycles set state='paid',
     provider_payment_id=p_payment_id,paid_at=now(),updated_at=now() where id=c.id;
  elsif p_state='refunded' and c.state='paid' and c.provider_payment_id=p_payment_id then
