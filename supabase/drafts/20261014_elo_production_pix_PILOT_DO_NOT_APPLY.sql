@@ -98,14 +98,14 @@ begin
  then raise exception 'Oferta inválida' using errcode='22023'; end if;
  perform pg_advisory_xact_lock(hashtext((select auth.uid())::text),
    hashtext(p_organization_id::text||p_amount_cents::text||p_frequency));
- select * into d from public.elo_prod_offering_intents
- where organization_id=p_organization_id and requested_by=(select auth.uid())
- and amount_cents=p_amount_cents and frequency=p_frequency and state='active'
- and (p_frequency='monthly' or created_at > now()-interval '10 minutes')
+ select * into d from public.elo_prod_offering_intents i
+ where i.organization_id=p_organization_id and i.requested_by=(select auth.uid())
+ and i.amount_cents=p_amount_cents and i.frequency=p_frequency and i.state='active'
+ and (p_frequency='monthly' or i.created_at > now()-interval '10 minutes')
  and (p_frequency='monthly' or not exists
-   (select 1 from public.elo_prod_pix_cycles c where c.intent_id=id
+   (select 1 from public.elo_prod_pix_cycles c where c.intent_id=i.id
       and c.state in ('paid','refunded','canceled','failed')))
- order by created_at desc limit 1;
+ order by i.created_at desc limit 1;
  if not found then
   if (select count(*) from public.elo_prod_offering_intents
      where requested_by=(select auth.uid()) and created_at>now()-interval '1 hour')>=5
