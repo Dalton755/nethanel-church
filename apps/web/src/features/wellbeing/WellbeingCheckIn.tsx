@@ -38,7 +38,7 @@ export function WellbeingCheckIn({ initialAnswers = {}, onSave }: Props) {
     <form onSubmit={submit} className="mx-auto max-w-xl space-y-6 rounded-3xl bg-white p-5 text-slate-900 shadow-sm">
       <header>
         <h2 className="text-2xl font-semibold">💙 Como está seu coração hoje?</h2>
-        <p className="mt-2 text-sm text-slate-600">Sua igreja se importa com você. Responda apenas o que desejar.</p>
+        <p className="mt-2 text-sm text-slate-600">Sua igreja se importa com você. Responda apenas o que desejar. Nesta etapa, as respostas ficam privadas e não são enviadas automaticamente à liderança.</p>
       </header>
       {WELLBEING_AREAS.map((area) => (
         <fieldset key={area.key} className="space-y-3">
