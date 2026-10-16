@@ -42,7 +42,7 @@ with check (
     select 1 from public.people p
     join public.user_role_assignments a on a.person_id = p.id and a.organization_id = p.organization_id
     join public.roles r on r.id = a.role_id and r.organization_id = a.organization_id
-    where p.id = created_by and p.auth_user_id = (select auth.uid())
+    where p.id = member_wellbeing_followups.created_by and p.auth_user_id = (select auth.uid())
       and p.organization_id = member_wellbeing_followups.organization_id
       and a.is_active and r.is_active and r.role_key in ('pastor','pastoral')
       and (a.starts_at is null or a.starts_at <= now())
