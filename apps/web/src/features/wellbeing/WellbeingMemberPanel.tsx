@@ -23,9 +23,9 @@ export function WellbeingMemberPanel({ organizationId, personId }: {
   const [history, setHistory] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit"
-  }).format(new Date());
+  const dateParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const dateValue = (type: string) => dateParts.find((part) => part.type === type)?.value ?? "";
+  const today = `${dateValue("year")}-${dateValue("month")}-${dateValue("day")}`;
 
   async function refresh() {
     const entries = await loadWellbeingHistory(organizationId, personId);
@@ -54,7 +54,9 @@ export function WellbeingMemberPanel({ organizationId, personId }: {
     <section className="space-y-6">
       {error && <p role="alert" className="text-red-700">{error}</p>}
       {loading ? <p>Carregando seu registro...</p> : (
-        <WellbeingCheckIn key={today + String(history.length > 0)} initialAnswers={initialAnswers}
+        <WellbeingCheckIn key={today + (current ? JSON.stringify(current) : "new")} initialAnswers={initialAnswers}
+          initialNote={current?.note ?? ""} initialWantsContact={current?.wants_contact ?? false}
+          initialShareWithPastoral={current?.share_with_pastoral ?? false}
           onSave={async (answers, wantsContact, note, shareWithPastoral) => {
             await saveWellbeing(organizationId, personId, today, answers, wantsContact, note, shareWithPastoral);
             await refresh();
