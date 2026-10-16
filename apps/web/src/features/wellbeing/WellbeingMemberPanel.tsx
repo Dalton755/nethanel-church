@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { WellbeingCheckIn } from "./WellbeingCheckIn";
 import { ReminderPreference } from "./ReminderPreference";
+import { createClient } from "@/lib/supabase/client";
 import { loadWellbeingHistory, saveWellbeing } from "./repository";
 import type { WellbeingAnswers } from "./model";
 
@@ -27,6 +28,14 @@ export function WellbeingMemberPanel({ organizationId, personId }: {
   const dateParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
   const dateValue = (type: string) => dateParts.find((part) => part.type === type)?.value ?? "";
   const today = `${dateValue("year")}-${dateValue("month")}-${dateValue("day")}`;
+
+  async function removeEntry(date: string) {
+    if (!window.confirm("Excluir definitivamente este registro?")) return;
+    const { error: failure } = await createClient().from("member_wellbeing_checkins").delete()
+      .eq("organization_id", organizationId).eq("person_id", personId).eq("checkin_date", date);
+    if (failure) { setError("Não foi possível excluir o registro."); return; }
+    await refresh();
+  }
 
   async function refresh() {
     const entries = await loadWellbeingHistory(organizationId, personId);
@@ -71,6 +80,7 @@ export function WellbeingMemberPanel({ organizationId, personId }: {
             {history.map((entry) => <li key={entry.checkin_date} className="rounded-lg bg-slate-50 p-3">
               <time>{entry.checkin_date.split("-").reverse().join("/")}</time>
               <span className="ml-2">Emocional: {entry.emotional ?? "—"} · Financeiro: {entry.financial ?? "—"} · Sentimental: {entry.sentimental ?? "—"} · Espiritual: {entry.spiritual ?? "—"}</span>
+              <button type="button" onClick={() => void removeEntry(entry.checkin_date)} className="ml-2 text-xs text-red-700 underline">Excluir registro</button>
             </li>)}
           </ul>
         )}
