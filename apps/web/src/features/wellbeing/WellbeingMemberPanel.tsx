@@ -13,6 +13,7 @@ type Entry = {
   spiritual: number | null;
   wants_contact: boolean;
   note: string | null;
+  share_with_pastoral: boolean;
 };
 
 export function WellbeingMemberPanel({ organizationId, personId }: {
@@ -54,8 +55,8 @@ export function WellbeingMemberPanel({ organizationId, personId }: {
       {error && <p role="alert" className="text-red-700">{error}</p>}
       {loading ? <p>Carregando seu registro...</p> : (
         <WellbeingCheckIn key={today + String(history.length > 0)} initialAnswers={initialAnswers}
-          onSave={async (answers, wantsContact, note) => {
-            await saveWellbeing(organizationId, personId, today, answers, wantsContact, note);
+          onSave={async (answers, wantsContact, note, shareWithPastoral) => {
+            await saveWellbeing(organizationId, personId, today, answers, wantsContact, note, shareWithPastoral);
             await refresh();
           }} />
       )}
