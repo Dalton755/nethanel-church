@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { findPastoralAlerts } from "@/features/wellbeing/alerts";
 
 type Church = { id: string; name: string; roles?: { role_key: string; is_owner?: boolean }[] };
 type Checkin = { id: string; checkin_date: string; person_id: string; emotional: number | null; financial: number | null; sentimental: number | null; spiritual: number | null; wants_contact: boolean; note: string | null };
@@ -49,6 +50,7 @@ export default function PainelPastoralBemEstar() {
     return () => { active = false; };
   }, [selected]);
 
+  const alerts = useMemo(() => findPastoralAlerts(entries, 3), [entries]);
   const summary = useMemo(() => areas.map((area, index) => {
     const values = entries.map((entry) => entry[area]).filter((value): value is number => value !== null);
     return { label: labels[index], average: values.length ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1) : "—" };
@@ -65,7 +67,11 @@ export default function PainelPastoralBemEstar() {
       {churches.length > 1 && <select className="rounded-xl border p-3" value={selected} onChange={(e) => setSelected(e.target.value)}>
         {churches.map((church) => <option key={church.id} value={church.id}>{church.name}</option>)}
       </select>}
-      {selected && <><section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {selected && <><section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+        <h2 className="font-semibold text-amber-950">Sinais para acompanhamento</h2>
+        <p className="mt-1 text-sm text-amber-900">Três dias consecutivos com avaliação 1 ou 2, apenas em registros compartilhados. Não é diagnóstico.</p>
+        <p className="mt-2 text-sm font-medium">{alerts.length === 0 ? "Nenhum padrão recorrente identificado nos registros disponíveis." : `${alerts.length} padrões identificados para revisão pastoral.`}</p>
+      </section><section className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {summary.map((item) => <div key={item.label} className="rounded-2xl bg-white p-5 shadow-sm"><p className="text-sm text-slate-600">{item.label}</p><strong className="text-3xl">{item.average}</strong><span className="text-sm"> / 5</span></div>)}
       </section><section className="rounded-2xl bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold">Registros compartilhados</h2>
