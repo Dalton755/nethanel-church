@@ -43,7 +43,7 @@ export default function PainelPastoralBemEstar() {
     client.from("member_wellbeing_checkins")
       .select("id,checkin_date,person_id,emotional,financial,sentimental,spiritual,wants_contact,note")
       .eq("organization_id", selected).eq("share_with_pastoral", true)
-      .order("checkin_date", { ascending: false }).limit(100)
+      .order("checkin_date", { ascending: false }).limit(1000)
       .then(({ data, error: queryError }) => {
         if (!active) return;
         if (queryError) setError(queryError.message);
@@ -78,7 +78,7 @@ export default function PainelPastoralBemEstar() {
         {summary.map((item) => <div key={item.label} className="rounded-2xl bg-white p-5 shadow-sm"><p className="text-sm text-slate-600">{item.label}</p><strong className="text-3xl">{item.average}</strong><span className="text-sm"> / 5</span></div>)}
       </section><section className="rounded-2xl bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold">Registros compartilhados</h2>
-        <p className="mb-4 text-sm text-slate-500">Últimos 100 registros autorizados. Identificação individual não é exibida nesta versão.</p>
+        <p className="mb-4 text-sm text-slate-500">Até 1.000 registros autorizados. Identificação individual não é exibida nesta versão.</p>
         {entries.length === 0 ? <p>Nenhum registro compartilhado disponível.</p> : <ul className="space-y-3">
           {entries.map((entry) => <li key={entry.id} className="rounded-xl border p-4 text-sm">
             <div className="flex justify-between"><time>{entry.checkin_date.split("-").reverse().join("/")}</time>
