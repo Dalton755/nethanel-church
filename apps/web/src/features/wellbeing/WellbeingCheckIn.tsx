@@ -5,14 +5,17 @@ import { WELLBEING_AREAS, WELLBEING_CHOICES, validateWellbeingAnswers, type Well
 
 type Props = {
   initialAnswers?: WellbeingAnswers;
+  initialWantsContact?: boolean;
+  initialShareWithPastoral?: boolean;
+  initialNote?: string;
   onSave: (answers: WellbeingAnswers, wantsContact: boolean, note: string, shareWithPastoral: boolean) => Promise<void>;
 };
 
-export function WellbeingCheckIn({ initialAnswers = {}, onSave }: Props) {
+export function WellbeingCheckIn({ initialAnswers = {}, initialWantsContact = false, initialShareWithPastoral = false, initialNote = '', onSave }: Props) {
   const [answers, setAnswers] = useState<WellbeingAnswers>(initialAnswers);
-  const [wantsContact, setWantsContact] = useState(false);
-  const [shareWithPastoral, setShareWithPastoral] = useState(false);
-  const [note, setNote] = useState("");
+  const [wantsContact, setWantsContact] = useState(initialWantsContact);
+  const [shareWithPastoral, setShareWithPastoral] = useState(initialShareWithPastoral);
+  const [note, setNote] = useState(initialNote);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
