@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { WellbeingCheckIn } from "./WellbeingCheckIn";
+import { ReminderPreference } from "./ReminderPreference";
 import { loadWellbeingHistory, saveWellbeing } from "./repository";
 import type { WellbeingAnswers } from "./model";
 
@@ -62,6 +63,7 @@ export function WellbeingMemberPanel({ organizationId, personId }: {
             await refresh();
           }} />
       )}
+      <ReminderPreference organizationId={organizationId} personId={personId} />
       <div className="rounded-2xl border p-4">
         <h3 className="font-semibold">Meu histórico</h3>
         {history.length === 0 ? <p className="mt-2 text-sm">Nenhum registro ainda.</p> : (
