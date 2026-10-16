@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { findPastoralAlerts } from "@/features/wellbeing/alerts";
+import { PastoralFollowup } from "@/features/wellbeing/PastoralFollowup";
 
-type Church = { id: string; name: string; roles?: { role_key: string; is_owner?: boolean }[] };
+type Church = { id: string; name: string; person?: { id: string }; roles?: { role_key: string; is_owner?: boolean }[] };
 type Checkin = { id: string; checkin_date: string; person_id: string; emotional: number | null; financial: number | null; sentimental: number | null; spiritual: number | null; wants_contact: boolean; note: string | null };
 const areas = ["emotional", "financial", "sentimental", "spiritual"] as const;
 const labels = ["Emocional", "Financeiro", "Sentimental", "Espiritual"];
@@ -84,6 +85,7 @@ export default function PainelPastoralBemEstar() {
               {entry.wants_contact && <strong className="text-amber-700">Solicitou conversa</strong>}</div>
             <p className="mt-2">{areas.map((area, index) => labels[index] + ": " + (entry[area] ?? "—")).join(" · ")}</p>
             {entry.note && <p className="mt-2 whitespace-pre-wrap text-slate-600">{entry.note}</p>}
+            {churches.find((church) => church.id === selected)?.person?.id && <PastoralFollowup checkinId={entry.id} organizationId={selected} pastorPersonId={churches.find((church) => church.id === selected)!.person!.id} />}
           </li>)}
         </ul>}
       </section></>}
