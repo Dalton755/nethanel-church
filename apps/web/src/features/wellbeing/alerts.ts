@@ -39,6 +39,11 @@ export function findPastoralAlerts(entries: TrendEntry[], threshold = 3, lowRati
   const alerts: PastoralAlert[] = [];
   for (const [personId, records] of byPerson) {
     const sorted = [...records].sort((a, b) => b.checkin_date.localeCompare(a.checkin_date));
+    const todayParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+    const part = (type: string) => todayParts.find((item) => item.type === type)?.value ?? "";
+    const today = utcDay(`${part("year")}-${part("month")}-${part("day")}`);
+    const latest = utcDay(sorted[0]?.checkin_date ?? "");
+    if (today === null || latest === null || today - latest > 1 || latest > today) continue;
     for (const area of areas) {
       let previousDay: number | null = null;
       let count = 0;
