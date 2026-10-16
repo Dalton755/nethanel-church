@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/client';
-import type { WellbeingAnswers } from './model';
+import { validateWellbeingAnswers, type WellbeingAnswers } from './model';
 
 export async function saveWellbeing(organizationId: string, personId: string, date: string, answers: WellbeingAnswers, wantsContact: boolean, note: string, shareWithPastoral: boolean) {
+  if ((!validateWellbeingAnswers(answers) && !wantsContact) || (wantsContact && !shareWithPastoral) || note.length > 1000) throw new Error('Registro inválido ou consentimento ausente');
   const client = createClient();
   const { data: { user }, error: authError } = await client.auth.getUser();
   if (authError || !user) throw new Error('Sessão inválida');
