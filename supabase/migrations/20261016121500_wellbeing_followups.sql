@@ -15,7 +15,8 @@ on public.member_wellbeing_followups for select to authenticated
 using (
   exists (
     select 1 from public.member_wellbeing_checkins c
-    where c.id = checkin_id and c.organization_id = organization_id
+    where c.id = member_wellbeing_followups.checkin_id
+      and c.organization_id = member_wellbeing_followups.organization_id
       and c.share_with_pastoral
   )
   and exists (
@@ -33,7 +34,8 @@ on public.member_wellbeing_followups for insert to authenticated
 with check (
   exists (
     select 1 from public.member_wellbeing_checkins c
-    where c.id = checkin_id and c.organization_id = organization_id
+    where c.id = member_wellbeing_followups.checkin_id
+      and c.organization_id = member_wellbeing_followups.organization_id
       and c.share_with_pastoral
   )
   and exists (
