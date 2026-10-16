@@ -5,12 +5,13 @@ import { WELLBEING_AREAS, WELLBEING_CHOICES, validateWellbeingAnswers, type Well
 
 type Props = {
   initialAnswers?: WellbeingAnswers;
-  onSave: (answers: WellbeingAnswers, wantsContact: boolean, note: string) => Promise<void>;
+  onSave: (answers: WellbeingAnswers, wantsContact: boolean, note: string, shareWithPastoral: boolean) => Promise<void>;
 };
 
 export function WellbeingCheckIn({ initialAnswers = {}, onSave }: Props) {
   const [answers, setAnswers] = useState<WellbeingAnswers>(initialAnswers);
   const [wantsContact, setWantsContact] = useState(false);
+  const [shareWithPastoral, setShareWithPastoral] = useState(false);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -25,7 +26,7 @@ export function WellbeingCheckIn({ initialAnswers = {}, onSave }: Props) {
     setSaving(true);
     setError("");
     try {
-      await onSave(answers, wantsContact, note.trim());
+      await onSave(answers, wantsContact, note.trim(), shareWithPastoral);
       setSaved(true);
     } catch {
       setError("Não foi possível salvar. Tente novamente.");
@@ -71,6 +72,7 @@ export function WellbeingCheckIn({ initialAnswers = {}, onSave }: Props) {
         <input type="checkbox" checked={wantsContact} onChange={(event) => setWantsContact(event.target.checked)} />
         Gostaria de conversar com alguém da equipe pastoral.
       </label>
+      <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={shareWithPastoral} onChange={(event) => setShareWithPastoral(event.target.checked)} /> Autorizo que pastores responsáveis da minha igreja visualizem este registro para oferecer cuidado pastoral. Posso revogar essa autorização editando meu registro.</label>
       <label className="block text-sm font-medium">
         Gostaria de compartilhar algo? (opcional)
         <textarea maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)}
