@@ -22,6 +22,8 @@ export default function Home() {
           >
             Cadastrar e personalizar minha igreja
           </Link>
+          <Link href="/meu-bem-estar" className="rounded-xl border border-sky-300 bg-sky-50 px-5 py-3 text-sm font-bold text-sky-900">💙 Meu bem-estar</Link>
+          <Link href="/painel/bem-estar" className="rounded-xl border border-zinc-300 bg-white px-5 py-3 text-sm font-bold text-zinc-900">Cuidado pastoral</Link>
           <Link
             href="/privacidade"
             className="rounded-xl bg-zinc-950 px-5 py-3 text-sm font-bold text-white"

@@ -1,0 +1,19 @@
+name: Wellbeing unit tests
+on:
+  push:
+    branches:
+      - feature/elo-monitor-bem-estar
+  pull_request:
+    paths:
+      - "apps/web/src/features/wellbeing/**"
+      - ".github/workflows/wellbeing-tests.yml"
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Run wellbeing unit tests
+        run: node --test apps/web/src/features/wellbeing/*.test.mjs
