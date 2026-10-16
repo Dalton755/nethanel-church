@@ -26,6 +26,7 @@ export function WellbeingCheckIn({ initialAnswers = {}, initialWantsContact = fa
       setError("Escolha pelo menos uma resposta ou solicite uma conversa.");
       return;
     }
+    if (Object.keys(answers).length > 0 && !validateWellbeingAnswers(answers)) { setError("Uma das respostas é inválida."); return; }
     if (wantsContact && !shareWithPastoral) { setError("Para solicitar contato, autorize o compartilhamento deste registro com a equipe pastoral."); return; }
     setSaving(true);
     setError("");
