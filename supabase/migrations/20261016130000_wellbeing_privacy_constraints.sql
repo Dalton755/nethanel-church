@@ -27,7 +27,7 @@ before insert or update on public.member_wellbeing_preferences
 for each row execute function public.wellbeing_person_org_guard();
 -- Follow-up uses created_by instead of person_id.
 create or replace function public.wellbeing_followup_org_guard()
-returns trigger language plpgsql set search_path = public as $
+returns trigger language plpgsql set search_path = public as $$
 begin
   if not exists (
     select 1 from public.people p
@@ -40,7 +40,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 revoke all on function public.wellbeing_followup_org_guard() from public, anon, authenticated;
 create trigger wellbeing_followup_org_guard
 before insert or update on public.member_wellbeing_followups
