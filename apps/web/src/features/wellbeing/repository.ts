@@ -1,11 +1,11 @@
 import { createClient } from '@/lib/supabase/client';
 import type { WellbeingAnswers } from './model';
 
-export async function saveWellbeing(organizationId: string, personId: string, date: string, answers: WellbeingAnswers, wantsContact: boolean, note: string) {
+export async function saveWellbeing(organizationId: string, personId: string, date: string, answers: WellbeingAnswers, wantsContact: boolean, note: string, shareWithPastoral: boolean) {
   const client = createClient();
   const { data: { user }, error: authError } = await client.auth.getUser();
   if (authError || !user) throw new Error('Sessão inválida');
-  const { error } = await client.from('member_wellbeing_checkins').upsert({ organization_id: organizationId, person_id: personId, checkin_date: date, emotional: answers.emotional ?? null, financial: answers.financial ?? null, sentimental: answers.sentimental ?? null, spiritual: answers.spiritual ?? null, wants_contact: wantsContact, note: note || null }, { onConflict: 'person_id,checkin_date' });
+  const { error } = await client.from('member_wellbeing_checkins').upsert({ organization_id: organizationId, person_id: personId, checkin_date: date, emotional: answers.emotional ?? null, financial: answers.financial ?? null, sentimental: answers.sentimental ?? null, spiritual: answers.spiritual ?? null, wants_contact: wantsContact, share_with_pastoral: shareWithPastoral, note: note || null }, { onConflict: 'person_id,checkin_date' });
   if (error) throw error;
 }
 
