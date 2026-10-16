@@ -30,7 +30,7 @@ export function ReminderPreference({ organizationId, personId }: { organizationI
   }
   return <section className="rounded-2xl border bg-white p-5">
     <h3 className="font-semibold">Lembrete diário</h3>
-    <p className="mt-1 text-sm text-slate-600">Você pode optar por receber um lembrete às 10h (horário de Brasília). O envio de notificações será ativado após a configuração do serviço de push.</p>
+    <p className="mt-1 text-sm text-slate-600">Você pode optar por receber um lembrete às 10h (horário de Brasília). Para receber a notificação, permita as notificações no aplicativo Elo. O envio depende da ativação do serviço de lembretes.</p>
     <label className="mt-3 flex items-center gap-3 text-sm"><input type="checkbox" checked={enabled} disabled={loading || saving} onChange={(event) => void change(event.target.checked)} /> Quero receber o lembrete diário</label>
     {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
     {notice && <p role="status" className="mt-2 text-sm text-green-700">{notice}</p>}
