@@ -18,7 +18,7 @@ export default function MeuBemEstarPage() {
     async function initialize() {
       const client = createClient();
       const { data: auth, error: authError } = await client.auth.getUser();
-      if (authError || !auth.user) throw new Error("Entre na sua conta para continuar.");
+      if (authError || !auth.user) throw new Error("Entre na sua conta de homologação para continuar.");
       const { data, error: contextError } = await client.rpc("get_my_context");
       if (contextError) throw contextError;
       const options = (Array.isArray(data?.organizations) ? data.organizations : [])
@@ -44,7 +44,7 @@ export default function MeuBemEstarPage() {
         <p className="mt-2 text-sm text-slate-600">Participação voluntária. Seus registros são privados nesta etapa.</p>
       </div>
       {loading && <p className="mx-auto max-w-xl">Carregando...</p>}
-      {error && <p role="alert" className="mx-auto max-w-xl text-red-700">{error}</p>}
+      {error && <div role="alert" className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900"><p>{error}</p><Link href="/painel" className="mt-3 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Entrar ou criar conta de teste</Link></div>}
       {!loading && !error && churches.length === 0 && <p className="mx-auto max-w-xl">Seu cadastro ainda não está vinculado a uma igreja.</p>}
       {churches.length > 1 && (
         <label className="mx-auto mb-4 block max-w-xl text-sm">Igreja
