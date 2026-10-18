@@ -64,7 +64,7 @@ export default function PainelPastoralBemEstar() {
       <header><h1 className="text-3xl font-bold">Cuidado pastoral</h1>
         <p className="mt-2 text-sm text-slate-600">Somente registros compartilhados voluntariamente. Indicadores não substituem uma conversa pessoal.</p></header>
       {loading && <p>Verificando permissões...</p>}
-      {error && <p role="alert" className="text-red-700">{error}</p>}
+      {error && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900"><p>{error}</p><Link href="/painel" className="mt-3 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Entrar no ambiente de teste</Link></div>}
       {!loading && churches.length === 0 && <p>Você não possui uma função pastoral habilitada neste ambiente.</p>}
       {churches.length > 1 && <select className="rounded-xl border p-3" value={selected} onChange={(e) => setSelected(e.target.value)}>
         {churches.map((church) => <option key={church.id} value={church.id}>{church.name}</option>)}
