@@ -31,7 +31,7 @@ export default function PrivacyPage() {
           Política de Privacidade
         </h1>
         <p className="mt-3 text-sm leading-6 text-zinc-600">
-          Última atualização: 28 de setembro de 2026.
+          Última atualização: 16 de outubro de 2026.
         </p>
 
         <div className="mt-10 space-y-9">
@@ -85,7 +85,12 @@ export default function PrivacyPage() {
             </p>
           </Section>
 
-          <Section title="5. Fornecedores e compartilhamento">
+          <Section title="5. Monitor de Sentimentos (participação voluntária)">
+            <p>O recurso de bem-estar permite registrar voluntariamente percepções emocionais, financeiras, sentimentais e espirituais, além de observações e pedidos de conversa. As respostas são privadas por padrão e somente são exibidas à equipe pastoral autorizada quando o próprio membro assinala o compartilhamento daquele registro.</p>
+            <p>A autorização pode ser revogada ao editar o registro. O membro pode optar por lembretes diários; a opção começa desativada. Ausência de respostas não é interpretada como problema ou diagnóstico. Os dados não são usados para publicidade.</p>
+          </Section>
+
+          <Section title="6. Fornecedores e compartilhamento">
             <p>
               Podemos utilizar fornecedores de infraestrutura, banco de dados,
               autenticação, notificações e serviços técnicos indispensáveis ao
