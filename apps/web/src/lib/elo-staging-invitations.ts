@@ -10,7 +10,7 @@ export function createEloStagingClient(): SupabaseClient | null {
   const key = process.env.NEXT_PUBLIC_ELO_STAGING_SUPABASE_ANON_KEY;
   if (!url || !key) return null;
   if (!url.startsWith("https://zhvbjzpszzpywnwcmulm.supabase.co")) return null;
-  return createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true } });
+  return createClient(url, key, { auth: { flowType: "pkce", detectSessionInUrl: true, persistSession: true, autoRefreshToken: true, storageKey: "elo-staging-auth" } });
 }
 export type EloInvitation = {
   id: string; organization_id: string; organization_name: string;
