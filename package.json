@@ -19,6 +19,9 @@
     "packages/*"
   ],
   "devDependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-server-dom-webpack": "^19.3.1",
     "supabase": "^2.117.0",
     "turbo": "^2.10.12"
   },
