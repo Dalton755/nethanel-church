@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "../../lib/supabase/client";
 
@@ -57,7 +57,7 @@ function formattedDate(value: string) {
   }).format(date);
 }
 
-function Message({ children }: { children: React.ReactNode }) {
+function Message({ children }: { children: ReactNode }) {
   return <p className="rounded-2xl border border-slate-200 bg-white px-5 py-7 text-sm text-slate-600">{children}</p>;
 }
 
@@ -193,7 +193,7 @@ export default function EloWebPage() {
   }, [selectedId, user, churches, refreshKey]);
 
   const unread = notices.filter((notice) => !notice.read_at).length;
-  const brandColor = church?.name ? "#1479b8" : "#1479b8";
+  const brandColor = "#1479b8";
 
   if (loading) {
     return <main className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600">Carregando seu Elo...</main>;
